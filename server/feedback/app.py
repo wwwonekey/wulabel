@@ -248,3 +248,9 @@ def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) 
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as s:
         s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
+
+
+# 使用统计页（/stats），配置见 stats_page.py
+import stats_page  # noqa: E402
+
+stats_page.install(app, DB_PATH)

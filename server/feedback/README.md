@@ -103,3 +103,16 @@ npm run tauri build
 - 最新版本写在同目录的 `latest.json`（格式同上，可用环境变量 `LATEST_FILE` 改位置）。发新版时改这个文件，不用重启服务。没有这个文件就返回客户端自己的版本，即「已是最新」。
 - 每台设备每天记一条（版本、系统），不记 IP、不记任何个人信息。设备编号是客户端随机生成的。
 - 查看统计：`python stats.py`（默认显示最近 14 天，`python stats.py 30` 显示 30 天），包括累计安装、今天 / 近 7 天 / 近 30 天在用人数、每天新增、版本和系统分布。
+
+## 使用统计页
+
+`/stats` 是给作者自己看的统计页面：每天在用的电脑、版本和系统分布、官网下载人数、GitHub 下载次数和星标。在 `.env` 里配置后才会开启：
+
+```
+STATS_KEY=访问密码（不配就没有这个页面）
+NGINX_ACCESS_LOG=nginx 访问日志路径（统计官网 /download/Wulabel_* 的下载，不配就不显示）
+STATS_EXCLUDE_IPS=不计入下载的 IP，逗号分隔
+GITHUB_REPO=owner/repo（显示 GitHub 下载次数，不配就不显示）
+```
+
+浏览器打开 `https://feedback.<域名>/stats`，输一次密码，之后半年内同一浏览器免登录。官网下载按 IP 去重计人数，库里只存 IP 的哈希。
