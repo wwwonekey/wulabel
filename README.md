@@ -1,66 +1,87 @@
-# Wulabel
+<div align="center">
 
-离线 AI 标注训练桌面软件：**导入数据 → 标注 → 训练 → 评估 → 用模型预标注 → 导出部署**，一个软件走完。
+# Wulabel（小物标注）
 
-- 完全离线可用，数据不出本机
-- 一键安装训练环境，自动识别显卡、选择 PyTorch 版本，支持国内镜像
-- 四种任务：目标检测、实例分割、图像分类、关键点
-- 越标越快：SAM 点一下出轮廓、文本提示自动找目标；标一小批就能训练，再用训练出的模型预标注剩下的图
-- 导出 YOLO（含 seg / pose）/ COCO / VOC / 分类文件夹数据集和 ONNX 模型
-- Windows 和 macOS（Apple 芯片用 MPS 加速训练）
-- 训练 YOLO 系列（YOLOX Nano / Tiny / S / M / L）和 torchvision 的 Faster R-CNN、Mask R-CNN 等模型
-- Apache-2.0 开源，内置模型只用 BSD / Apache 许可的代码和权重（torchvision、YOLOX），训出的模型可以放心商用
+**离线 AI 标注训练桌面软件**
 
-**官网**：<https://wulabel.xiaowuiot.com>　|　**使用教程**：[docs/使用教程.md](docs/使用教程.md)（在线版 <https://wulabel.xiaowuiot.com/guide.html>）　|　**反馈服务部署**：[server/feedback/](server/feedback/)
+导入数据 → 标注 → 训练 → 评估 → 用模型预标注 → 导出部署，一个软件走完
 
-> 作者：小物学长。打包方法见 [docs/打包发布.md](docs/打包发布.md)。
+[官网](https://wulabel.xiaowuiot.com) · [下载](#下载) · [使用教程](https://wulabel.xiaowuiot.com/guide.html) · [版本历史](#版本历史) · [交流群](https://wulabel.xiaowuiot.com/#contact)
+
+[![最新版本](https://img.shields.io/github/v/release/xiaowu-iot/wulabel?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/xiaowu-iot/wulabel/releases)
+[![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-blue)](LICENSE)
+[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS-lightgrey)](#下载)
+
+</div>
+
+## 亮点
+
+- **完全离线**：图片、标注、模型都在你自己的电脑上，数据不出本机
+- **装好就能训**：一键安装训练环境，自动识别显卡、选 PyTorch 版本，支持国内镜像
+- **四种任务**：目标检测、实例分割、图像分类、关键点
+- **YOLO 系列训练**：YOLOX Nano / Tiny / S / M / L，另有 Faster R-CNN、RetinaNet、Mask R-CNN 等
+- **越标越快**：SAM 点一下出轮廓、文本提示自动找目标；标一小批就训练，再用训出的模型预标注剩下的图
+- **团队协作**：成员用浏览器就能一起标，分配任务、审核打回、计件统计
+- **部署到现场**：ONNX、OpenVINO、TensorRT、RKNN，一键生成推理服务包
+- **放心商用**：Apache-2.0 开源，内置模型只用 BSD / Apache 许可的代码和权重（torchvision、YOLOX）
 
 ## 下载
 
-最新版 **v0.3.0**，点文件名直接下载：
+最新版 **v0.3.0**（Windows 10 / 11 64 位、macOS 11 及以上，Mac 版 Apple 芯片和 Intel 通用）：
 
-| 系统 | 官网（国内推荐） | GitHub |
+| 系统 | 官网下载（国内推荐） | GitHub 下载 |
 |---|---|---|
-| Windows 10 / 11（64 位） | [Wulabel_0.3.0_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.3.0_x64-setup.exe) | [Wulabel_0.3.0_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.3.0/Wulabel_0.3.0_x64-setup.exe) |
-| macOS 11 及以上（Apple 芯片和 Intel 通用） | [Wulabel_0.3.0_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.3.0_universal.dmg) | [Wulabel_0.3.0_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.3.0/Wulabel_0.3.0_universal.dmg) |
+| Windows | [Wulabel_0.3.0_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.3.0_x64-setup.exe) | [Wulabel_0.3.0_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.3.0/Wulabel_0.3.0_x64-setup.exe) |
+| macOS | [Wulabel_0.3.0_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.3.0_universal.dmg) | [Wulabel_0.3.0_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.3.0/Wulabel_0.3.0_universal.dmg) |
 
-- 历史版本和更新说明：[GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases) ｜ [Gitee 发行版](https://gitee.com/xiaowu-iot/wulabel/releases)
-- Windows 双击安装；Mac 打开 .dmg，把 Wulabel 拖进「应用程序」。
-- Mac 第一次打开会提示「无法验证开发者」（没有苹果开发者签名）：在「应用程序」里右键 Wulabel → 打开；macOS 15 以后到「系统设置 → 隐私与安全性」点「仍要打开」。提示「已损坏」的话，在终端执行 `xattr -cr /Applications/Wulabel.app`。
+历史版本：[GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases) · [Gitee 发行版](https://gitee.com/xiaowu-iot/wulabel/releases) · [官网](https://wulabel.xiaowuiot.com/#download)
 
-## 当前功能（v0.3.0）
+**第一次安装**
 
-| 模块 | 功能 |
+- **Windows**：双击安装。弹出「Windows 已保护你的电脑」时，点「更多信息」→「仍要运行」（安装包还没有代码签名）。
+- **macOS**：打开 .dmg，把 Wulabel 拖进「应用程序」。提示「无法验证开发者」时，在「应用程序」里右键 Wulabel →「打开」；macOS 15 以后到「系统设置 → 隐私与安全性」点「仍要打开」。提示「已损坏」的话，在终端执行 `xattr -cr /Applications/Wulabel.app`。
+- 装好后到「设置」页点「一键安装训练环境」。只标注、不训练可以跳过。
+
+## 功能一览
+
+| 模块 | 能做什么 |
 |---|---|
-| 项目 | 新建/打开、最近项目；一个项目就是一个文件夹；任务类型：目标检测 / 实例分割 / 图像分类 / 关键点 |
-| 数据 | 导入图片/文件夹/拖拽（复制或引用、按内容去重、EXIF 摆正）；视频抽帧；视频流抽帧（RTSP/直播/回放 URL，测试连接、边采边入库、可停止）；导入带标注的数据集（YOLO 含 seg/pose、COCO 含分割/关键点、VOC、分类文件夹，自动识别）；撤销上次导入、多选删除、清空；按任务导出（可批量给人脸、车牌等区域打码）；训练/验证/测试划分；图片质量筛查（模糊、过暗过曝、低对比）；主动学习挑图（挑模型最没把握的图先标）；从巡瞳 AI 平台拉取告警图片（识别框作为预标注） |
-| 数据集版本 | 把已标注数据存成快照；和当前数据对比、导出某个版本、用某个版本训练、恢复（恢复前自动备份） |
-| 多人协作 | 实时协作：发起人的电脑当主机，成员用浏览器登录就能标（不用装软件）；局域网或在线（自建中转 / 巡瞳官方中转）；成员和角色（标注员、审核员）、分配任务、按张加锁（别人在改就只读、实时同步）、审核打回（带原因）、在线状态、工作量统计（导出 CSV 计件）、操作记录、水印。离线分包：按人数分成几个标注包（独立项目，可带预标注、可打码），标完合并回来，冲突提示 |
-| 标注 | 矩形框；多边形轮廓；分类（数字键一键一张）；关键点（可编辑模板，逐个点、遮挡/跳过、拖点微调）；类别管理（1–9 快捷切换）；撤销重做；复制上一张；视频帧关键帧插值、往后自动跟踪；自动保存；审核/跳过 |
-| AI 辅助 | SAM 智能选取（点选/框选出轮廓）；文本提示（按英文类别名开放词汇检测，分割项目再用 SAM 出轮廓）；巡瞳 AI 平台（按项目类别识别：只认项目里的类别、按识别说明来；专用模型、大模型识别）；识别规则（每个类别的识别说明 + 整体规则，可以和 AI 聊天整理规则、在当前图上试识别）；自己训练的模型预标注（单张 P 键、批量） |
-| 体检 | 规则检查：极小框、重复框、近似重复图片（感知哈希）、类别不均衡、框大小分布；模型检查：疑似漏标、类别错、框不准、多余框（分类：疑似标错类别）；一键加为标注、忽略、跳到标注页高亮问题框 |
-| 训练 | 检测：YOLOX（Nano / Tiny / S / M / L，官方 Mosaic / MixUp 增强、EMA、COCO 预训练权重）、Faster R-CNN（MobileNetV3 / ResNet50）、单阶段 RetinaNet / FCOS / SSDLite；分割：Mask R-CNN；关键点：Keypoint R-CNN；分类：MobileNetV3 / EfficientNet-B0 / ResNet50。数据增强（预设 + 自定义，效果预览）；接着已有模型继续训练；导入外部 ONNX 模型（YOLOv5/v8、YOLOX、RT-DETR 等，用于预标注、评估）；实时曲线、日志、中途停止、训练记录、训练对比 |
-| 评估 | 检测类：mAP50、mAP50-95、精确率、召回率；分类：准确率、宏平均 F1；各类别指标、混淆矩阵、错例浏览（点击直接去改标注）；PR 曲线、阈值推荐；误报测试（拿不含目标的视频/视频流跑，统计每小时误报，误报帧一键加为负样本）；用当前数据重新评估；导出交付报告（单个 HTML） |
-| 部署 | 实时验证（RTSP 摄像头/本地视频，截图加入数据集）；导出 ONNX（动态/固定尺寸）、OpenVINO（软件内转换并验证）、TensorRT/RKNN 转换包（检测、分类）；生成推理服务包（检测；多路拉流、告警规则、Webhook/MQTT 推送、HTTP 检测接口、现场回流）；导入回流图片；上传到巡瞳 AI 平台（在平台上接摄像头、配告警） |
-| 设置 | 训练环境一键安装、安装位置、下载源、使用已有 Python 环境、巡瞳 AI 平台；检查更新（启动时自动检查，可关闭） |
-| 协作中转 | `relay/wulabel_relay.py`：在线协作用的中转服务（Python + aiohttp），可以自建，也可以用巡瞳官方中转，部署见 [relay/README.md](relay/README.md) |
+| 数据 | 导入图片、文件夹，自动去重和摆正方向；视频抽帧、RTSP / 直播流边采边入库；导入 YOLO / COCO / VOC / 分类文件夹数据集（自动识别格式）；划分训练、验证、测试集；图片质量筛查；挑出最值得先标的图；导出时可给人脸、车牌打码 |
+| 标注 | 矩形框、多边形、分类、关键点；1–9 快捷切换类别；撤销重做、复制上一张；视频帧关键帧插值、自动跟踪 |
+| AI 辅助 | SAM 点选出轮廓；文本提示自动找目标；巡瞳 AI 平台识别（专用模型、按项目类别识别、和 AI 聊识别规则）；自己训练的模型预标注（单张或批量） |
+| 数据体检 | 规则检查：极小框、重复框、重复图片、类别不均衡；模型检查：疑似漏标、标错类别、框不准、多余框，一键去改 |
+| 数据集版本 | 把标注存成快照，对比、导出、用某个版本训练、恢复 |
+| 训练 | 检测：YOLOX（Nano / Tiny / S / M / L）、Faster R-CNN、RetinaNet、FCOS、SSDLite；分割：Mask R-CNN；关键点：Keypoint R-CNN；分类：MobileNetV3、EfficientNet、ResNet50。数据增强、接着训练、训练对比；导入别处训好的 ONNX 模型（YOLOv5 / v8 / v11、YOLOX、RT-DETR 等）做预标注和评估 |
+| 评估 | mAP、精确率、召回率（分类看准确率、F1）；各类别指标、混淆矩阵、错例浏览；阈值推荐；误报测试；导出交付报告 |
+| 部署 | 接摄像头实时验证；导出 ONNX、OpenVINO、TensorRT / RKNN 转换包；生成推理服务包（多路拉流、告警规则、Webhook / MQTT 推送）；上传巡瞳 AI 平台 |
+| 团队协作 | 实时协作：你的电脑当主机，成员用浏览器登录就能标，局域网或在线都行；角色、分配任务、按张加锁、审核打回、工作量统计、水印。离线分包：分成几个标注包，标完合并回来 |
+| 设置 | 训练环境一键安装、下载源、使用已有 Python 环境、巡瞳 AI 账号、检查更新 |
 
-### 版本历史
+已知限制：分割、关键点模型暂不支持导出部署（可以在软件里预标注）；分割、关键点的评估按目标框计算指标。
+
+## 版本历史
 
 | 版本 | 日期 | 主要内容 |
 |---|---|---|
-| [v0.3.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.3.0) | 2026-11-17 | 新增 YOLO 系列训练：YOLOX Nano / Tiny / S / M / L（官方数据增强、COCO 预训练权重），可评估、预标注、导出 ONNX / OpenVINO / TensorRT / RKNN、上传巡瞳 |
-| [v0.2.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.1) | 2026-11-12 | 检查更新（有新版本时提醒）；标注页缩略图条可拖动调整大小；Windows 安装界面改为中文 |
-| [v0.2.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.0) | 2026-11-10 | 首个 Mac 版；实例分割、分类、关键点；SAM 智能选取、文本提示、巡瞳 AI 辅助标注；视频和视频流抽帧、关键帧插值和跟踪；训练对比、数据集版本；单阶段检测模型；实时多人协作；巡瞳平台对接（上传模型、拉告警图） |
-| [v0.1.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.1.0) | 2026-11-09 | 首个版本：目标检测的标注、训练（Faster R-CNN）、评估、模型预标注、导出 |
+| [v0.3.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.3.0) | 2026-11-17 | 新增 YOLO 系列训练：YOLOX Nano / Tiny / S / M / L，官方数据增强和 COCO 预训练权重，可导出 ONNX / OpenVINO / TensorRT / RKNN、上传巡瞳 |
+| [v0.2.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.1) | 2026-11-12 | 检查更新；标注页缩略图条可拖动调整大小；Windows 安装界面改为中文 |
+| [v0.2.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.0) | 2026-11-10 | 首个 Mac 版；实例分割、分类、关键点；SAM、文本提示、巡瞳 AI 辅助标注；视频抽帧和跟踪；数据集版本、训练对比；单阶段检测模型；实时多人协作；巡瞳平台对接 |
+| [v0.1.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.1.0) | 2026-11-09 | 首个版本：目标检测的标注、训练、评估、模型预标注、导出 |
 
-每个版本的详细说明见 [GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases)。
+## 文档
 
-已知限制：分割、关键点模型暂不支持导出部署（可在软件内预标注）；分割、关键点的评估按目标框计算指标。
+| 文档 | 说明 |
+|---|---|
+| [使用教程](docs/使用教程.md) | 从安装到部署的快速上手（[在线版](https://wulabel.xiaowuiot.com/guide.html)） |
+| [使用教程（详细版）](docs/使用教程-详细版.md) | 每个页面、每个按钮的详细说明 |
+| [巡瞳平台对接接口](docs/巡瞳平台对接接口.md) | 和巡瞳 AI 平台对接用到的接口 |
+| [打包发布](docs/打包发布.md) | 打安装包、自动打包、发布新版本的步骤 |
+| [反馈服务](server/feedback/) | 软件内「反馈」、检查更新、使用统计的服务端，可以自己部署 |
+| [协作中转](relay/README.md) | 在线协作用的中转服务，可以自己部署 |
 
 ## 开发
 
-需要：Node.js 20+、Rust（stable）、Windows 上还需要 VS C++ 生成工具和 WebView2。
+需要 Node.js 20+、Rust（stable）；Windows 上还需要 Visual Studio C++ 生成工具和 WebView2。
 
 ```bash
 cd apps/desktop
@@ -79,49 +100,62 @@ cargo test
 # 训练全流程集成测试（需要装有 torch 的 Python）
 XLABEL_TEST_PYTHON=/path/to/python cargo test end_to_end -- --nocapture
 
-# Python 指标测试
+# Python 测试：指标单元测试 + YOLOX 冒烟测试（CPU 上训练、导出、onnxruntime 验证）
 cd worker
 python -m unittest discover -s tests
 ```
 
-## 目录
+GitHub Actions：`release` 推送 `v*` 标签时打 Windows 和 Mac 安装包；`build` 手动运行，只打测试包；`worker-test` 改了 worker 代码时自动跑 Python 测试。
+
+## 目录结构
 
 ```
-apps/desktop/
-├─ src/                     React 前端
-│  ├─ pages/                项目、数据、标注、训练、评估、设置
-│  └─ components/           标注画布、导出弹窗、数据集版本、训练对比、大图预览、折线图
-└─ src-tauri/src/           Rust 核心
-   ├─ project.rs            项目新建/打开、最近项目
-   ├─ db.rs                 SQLite 表结构与迁移
-   ├─ images.rs             图片导入、缩略图、删除
-   ├─ video.rs              视频抽帧、视频流抽帧（ffmpeg）
-   ├─ annotations.rs        标注读写、类别、图片状态
-   ├─ keypoints.rs          关键点模板
-   ├─ dataset.rs            数据集划分与导出
-   ├─ dataset_import.rs     YOLO/COCO/VOC/分类文件夹导入
-   ├─ versions.rs           数据集版本（快照、对比、恢复）
-   ├─ health.rs             数据体检
-   ├─ runtime.rs            训练环境：显卡检测、uv、PyTorch 安装
-   ├─ training.rs           训练任务、推理服务（预标注）、ONNX 导出
-   ├─ assist.rs             SAM 智能选取、文本提示标注
-   ├─ ai.rs                 巡瞳 AI 平台辅助标注
-   ├─ deploy.rs             实时验证、多格式导出、推理服务包
-   ├─ protocol.rs           xl:// 图片协议
-   └─ commands.rs           前端调用的命令
-worker/                     Python 训练与推理进程（随安装包分发）
-└─ xlabel_worker/
-   ├─ train.py              训练与评估（检测 / 分割 / 关键点 / 分类）
-   ├─ serve.py              常驻推理服务（预标注、SAM、文本提示）
-   ├─ assist.py             SAM、开放词汇检测（transformers，首次使用时安装）
-   ├─ export.py             导出 ONNX / OpenVINO / TensorRT、RKNN 转换包
-   ├─ live.py               实时验证（RTSP / 视频文件）
-   ├─ metrics.py            mAP、分类指标、混淆矩阵（只依赖 numpy）
-   ├─ models.py             内置模型列表（torchvision 检测、分割、关键点、分类；YOLOX）
-   ├─ yolox_det.py          YOLOX 接入：规格、预训练权重、推理包装、训练任务
-   ├─ yolox_data.py         YOLOX 数据增强（Mosaic、MixUp、随机仿射、HSV）
-   └─ yolox/               YOLOX 模型代码（摘自官方仓库，Apache-2.0，见 NOTICE）
-└─ service/                 推理服务包模板（只依赖 onnxruntime + OpenCV，含中文说明）
+apps/desktop/                桌面端（Tauri 2）
+├─ src/                      React 前端
+│  ├─ pages/                 项目、数据、标注、体检、训练、评估、部署、协作、设置
+│  └─ components/            标注画布、导出、数据集版本、训练对比、巡瞳、反馈等
+└─ src-tauri/src/            Rust 核心
+   ├─ project.rs / db.rs     项目、SQLite 表结构与迁移
+   ├─ images.rs / video.rs   图片导入、缩略图；视频和视频流抽帧（ffmpeg）
+   ├─ annotations.rs         标注、类别、图片状态
+   ├─ keypoints.rs           关键点模板
+   ├─ track.rs               视频帧关键帧插值、跟踪
+   ├─ dataset.rs             数据集划分与导出
+   ├─ dataset_import.rs      YOLO / COCO / VOC / 分类文件夹导入
+   ├─ versions.rs            数据集版本
+   ├─ health.rs / quality.rs 数据体检、图片质量筛查
+   ├─ runtime.rs             训练环境：显卡检测、PyTorch 安装
+   ├─ training.rs            训练任务、推理服务（预标注）、ONNX 导出
+   ├─ evaltools.rs           导入外部模型、重新评估、误报测试
+   ├─ report.rs              交付报告
+   ├─ deploy.rs              实时验证、多格式导出、推理服务包
+   ├─ assist.rs / ai.rs      SAM、文本提示；巡瞳 AI 辅助标注
+   ├─ xuntong.rs             巡瞳平台对接（上传模型、拉告警图）
+   ├─ share.rs / tunnel.rs   实时协作主机、在线中转连接
+   ├─ team.rs / collab.rs    成员、分配、审核；离线分包与合并
+   ├─ feedback.rs / update.rs  软件内反馈、检查更新
+   └─ commands.rs            前端调用的命令
+worker/                      Python 训练与推理进程（随安装包分发）
+├─ xlabel_worker/
+│  ├─ train.py               训练与评估
+│  ├─ models.py              内置模型列表
+│  ├─ yolox_det.py           YOLOX 接入：规格、预训练权重、推理、训练
+│  ├─ yolox_data.py          YOLOX 数据增强（Mosaic、MixUp 等）
+│  ├─ yolox/                 YOLOX 模型代码（摘自官方仓库，Apache-2.0，见 NOTICE）
+│  ├─ data.py / augment.py   数据集读取、数据增强
+│  ├─ serve.py               常驻推理服务（预标注、SAM、文本提示）
+│  ├─ assist.py              SAM、开放词汇检测
+│  ├─ evaluate.py / metrics.py  评估、mAP 和混淆矩阵
+│  ├─ fptest.py              误报测试
+│  ├─ onnx_model.py          外部 ONNX 模型推理
+│  ├─ export.py              导出 ONNX / OpenVINO、TensorRT / RKNN 转换包
+│  ├─ live.py                实时验证
+│  └─ anonymize.py           导出时打码
+├─ service/                  推理服务包模板（只依赖 onnxruntime + OpenCV）
+└─ tests/                    Python 测试
+relay/                       在线协作中转服务
+server/                      反馈服务、部署示例
+docs/                        使用教程、对接接口、打包发布
 ```
 
 桌面端和 worker 之间通过标准输入输出逐行传 JSON，不开端口。
@@ -140,3 +174,5 @@ worker/                     Python 训练与推理进程（随安装包分发）
 ## 许可证
 
 [Apache-2.0](LICENSE)。第三方代码（YOLOX，Apache-2.0）见 [NOTICE](NOTICE)。
+
+作者：小物学长。使用问题、功能建议欢迎提 [Issue](https://github.com/xiaowu-iot/wulabel/issues)，或到[官网](https://wulabel.xiaowuiot.com/#contact)找作者、进交流群。
