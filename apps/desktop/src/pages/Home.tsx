@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { api, errText, RecentProject, taskName } from "../api";
 import { useApp } from "../store";
 import NewProjectModal from "../components/NewProjectModal";
+import GuideCard from "../components/GuideCard";
 
 function ago(ts: number) {
   const s = Date.now() / 1000 - ts;
@@ -50,6 +51,8 @@ export default function Home() {
     <div className="page">
       <h1>项目</h1>
       <p className="desc">一个项目就是一个文件夹，整个拷走就能在另一台电脑上打开。</p>
+
+      <GuideCard hasProject={recent.length > 0} onNewProject={() => setShowNew(true)} />
 
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ fontSize: 14, margin: 0 }}>最近项目</h2>
