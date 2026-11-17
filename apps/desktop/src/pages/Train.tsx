@@ -113,6 +113,12 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [prog, setProg] = useState<ProgressEv | null>(null);
   const [starting, setStarting] = useState(false);
+  // 高级设置（输入尺寸、批大小、数据增强、设备）默认收起，记住用户上次的选择
+  const [advOpen, setAdvOpen] = useState(prefs.get("trainAdv", "0") === "1");
+  const toggleAdv = (v: boolean) => {
+    setAdvOpen(v);
+    prefs.set("trainAdv", v ? "1" : "0");
+  };
   const [exporting, setExporting] = useState(false);
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
@@ -368,10 +374,26 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   </Space>
                 </Radio.Group>
               </Form.Item>
+              <Form.Item label="训练轮数" tooltip="数据越少需要的轮数越多；一般 20~50，YOLOX 建议 50 以上">
+                <InputNumber min={1} max={500} value={cfg.epochs} onChange={(v) => update({ epochs: Number(v ?? 30) })} />
+              </Form.Item>
+              <Form.Item label="训练数据" tooltip="选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存">
+                <Select
+                  style={{ width: "100%" }}
+                  value={cfg.version != null && versions.some((v) => v.id === cfg.version) ? cfg.version : 0}
+                  onChange={(v) => update({ version: v === 0 ? null : v })}
+                  options={[
+                    { value: 0, label: `当前数据（${trainable} 张）` },
+                    ...versions.map((v) => ({ value: v.id, label: `版本「${v.name}」（${v.images} 张，${new Date(v.createdAt * 1000).toLocaleDateString()}）` })),
+                  ]}
+                />
+              </Form.Item>
+              <Button type="link" size="small" style={{ padding: 0, marginBottom: 10 }} onClick={() => toggleAdv(!advOpen)}>
+                {advOpen ? "收起高级设置 ▴" : "高级设置：输入尺寸、批大小、数据增强、设备 ▾"}
+              </Button>
+              {advOpen && (
+                <>
               <Space wrap>
-                <Form.Item label="训练轮数" tooltip="数据越少需要的轮数越多；一般 20~50">
-                  <InputNumber min={1} max={500} value={cfg.epochs} onChange={(v) => update({ epochs: Number(v ?? 30) })} />
-                </Form.Item>
                 <Form.Item
                   label="输入尺寸"
                   tooltip={
@@ -405,17 +427,6 @@ export default function Train({ project }: { project: ProjectInfo }) {
               ) : (
                 <AugPanel value={cfg.aug} task={task} imgSize={picked?.fixedSize ?? cfg.imgSize} fixedSize={!!picked?.fixedSize} onChange={(aug) => update({ aug })} />
               )}
-              <Form.Item label="训练数据" tooltip="选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存">
-                <Select
-                  style={{ width: "100%" }}
-                  value={cfg.version != null && versions.some((v) => v.id === cfg.version) ? cfg.version : 0}
-                  onChange={(v) => update({ version: v === 0 ? null : v })}
-                  options={[
-                    { value: 0, label: `当前数据（${trainable} 张）` },
-                    ...versions.map((v) => ({ value: v.id, label: `版本「${v.name}」（${v.images} 张，${new Date(v.createdAt * 1000).toLocaleDateString()}）` })),
-                  ]}
-                />
-              </Form.Item>
               <Form.Item label="设备">
                 <Radio.Group value={cfg.device} onChange={(e) => update({ device: e.target.value })}>
                   <Radio value="auto">自动（有显卡用显卡）</Radio>
@@ -427,6 +438,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   只用已审核的图片
                 </Checkbox>
               </Form.Item>
+                </>
+              )}
               <Button
                 type="primary"
                 block
