@@ -28,4 +28,13 @@ jobs:
 
       - name: 运行测试
         working-directory: worker
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -v 2>&1 | tee test-output.txt
+          {
+            echo '### 测试结果'
+            echo '```'
+            grep -E '\.\.\. |^Ran |^OK|^FAILED|已加载|mAP50|最后 [0-9]+ 轮|onnxruntime' test-output.txt | tail -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
