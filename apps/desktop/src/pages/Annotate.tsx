@@ -224,6 +224,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [fitSignal, setFitSignal] = useState(0);
   const [showNames, setShowNames] = useState(true);
+  const [keysOpen, setKeysOpen] = useState(false);
   const [scale, setScale] = useState(1);
   const [newLabel, setNewLabel] = useState("");
   const [editing, setEditing] = useState<Label | null>(null);
@@ -1214,6 +1215,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     else if (k === "f") setFitSignal((n) => n + 1);
     else if (k === "h") setShowNames((v) => !v);
     else if (k === "p") predictCurrent();
+    else if (e.key === "?" || (k === "/" && e.shiftKey)) setKeysOpen(true);
     else if (k === "escape") setSelected(null);
     else return;
     e.preventDefault();
@@ -1275,8 +1277,8 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const placingPose = placing ? poses.find((p) => p.key === placing.key) : null;
   const toolLabel = isSeg ? "画多边形轮廓 (R)" : isPose ? "画目标框，再逐个点关键点 (R)" : "画矩形框 (R)";
   const hint = isCls
-    ? "1–9 选类别" + (autoNext ? "（选完自动下一张）" : "") + " · A/D 翻图 · Enter 审核通过 · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张"
-    : `${isSeg ? "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）" : isPose ? "R 画目标框后逐个点关键点" : "R 画框"} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名`;
+    ? "1–9 选类别" + (autoNext ? "（选完自动下一张）" : "") + " · A/D 翻图 · Enter 审核通过 · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张" + " · ? 全部快捷键"
+    : `${isSeg ? "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）" : isPose ? "R 画目标框后逐个点关键点" : "R 画框"} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键`;
   const srcOptions = [
     { label: "我的模型", value: "model" },
     // 协作成员不能直接用巡瞳 AI（用的是发起人的额度），可以用「识别规则」和 AI 聊
@@ -1526,6 +1528,61 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         )}
         <div className="annot-hint">{hint}</div>
       </div>
+
+      <Modal title="快捷键" open={keysOpen} onCancel={() => setKeysOpen(false)} footer={null} width={560}>
+        {(
+          [
+            [
+              "翻图和审核",
+              [
+                ["A / ←", "上一张"],
+                ["D / →", "下一张"],
+                ["Enter", "审核通过（并跳到下一张）"],
+                ["P", "用选中的模型预测当前图"],
+                ["Ctrl + D", "沿用上一张的标注"],
+              ],
+            ],
+            isCls
+              ? ["分类", [["1–9", "选类别" + (autoNext ? "（选完自动下一张）" : "")], ["Del", "清除这张图的类别"]]]
+              : [
+                  "画框和编辑",
+                  [
+                    ["V", "选择、移动、调整大小"],
+                    ["R", isSeg ? "画多边形轮廓：逐点点击，双击或 Enter 闭合，退格撤一个点" : isPose ? "画目标框，再逐个点关键点" : "画矩形框"],
+                    ["S", "智能选取（SAM）：点一下出轮廓，Enter 确认、Esc 清除、退格撤点"],
+                    ["1–9", "切换当前类别（选中框时改它的类别）"],
+                    ["Del / 退格", "删除选中的标注"],
+                    ["Esc", "取消选择"],
+                    ...(isPose ? [["N", "关键点：跳过当前点（看不见）"]] : []),
+                  ],
+                ],
+            [
+              "视图和撤销",
+              [
+                ["滚轮", "缩放"],
+                ["空格 + 拖动 / 右键拖动", "移动画面"],
+                ["F", "适应窗口"],
+                ["H", "隐藏 / 显示类别名"],
+                ["Ctrl + Z", "撤销"],
+                ["Ctrl + Y / Ctrl + Shift + Z", "重做"],
+                ["?", "打开这个面板"],
+              ],
+            ],
+          ] as [string, string[][]][]
+        ).map(([group, rows]) => (
+          <div key={group} style={{ marginBottom: 14 }}>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+              {group}
+            </div>
+            {rows.map(([k, v]) => (
+              <div key={k} className="row" style={{ flexWrap: "nowrap", gap: 12, padding: "3px 0", alignItems: "flex-start" }}>
+                <kbd style={{ minWidth: 150, fontFamily: "inherit", fontSize: 12, color: "var(--text)" }}>{k}</kbd>
+                <span style={{ fontSize: 13 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </Modal>
 
       <aside className="annot-side">
         {aiAllowed && (

@@ -34,6 +34,15 @@ export interface RecentProject {
   exists: boolean;
 }
 
+/** 首页项目卡片的概况 */
+export interface ProjectSummary {
+  images: number;
+  labeled: number;
+  runs: number;
+  /** 封面缩略图（data URL），还没有缩略图时为空 */
+  cover: string | null;
+}
+
 export type ImageStatus = "todo" | "labeled" | "reviewed" | "skipped";
 
 export interface ImageItem {
@@ -610,6 +619,7 @@ export const api = {
   closeProject: () => invoke<void>("close_project"),
   currentProject: () => invoke<ProjectInfo | null>("current_project"),
   recentProjects: () => invoke<RecentProject[]>("recent_projects"),
+  projectSummary: (path: string) => invoke<ProjectSummary | null>("project_summary", { path }),
   removeRecent: (path: string) => invoke<void>("remove_recent", { path }),
   importImages: (paths: string[], copy: boolean) => invoke<ImportResult>("import_images", { paths, copy }),
   extractVideo: (paths: string[], every: number, maxFrames: number) =>

@@ -75,6 +75,7 @@ pub fn run() {
             commands::current_project,
             commands::recent_projects,
             commands::remove_recent,
+            commands::project_summary,
             commands::import_images,
             commands::extract_video,
             commands::probe_stream,

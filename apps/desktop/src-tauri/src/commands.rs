@@ -79,6 +79,14 @@ pub async fn recent_projects(app: AppHandle) -> AppResult<Vec<RecentProject>> {
     Ok(project::load_recent(&config_dir(&app)?))
 }
 
+/// 首页项目卡片的概况（图片数、已标注、训练次数、封面），项目不存在时返回 null
+#[tauri::command]
+pub async fn project_summary(path: String) -> AppResult<Option<project::ProjectSummary>> {
+    Ok(tauri::async_runtime::spawn_blocking(move || project::summary(std::path::Path::new(&path)))
+        .await
+        .unwrap_or(None))
+}
+
 #[tauri::command]
 pub async fn remove_recent(app: AppHandle, path: String) -> AppResult<()> {
     project::remove_recent(&config_dir(&app)?, &path)

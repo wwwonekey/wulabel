@@ -147,6 +147,43 @@ pub struct RecentProject {
 
 const RECENT_MAX: usize = 20;
 
+/// 首页项目卡片上显示的概况：图片数、已标注数、训练次数、封面缩略图（data URL）
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSummary {
+    pub images: i64,
+    pub labeled: i64,
+    pub runs: i64,
+    pub cover: Option<String>,
+}
+
+/// 只读打开项目的数据库读概况，不改动项目；读不到返回 None
+pub fn summary(path: &Path) -> Option<ProjectSummary> {
+    use base64::Engine;
+
+    let conn = rusqlite::Connection::open_with_flags(
+        path.join(DB_FILE),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0);
+    let images = count("SELECT COUNT(*) FROM images");
+    let labeled = count("SELECT COUNT(*) FROM images WHERE status IN ('labeled', 'reviewed')");
+    let runs = count("SELECT COUNT(*) FROM runs");
+    // 封面：优先第一张标过的图，没有就第一张图；只用已经生成的缩略图，不现做
+    let hash: Option<String> = conn
+        .query_row(
+            "SELECT hash FROM images ORDER BY CASE WHEN status IN ('labeled', 'reviewed') THEN 0 ELSE 1 END, id LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    let cover = hash
+        .and_then(|h| fs::read(path.join(THUMBS_DIR).join(format!("{h}.jpg"))).ok())
+        .map(|b| format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(b)));
+    Some(ProjectSummary { images, labeled, runs, cover })
+}
+
 pub fn load_recent(config_dir: &Path) -> Vec<RecentProject> {
     let list: Vec<RecentProject> = fs::read_to_string(config_dir.join("recent.json"))
         .ok()
