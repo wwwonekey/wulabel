@@ -29,6 +29,56 @@ class _ClsNet(torch.nn.Module):
 
 CLS_OUTPUTS = "probs [N, 类别数]，各类别概率（已 softmax），类别顺序见 classes"
 DET_OUTPUTS = "boxes [N,4] xyxy 像素坐标；labels [N] 类别序号从 1 开始（0 是背景）；scores [N]"
+# YOLOX 的固定尺寸导出用官方格式：没有 NMS，适合 TensorRT / RKNN 等边缘设备，巡瞳平台的 yolox 解码也认这个格式
+YOLOX_OUTPUTS = (
+    "output [1, N, 5+类别数]，YOLOX 官方格式（已解码）：每行 cx, cy, w, h（输入尺寸上的像素）、目标分数 obj、各类别分数；"
+    "最终分数 = obj × 类别分数，过滤后按类别做 NMS（模型里没有 NMS）"
+)
+
+
+YOLOX_NOTE = """## YOLOX 模型说明
+
+这是 YOLOX 官方格式的模型：模型里没有 NMS，算子都是普通卷积和激活，TensorRT 和 RK 系列 NPU 都能完整跑。
+输出每行是 `cx, cy, w, h, obj, 各类别分数`（输入尺寸上的像素，已解码），后处理：分数 = obj × 类别分数，过滤低分后按类别做 NMS，
+再把框除以缩放比例换回原图。可以参考 YOLOX 官方仓库的 demo（ONNXRuntime / TensorRT / ncnn）。
+"""
+
+
+def _yolox_readme(text: str, size: int) -> str:
+    s = str(size)
+    yolox_in = f"BGR，0~255，不归一化。原图按比例缩放后放在左上角，其余补 114，补到 {s}×{s}"
+    text = text.replace(
+        f"- 输入 `image`：float32 `[1, 3, {s}, {s}]`，RGB，0~1。原图需要先缩放（保持比例，空白处补 0）到 {s}×{s}。",
+        f"- 输入 `image`：float32 `[1, 3, {s}, {s}]`，{yolox_in}。",
+    )
+    text = text.replace(
+        f"- 输入：uint8 RGB `[1, 3, {s}, {s}]`（转换时已把 /255 归一化写进模型）。原图需要先缩放（保持比例，空白处补 0）到 {s}×{s}。",
+        f"- 输入：uint8 `[1, 3, {s}, {s}]`，{yolox_in}。",
+    )
+    out = "- 输出 `output` [1, N, 5+类别数]，YOLOX 官方格式，见下面的说明。"
+    text = text.replace("- 输出 `boxes` [N,4]（xyxy，基于输入尺寸）、`labels` [N]（从 1 开始）、`scores` [N]。", out)
+    text = text.replace("- 输出 `boxes`、`labels`、`scores`，含义同 ONNX，类别见 `model.json`。", out + "类别见 `model.json`。")
+    for note in (TRT_NOTE_ONE, RKNN_NOTE_ONE):
+        text = text.replace(note, YOLOX_NOTE)
+    return text
+
+
+def _yolox_input(size: int) -> str:
+    return f"image: float32 [1, 3, {size}, {size}]，BGR，0~255 不归一化；原图按比例缩放后放在左上角，其余补 114"
+
+
+def _export_yolox_native(model, size: int, path: Path) -> None:
+    from .yolox_det import NativeExport
+
+    torch.onnx.export(
+        NativeExport(model).eval(),
+        (torch.rand(1, 3, size, size) * 255,),
+        str(path),
+        opset_version=17,
+        input_names=["image"],
+        output_names=["output"],
+        dynamo=False,
+    )
 
 
 def _export_cls(model, size: int, path: Path) -> None:
@@ -207,6 +257,9 @@ def run_formats(cfg: dict) -> None:
     formats = cfg["formats"]
     cls = models.is_cls(ck["model"])
     two_stage = models.kind_of(ck["model"]) == "rcnn"
+    yolox = models.kind_of(ck["model"]) == "yolox"
+    if yolox:
+        size = max(32, round(size / 32) * 32)
     meta = {
         "classes": ck["classes"],
         "model": ck["model"],
@@ -240,13 +293,22 @@ def run_formats(cfg: dict) -> None:
     if need_static:
         log(f"导出 ONNX（固定尺寸 {size}×{size}）…")
         static.parent.mkdir(parents=True, exist_ok=True)
+        static_meta = dict(meta)
         if cls:
             _export_cls(model, size, static)
+        elif yolox:
+            _export_yolox_native(model, size, static)
+            static_meta.update(outputs=YOLOX_OUTPUTS, format="yolox", inputSize=size)
         else:
             _export_onnx(model, size, static, False)
-        static_input = cls_input if cls else f"image: float32 [1, 3, {size}, {size}]，RGB，0~1；原图按比例缩放后补边到该尺寸"
+        if cls:
+            static_input = cls_input
+        elif yolox:
+            static_input = _yolox_input(size)
+        else:
+            static_input = f"image: float32 [1, 3, {size}, {size}]，RGB，0~1；原图按比例缩放后补边到该尺寸"
         (static.parent / "model.json").write_text(
-            json.dumps({**meta, "input": static_input}, ensure_ascii=False, indent=2),
+            json.dumps({**static_meta, "input": static_input}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         if "onnx_static" in formats:
@@ -293,8 +355,14 @@ def run_formats(cfg: dict) -> None:
         if cls:
             text = text.replace("输出 `boxes` [N,4]（xyxy，基于输入尺寸）、`labels` [N]（从 1 开始）、`scores` [N]", "输出 `probs` [N, 类别数]，各类别概率")
             text = text.replace("输出 `boxes`、`labels`、`scores`，含义同 ONNX", "输出 `probs`，各类别概率")
+        if yolox:
+            text = _yolox_readme(text, size)
         (d / "README.md").write_text(text, encoding="utf-8")
         for name, text in files.items():
+            if yolox and name == "convert_rknn.py":
+                # YOLOX 输入就是 0~255，不用再归一化
+                text = text.replace("# 输入 uint8 RGB，模型内部要的是 0~1，这里用 std=255 完成归一化", "# 输入 uint8 BGR 0~255，YOLOX 不需要归一化")
+                text = text.replace("std_values=[[255, 255, 255]]", "std_values=[[1, 1, 1]]")
             (d / name).write_text(text, encoding="utf-8", newline="")
         done(fmt, d, note="转换包：需要在目标设备上完成转换，见 README.md")
 

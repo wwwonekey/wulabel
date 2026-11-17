@@ -186,14 +186,22 @@ def run(cfg: dict) -> None:
     epochs = int(cfg.get("epochs", 30))
     key = cfg.get("model", "frcnn_mobilenet")
     cls = models.is_cls(key)
-    # SSDLite 固定 320 输入
+    yolox = models.kind_of(key) == "yolox"
+    # SSDLite 固定 320 输入；YOLOX 要 32 的倍数
     img_size = 320 if models.kind_of(key) == "ssd" else int(cfg.get("img_size", 224 if cls else 640))
+    if yolox:
+        img_size = max(32, round(img_size / 32) * 32)
     cfg["img_size"] = img_size
     batch = int(cfg.get("batch", 4))
     lr = float(cfg.get("lr", 0.01))
     device = pick_device(cfg.get("device", "auto"))
     torch.manual_seed(int(cfg.get("seed", 0)))
-    task = ClsTask(cfg, root, key) if cls else DetTask(cfg, root, key)
+    if yolox:
+        from .yolox_det import YoloxTask
+
+        task = YoloxTask(cfg, root, key, epochs)
+    else:
+        task = ClsTask(cfg, root, key) if cls else DetTask(cfg, root, key)
 
     log(f"设备：{device_name(device)}，模型：{models.MODELS[key]['name']}")
     train_ds = task.dataset("train", True)
@@ -225,8 +233,12 @@ def run(cfg: dict) -> None:
         sizes = augment.multiscale_sizes(img_size, scale)
         model.transform.min_size = sizes
         log(f"多尺度训练：{'、'.join(str(s) for s in sizes)}")
-    params = [p for p in model.parameters() if p.requires_grad]
-    opt = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=1e-4)
+    # 任务可以自带优化器、学习率曲线和 EMA（YOLOX 按官方做法），没有的用通用的
+    if hasattr(task, "optimizer"):
+        opt, params = task.optimizer(model, lr, batch)
+    else:
+        params = [p for p in model.parameters() if p.requires_grad]
+        opt = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=1e-4)
     iters_per_epoch = max(len(loader), 1)
     total = epochs * iters_per_epoch
     warmup = min(300, iters_per_epoch * 2)
@@ -237,6 +249,11 @@ def run(cfg: dict) -> None:
         p = (it - warmup) / max(total - warmup, 1)
         return 0.05 + 0.95 * 0.5 * (1 + math.cos(math.pi * p))
 
+    if hasattr(task, "lr_factor"):
+        lr_factor = task.lr_factor(iters_per_epoch, total)  # noqa: F811
+    if hasattr(task, "on_model"):
+        task.on_model(model)
+    clip = getattr(task, "clip", 10.0)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_factor)
     use_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
@@ -250,6 +267,8 @@ def run(cfg: dict) -> None:
     t0 = time.time()
     it = 0
     for epoch in range(1, epochs + 1):
+        if hasattr(task, "on_epoch"):
+            task.on_epoch(epoch, model)
         model.train()
         losses = []
         for i, b in enumerate(loader):
@@ -264,11 +283,14 @@ def run(cfg: dict) -> None:
                 continue
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
-            scaler.unscale_(opt)
-            torch.nn.utils.clip_grad_norm_(params, 10.0)
+            if clip:
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(params, clip)
             scaler.step(opt)
             scaler.update()
             sched.step()
+            if hasattr(task, "after_step"):
+                task.after_step(model)
             it += 1
             losses.append(loss.item())
             if i % max(1, iters_per_epoch // 20) == 0 or i == iters_per_epoch - 1:
@@ -285,7 +307,9 @@ def run(cfg: dict) -> None:
         if stopped:
             log("收到停止指令，已停止训练")
             break
-        r = task.evaluate(model, val_ds, device, batch, len(classes))
+        # 有 EMA 的任务用平滑后的权重评估和保存
+        eval_model = task.eval_model(model) if hasattr(task, "eval_model") else model
+        r = task.evaluate(eval_model, val_ds, device, batch, len(classes))
         # 综合分：检测同 YOLO（mAP50 相同时选框更准的）；分类兼顾准确率和各类别均衡
         fitness = 0.5 * r.map50 + 0.5 * r.map if cls else 0.1 * r.map50 + 0.9 * r.map
         is_best = fitness > best
@@ -303,10 +327,10 @@ def run(cfg: dict) -> None:
         metrics_file.write(json.dumps(rec) + "\n")
         metrics_file.flush()
         emit("metric", **rec)
-        models.save(out / "last.pt", model, key, classes, img_size, {"epoch": epoch, **extra})
+        models.save(out / "last.pt", eval_model, key, classes, img_size, {"epoch": epoch, **extra})
         if is_best:
             best, best_epoch, best_map50 = fitness, epoch, r.map50
-            models.save(out / "best.pt", model, key, classes, img_size, {"epoch": epoch, "map50": r.map50, **extra})
+            models.save(out / "best.pt", eval_model, key, classes, img_size, {"epoch": epoch, "map50": r.map50, **extra})
             if cls:
                 log(f"第 {epoch} 轮准确率 {r.map50:.3f}、宏平均 F1 {r.map:.3f}，保存为最好的模型")
             else:

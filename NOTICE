@@ -1,0 +1,17 @@
+Wulabel
+Copyright 2026 小物学长
+
+本软件以 Apache License 2.0 发布，见 LICENSE。
+
+本软件包含以下第三方代码：
+
+YOLOX
+  https://github.com/Megvii-BaseDetection/YOLOX （版本 0.3.0）
+  Copyright (c) Megvii Inc. All rights reserved.
+  Apache License 2.0，许可证原文见 worker/xlabel_worker/yolox/LICENSE
+  位置：worker/xlabel_worker/yolox/（模型结构、损失函数、EMA，各文件开头写明了是否修改）
+        worker/xlabel_worker/yolox_data.py（数据增强，改写自 yolox/data/data_augment.py 和 datasets/mosaicdetection.py）
+
+YOLOX 预训练权重（训练时自动下载，不随安装包分发）
+  https://github.com/Megvii-BaseDetection/YOLOX/releases/tag/0.1.1rc0
+  Copyright (c) Megvii Inc.，Apache License 2.0

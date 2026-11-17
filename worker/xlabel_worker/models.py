@@ -1,7 +1,7 @@
-"""内置模型（torchvision，BSD 许可）
+"""内置模型（torchvision，BSD 许可；YOLOX，Apache-2.0，见 yolox/ 和 yolox_det.py）
 
 task：detect 目标检测 / segment 实例分割 / pose 关键点 / classify 图像分类
-kind：rcnn 两阶段（Faster/Mask/Keypoint R-CNN）、retinanet / fcos / ssd 单阶段检测、cls 分类
+kind：rcnn 两阶段（Faster/Mask/Keypoint R-CNN）、retinanet / fcos / ssd 单阶段检测、yolox、cls 分类
 """
 
 from __future__ import annotations
@@ -47,6 +47,12 @@ MODELS = {
         "task": "detect",
         "kind": "ssd",
     },
+    # ---------- 目标检测：YOLOX（Apache-2.0，官方 COCO 预训练权重） ----------
+    "yolox_nano": {"name": "YOLOX-Nano", "task": "detect", "kind": "yolox"},
+    "yolox_tiny": {"name": "YOLOX-Tiny", "task": "detect", "kind": "yolox"},
+    "yolox_s": {"name": "YOLOX-S", "task": "detect", "kind": "yolox"},
+    "yolox_m": {"name": "YOLOX-M", "task": "detect", "kind": "yolox"},
+    "yolox_l": {"name": "YOLOX-L", "task": "detect", "kind": "yolox"},
     # ---------- 实例分割 ----------
     "maskrcnn_r50": {
         "name": "Mask R-CNN ResNet50",
@@ -152,6 +158,10 @@ def build(key: str, num_classes: int, img_size: int, pretrained: bool = True, nu
     kind = kind_of(key)
     if kind == "cls":
         return _build_cls(key, num_classes, pretrained)
+    if kind == "yolox":
+        from . import yolox_det
+
+        return yolox_det.build(key, num_classes, img_size, pretrained)
 
     from torchvision.models import detection as D
 
@@ -210,6 +220,8 @@ def class_heads(key: str, model: torch.nn.Module) -> list[str]:
         return ["head.classification_head.cls_logits."]
     if kind == "ssd":
         return ["head.classification_head."]
+    if kind == "yolox":
+        return ["net.head.cls_preds."]
     linears = [n for n, m in model.named_modules() if isinstance(m, torch.nn.Linear)]
     return [linears[-1] + "."] if linears else []
 

@@ -1,0 +1,31 @@
+# worker（训练、推理、导出）的自动测试：CPU 上跑指标单元测试和 YOLOX 冒烟测试。
+name: worker-test
+
+on:
+  push:
+    paths: ["worker/**", ".github/workflows/worker-test.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖（CPU 版 PyTorch）
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy pillow onnx onnxruntime opencv-python-headless
+
+      - name: 运行测试
+        working-directory: worker
+        run: python -m unittest discover -s tests -v

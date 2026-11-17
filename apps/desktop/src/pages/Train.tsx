@@ -15,8 +15,23 @@ import RunCompare from "../components/RunCompare";
 import ImportModelModal from "../components/ImportModelModal";
 import AugPanel from "../components/AugPanel";
 
-/** 内置模型，和 worker/xlabel_worker/models.py 的 MODELS 对应。oneStage：单阶段检测，部署到 TensorRT / NPU 更顺 */
-export const MODELS: { value: string; name: string; desc: string; task: Task; oneStage?: boolean; fixedSize?: number }[] = [
+/** 内置模型，和 worker/xlabel_worker/models.py 的 MODELS 对应。oneStage：单阶段检测，部署到 TensorRT / NPU 更顺；
+ *  yolox：YOLOX 系列（官方数据增强，增强设置里只有翻转生效）；defaultSize：选中时默认的输入尺寸 */
+export const MODELS: {
+  value: string;
+  name: string;
+  desc: string;
+  task: Task;
+  oneStage?: boolean;
+  fixedSize?: number;
+  yolox?: boolean;
+  defaultSize?: number;
+}[] = [
+  { value: "yolox_nano", name: "YOLOX-Nano", desc: "YOLO 系列最轻的一档，适合 CPU、手机和很弱的边缘设备；默认 416 输入", task: "detect", oneStage: true, yolox: true, defaultSize: 416 },
+  { value: "yolox_tiny", name: "YOLOX-Tiny", desc: "很轻，适合 CPU 和 NPU 边缘盒子实时推理；默认 416 输入", task: "detect", oneStage: true, yolox: true, defaultSize: 416 },
+  { value: "yolox_s", name: "YOLOX-S", desc: "速度和精度最均衡，大多数项目先用它", task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
+  { value: "yolox_m", name: "YOLOX-M", desc: "精度更高，建议有独立显卡（6GB 以上显存）", task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
+  { value: "yolox_l", name: "YOLOX-L", desc: "精度最高、最慢，建议 8GB 以上显存", task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
   { value: "frcnn_mobilenet", name: "Faster R-CNN MobileNetV3", desc: "速度快、显存占用小，适合入门和没有独立显卡的电脑", task: "detect" },
   { value: "frcnn_resnet50", name: "Faster R-CNN ResNet50 v2", desc: "精度更高，训练和推理更慢，建议 6GB 以上显存", task: "detect" },
   { value: "retinanet_r50", name: "RetinaNet ResNet50 v2", desc: "单阶段，精度接近 Faster R-CNN；没有 RoIAlign，转 TensorRT 更顺", task: "detect", oneStage: true },
@@ -195,7 +210,14 @@ export default function Train({ project }: { project: ProjectInfo }) {
   }, [task]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const picked = MODELS.find((m) => m.value === cfg.model);
-  const sizeOptions = task === "classify" ? [128, 160, 224, 256, 320, 384] : [320, 480, 640, 800, 960, 1280];
+  const sizeOptions = task === "classify" ? [128, 160, 224, 256, 320, 384] : [320, 416, 480, 640, 800, 960, 1280];
+  /** 换模型：YOLOX 有自己的默认输入尺寸，从 YOLOX 换回其他模型时恢复 640 */
+  const pickModel = (value: string) => {
+    const next = MODELS.find((m) => m.value === value);
+    if (next?.defaultSize) update({ model: value, imgSize: next.defaultSize });
+    else if (picked?.defaultSize && task !== "classify") update({ model: value, imgSize: 640 });
+    else update({ model: value });
+  };
 
   const start = async () => {
     setStarting(true);
@@ -320,12 +342,13 @@ export default function Train({ project }: { project: ProjectInfo }) {
                 />
               </Form.Item>
               <Form.Item label="模型" extra={baseRun ? "接着训练时沿用那次的模型" : undefined}>
-                <Radio.Group value={cfg.model} disabled={!!baseRun} onChange={(e) => update({ model: e.target.value })}>
+                <Radio.Group value={cfg.model} disabled={!!baseRun} onChange={(e) => pickModel(e.target.value)}>
                   <Space direction="vertical">
                     {models.map((m) => (
                       <Radio key={m.value} value={m.value}>
                         <b>{m.name}</b>
                         {m.value === recommended && <Tag color="blue" style={{ marginLeft: 6 }}>推荐</Tag>}
+                        {m.yolox && <Tag color="green" style={{ marginLeft: 6 }}>YOLO</Tag>}
                         {m.oneStage && <Tag style={{ marginLeft: 6 }}>单阶段</Tag>}
                         <div className="dim" style={{ fontSize: 12 }}>{m.desc}</div>
                       </Radio>
@@ -359,7 +382,17 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   <InputNumber min={1} max={64} value={cfg.batch} onChange={(v) => update({ batch: Number(v ?? 4) })} />
                 </Form.Item>
               </Space>
-              <AugPanel value={cfg.aug} task={task} imgSize={picked?.fixedSize ?? cfg.imgSize} fixedSize={!!picked?.fixedSize} onChange={(aug) => update({ aug })} />
+              {picked?.yolox ? (
+                <Alert
+                  style={{ marginBottom: 12 }}
+                  type="info"
+                  showIcon
+                  message="YOLOX 用官方的数据增强"
+                  description="Mosaic 拼图、MixUp、随机缩放旋转、颜色抖动、水平翻转、多尺度训练都自动开启，最后约 10% 的轮数关掉强增强收尾。学习率按批大小自动换算（界面上的学习率当作批大小 64 时的值）。"
+                />
+              ) : (
+                <AugPanel value={cfg.aug} task={task} imgSize={picked?.fixedSize ?? cfg.imgSize} fixedSize={!!picked?.fixedSize} onChange={(aug) => update({ aug })} />
+              )}
               <Form.Item label="训练数据" tooltip="选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存">
                 <Select
                   style={{ width: "100%" }}
