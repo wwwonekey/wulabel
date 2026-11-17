@@ -42,20 +42,19 @@
 | 训练 | 检测：YOLOX（Nano / Tiny / S / M / L，官方 Mosaic / MixUp 增强、EMA、COCO 预训练权重）、Faster R-CNN（MobileNetV3 / ResNet50）、单阶段 RetinaNet / FCOS / SSDLite；分割：Mask R-CNN；关键点：Keypoint R-CNN；分类：MobileNetV3 / EfficientNet-B0 / ResNet50。数据增强（预设 + 自定义，效果预览）；接着已有模型继续训练；导入外部 ONNX 模型（YOLOv5/v8、YOLOX、RT-DETR 等，用于预标注、评估）；实时曲线、日志、中途停止、训练记录、训练对比 |
 | 评估 | 检测类：mAP50、mAP50-95、精确率、召回率；分类：准确率、宏平均 F1；各类别指标、混淆矩阵、错例浏览（点击直接去改标注）；PR 曲线、阈值推荐；误报测试（拿不含目标的视频/视频流跑，统计每小时误报，误报帧一键加为负样本）；用当前数据重新评估；导出交付报告（单个 HTML） |
 | 部署 | 实时验证（RTSP 摄像头/本地视频，截图加入数据集）；导出 ONNX（动态/固定尺寸）、OpenVINO（软件内转换并验证）、TensorRT/RKNN 转换包（检测、分类）；生成推理服务包（检测；多路拉流、告警规则、Webhook/MQTT 推送、HTTP 检测接口、现场回流）；导入回流图片；上传到巡瞳 AI 平台（在平台上接摄像头、配告警） |
-| 设置 | 训练环境一键安装、安装位置、下载源、使用已有 Python 环境、巡瞳 AI 平台 |
+| 设置 | 训练环境一键安装、安装位置、下载源、使用已有 Python 环境、巡瞳 AI 平台；检查更新（启动时自动检查，可关闭） |
 | 协作中转 | `relay/wulabel_relay.py`：在线协作用的中转服务（Python + aiohttp），可以自建，也可以用巡瞳官方中转，部署见 [relay/README.md](relay/README.md) |
 
-### 后续版本
+### 版本历史
 
-v0.2.0 已包含下表 v0.2–v1.1 的全部功能。
-
-| 版本 | 主题 | 状态 |
+| 版本 | 日期 | 主要内容 |
 |---|---|---|
-| v0.2 | SAM 交互分割、实例分割、文本提示标注、AI 平台辅助、视频抽帧、视频流抽帧 | 已发布（v0.2.0） |
-| v0.3 | 训练对比、数据集版本 | 已发布（v0.2.0） |
-| v0.4 | 分类、关键点 | 已发布（v0.2.0） |
-| v1.0 | 正式版，macOS；单阶段检测模型 | 已发布（v0.2.0，Mac 版无苹果签名） |
-| v1.1 | 实时多人协作（局域网 / 在线）、巡瞳 AI 平台深度对接（按类别识别、聊天定规则、上传模型、拉告警图） | 已发布（v0.2.0） |
+| [v0.3.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.3.0) | 2026-11-17 | 新增 YOLO 系列训练：YOLOX Nano / Tiny / S / M / L（官方数据增强、COCO 预训练权重），可评估、预标注、导出 ONNX / OpenVINO / TensorRT / RKNN、上传巡瞳 |
+| [v0.2.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.1) | 2026-11-12 | 检查更新（有新版本时提醒）；标注页缩略图条可拖动调整大小；Windows 安装界面改为中文 |
+| [v0.2.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.0) | 2026-11-10 | 首个 Mac 版；实例分割、分类、关键点；SAM 智能选取、文本提示、巡瞳 AI 辅助标注；视频和视频流抽帧、关键帧插值和跟踪；训练对比、数据集版本；单阶段检测模型；实时多人协作；巡瞳平台对接（上传模型、拉告警图） |
+| [v0.1.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.1.0) | 2026-11-09 | 首个版本：目标检测的标注、训练（Faster R-CNN）、评估、模型预标注、导出 |
+
+每个版本的详细说明见 [GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases)。
 
 已知限制：分割、关键点模型暂不支持导出部署（可在软件内预标注）；分割、关键点的评估按目标框计算指标。
 
