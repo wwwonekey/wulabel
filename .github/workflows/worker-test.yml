@@ -38,3 +38,6 @@ jobs:
             grep -E '\.\.\. |^Ran |^OK|^FAILED|已加载|mAP50|最后 [0-9]+ 轮|onnxruntime' test-output.txt | tail -60
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # 运行页面上直接能看到的一行结果
+          echo "::notice title=测试结果::$(grep -E '^Ran |^OK|^FAILED' test-output.txt | tr '\n' ' ') $(grep -cE '\.\.\. ok$' test-output.txt) 项通过"
+          echo "::notice title=YOLOX 冒烟测试::$(grep -oE 'test_[a-z_]+ \([^)]*\) \.\.\. [a-z]+' test-output.txt | tr '\n' '；')"
