@@ -36,6 +36,8 @@ futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 getrandom = "0.2"
 base64 = "0.22"
+# 软件内更新：核对安装包的 SHA-256
+sha2 = "0.10"
 
 [profile.dev.package."*"]
 # 依赖库用优化编译，开发时图片解码不至于太慢

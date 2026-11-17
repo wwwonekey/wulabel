@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { AiModel, api, EnvStatus, errText, SpeedResult, UpdateInfo, XtAccount } from "../api";
 import { prefs } from "../store";
+import UpdateModal from "../components/UpdateModal";
 
 /** 关于与更新：当前版本、手动检查更新、自动检查开关 */
 function UpdateCard() {
@@ -12,6 +13,7 @@ function UpdateCard() {
   const [checking, setChecking] = useState(false);
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [error, setError] = useState("");
+  const [installing, setInstalling] = useState(false);
 
   const check = async () => {
     setChecking(true);
@@ -38,8 +40,13 @@ function UpdateCard() {
             <span>
               有新版本 <b>v{info.latest}</b>（当前 v{info.current}）
             </span>
+            {info.downloadUrl && info.sha256 && (
+              <Button type="primary" onClick={() => setInstalling(true)}>
+                立即更新
+              </Button>
+            )}
             {info.url && (
-              <Button type="primary" onClick={() => api.openUrl(info.url).catch(() => {})}>
+              <Button type={info.downloadUrl ? "default" : "primary"} onClick={() => api.openUrl(info.url).catch(() => {})}>
                 去下载
               </Button>
             )}
@@ -48,6 +55,7 @@ function UpdateCard() {
         {error && <span style={{ color: "var(--bad)" }}>{error}</span>}
       </Space>
       {info?.newer && info.notes && <div className="muted" style={{ marginTop: 8 }}>{info.notes}</div>}
+      <UpdateModal info={info} open={installing} onClose={() => setInstalling(false)} />
       <div className="row" style={{ marginTop: 14, gap: 10, alignItems: "flex-start", flexWrap: "nowrap" }}>
         <Switch
           checked={auto}

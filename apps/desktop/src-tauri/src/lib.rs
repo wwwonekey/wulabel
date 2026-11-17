@@ -184,6 +184,7 @@ pub fn run() {
             commands::open_url,
             feedback::submit_feedback,
             update::check_update,
+            update::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("程序启动失败")

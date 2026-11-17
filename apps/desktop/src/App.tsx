@@ -13,7 +13,7 @@ import {
   SettingOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { api, ShareStatus, taskName } from "./api";
+import { api, ShareStatus, taskName, UpdateInfo } from "./api";
 import { listen } from "./transport";
 import { PageKey, prefs, useApp } from "./store";
 import Home from "./pages/Home";
@@ -26,6 +26,7 @@ import Settings from "./pages/Settings";
 import Deploy from "./pages/Deploy";
 import Team from "./pages/Team";
 import FeedbackModal from "./components/FeedbackModal";
+import UpdateModal from "./components/UpdateModal";
 import html2canvas from "html2canvas";
 
 const NAV: { key: PageKey; label: string; icon: ReactNode; needProject: boolean }[] = [
@@ -54,6 +55,7 @@ const TITLES: Record<PageKey, string> = {
 export default function App() {
   const { project, page, setPage, setProject, setTeam, team } = useApp();
   const { notification } = AntApp.useApp();
+  const [upd, setUpd] = useState<UpdateInfo | null>(null);
 
   // 启动时检查更新（设置里可关）。有新版本一天最多提醒一次，用户点了「不再提醒」的版本不再提。
   useEffect(() => {
@@ -73,8 +75,20 @@ export default function App() {
             description: (
               <div>
                 <div>当前是 v{u.current}。{u.notes}</div>
-                <Space style={{ marginTop: 10 }}>
-                  <Button size="small" type="primary" onClick={() => u.url && api.openUrl(u.url).catch(() => {})}>
+                <Space style={{ marginTop: 10 }} wrap>
+                  {u.downloadUrl && u.sha256 ? (
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => {
+                        notification.destroy(key);
+                        setUpd(u);
+                      }}
+                    >
+                      立即更新
+                    </Button>
+                  ) : null}
+                  <Button size="small" type={u.downloadUrl ? "default" : "primary"} onClick={() => u.url && api.openUrl(u.url).catch(() => {})}>
                     去下载
                   </Button>
                   <Button
@@ -204,6 +218,7 @@ export default function App() {
       </main>
 
       <FeedbackModal open={fbOpen} shot={fbShot} onClose={() => setFbOpen(false)} />
+      <UpdateModal info={upd} open={!!upd} onClose={() => setUpd(null)} />
     </div>
   );
 }

@@ -1,5 +1,15 @@
 {
-  "latest": "0.2.0",
+  "latest": "0.4.0",
   "url": "https://wulabel.xiaowuiot.com/#download",
-  "notes": ""
+  "notes": "这一版的更新说明，显示在升级提示里",
+  "downloads": {
+    "windows": {
+      "url": "https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_x64-setup.exe",
+      "sha256": "安装包的 SHA-256（小写十六进制）"
+    },
+    "macos": {
+      "url": "https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_universal.dmg",
+      "sha256": "安装包的 SHA-256（小写十六进制）"
+    }
+  }
 }

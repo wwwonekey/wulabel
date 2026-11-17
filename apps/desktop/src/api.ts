@@ -540,11 +540,15 @@ export interface UpdateInfo {
   newer: boolean;
   url: string;
   notes: string;
+  /** 本系统安装包直链和 SHA-256，有的话可以「立即更新」 */
+  downloadUrl: string;
+  sha256: string;
 }
 
 export const api = {
   submitFeedback: (input: FeedbackInput) => invoke<void>("submit_feedback", { input }),
   checkUpdate: () => invoke<UpdateInfo>("check_update"),
+  installUpdate: (url: string, sha256: string) => invoke<void>("install_update", { url, sha256 }),
   liveStart: (runId: number, source: string, conf: number) => invoke<void>("live_start", { runId, source, conf }),
   liveStop: () => invoke<void>("live_stop"),
   liveConf: (conf: number) => invoke<void>("live_conf", { conf }),
