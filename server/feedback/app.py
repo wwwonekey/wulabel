@@ -217,11 +217,16 @@ def update(req: Request):
             conn.close()
 
     info = read_latest()
-    return {
+    out = {
         "latest": str(info.get("latest") or version or ""),
         "url": str(info.get("url") or ""),
         "notes": str(info.get("notes") or ""),
     }
+    # 本系统的安装包直链和 SHA-256（有的话客户端可以「立即更新」）
+    dl = (info.get("downloads") or {}).get(osname)
+    if isinstance(dl, dict) and dl.get("url") and dl.get("sha256"):
+        out["download"] = {"url": str(dl["url"]), "sha256": str(dl["sha256"]).lower()}
+    return out
 
 
 def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) -> None:
