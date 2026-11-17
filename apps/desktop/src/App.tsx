@@ -140,6 +140,41 @@ export default function App() {
     api.currentProject().then((p) => p && setProject(p)).catch(() => {});
   }, [setProject]);
 
+  // 训练完成：不管在哪个页面都提示，并给出下一步
+  useEffect(() => {
+    const un = listen<{ runId: number; event: { type?: string; status?: string } }>("train-event", (e) => {
+      const ev = e.payload.event;
+      if (ev.type !== "finished" || ev.status !== "done") return;
+      const key = `train-done-${e.payload.runId}`;
+      const go = (p: PageKey) => {
+        notification.destroy(key);
+        setPage(p);
+      };
+      notification.success({
+        key,
+        message: "训练完成",
+        description: (
+          <Space style={{ marginTop: 6 }} wrap>
+            <Button size="small" type="primary" onClick={() => go("eval")}>
+              去评估
+            </Button>
+            <Button size="small" onClick={() => go("annotate")}>
+              去预标注
+            </Button>
+            <Button size="small" onClick={() => go("train")}>
+              看训练记录
+            </Button>
+          </Space>
+        ),
+        duration: 0,
+        placement: "bottomRight",
+      });
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [notification, setPage]);
+
   // 协作开没开（标注页据此加锁、显示审核打回）
   useEffect(() => {
     api

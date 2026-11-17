@@ -534,6 +534,9 @@ pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: 
     let jobs = app.state::<Arc<Jobs>>().inner().clone();
     let a = app.clone();
     let sink: training::EventSink = Arc::new(move |id, ev| {
+        if ev["type"] == "finished" {
+            notify_training(&a, ev["status"].as_str().unwrap_or(""));
+        }
         let _ = a.emit("train-event", serde_json::json!({ "runId": id, "event": ev }));
     });
     tauri::async_runtime::spawn_blocking(move || {
@@ -542,6 +545,21 @@ pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: 
     })
     .await
     .map_err(|e| msg(format!("启动训练异常：{e}")))?
+}
+
+/// 训练结束：发系统通知、任务栏闪一下（训练常常要几十分钟，人多半不在电脑前）
+fn notify_training(app: &AppHandle, status: &str) {
+    use tauri_plugin_notification::NotificationExt;
+
+    let (title, body) = match status {
+        "done" => ("Wulabel 训练完成", "可以去评估页看效果，或者用训好的模型预标注剩下的图"),
+        "failed" => ("Wulabel 训练失败", "打开 Wulabel 的训练页看日志"),
+        _ => return,
+    };
+    let _ = app.notification().builder().title(title).body(body).show();
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    }
 }
 
 #[tauri::command]

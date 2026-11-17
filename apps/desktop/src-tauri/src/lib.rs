@@ -53,6 +53,7 @@ fn worker_dir(app: &tauri::App) -> PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state::AppState::default())
         .manage(Arc::new(training::Jobs::default()))
         .manage(training::Predictor::default())
