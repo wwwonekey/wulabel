@@ -8,7 +8,8 @@
 - 越标越快：SAM 点一下出轮廓、文本提示自动找目标；标一小批就能训练，再用训练出的模型预标注剩下的图
 - 导出 YOLO（含 seg / pose）/ COCO / VOC / 分类文件夹数据集和 ONNX 模型
 - Windows 和 macOS（Apple 芯片用 MPS 加速训练）
-- Apache-2.0 开源，内置模型只用 BSD / Apache 许可的 torchvision
+- 训练 YOLO 系列（YOLOX Nano / Tiny / S / M / L，v0.3.0 起）和 torchvision 的 Faster R-CNN、Mask R-CNN 等模型
+- Apache-2.0 开源，内置模型只用 BSD / Apache 许可的代码和权重（torchvision、YOLOX），训出的模型可以放心商用
 
 **官网**：<https://wulabel.xiaowuiot.com>　|　**使用教程**：[docs/使用教程.md](docs/使用教程.md)（在线版 <https://wulabel.xiaowuiot.com/guide.html>）　|　**反馈服务部署**：[server/feedback/](server/feedback/)
 
@@ -38,7 +39,7 @@
 | 标注 | 矩形框；多边形轮廓；分类（数字键一键一张）；关键点（可编辑模板，逐个点、遮挡/跳过、拖点微调）；类别管理（1–9 快捷切换）；撤销重做；复制上一张；视频帧关键帧插值、往后自动跟踪；自动保存；审核/跳过 |
 | AI 辅助 | SAM 智能选取（点选/框选出轮廓）；文本提示（按英文类别名开放词汇检测，分割项目再用 SAM 出轮廓）；巡瞳 AI 平台（按项目类别识别：只认项目里的类别、按识别说明来；专用模型、大模型识别）；识别规则（每个类别的识别说明 + 整体规则，可以和 AI 聊天整理规则、在当前图上试识别）；自己训练的模型预标注（单张 P 键、批量） |
 | 体检 | 规则检查：极小框、重复框、近似重复图片（感知哈希）、类别不均衡、框大小分布；模型检查：疑似漏标、类别错、框不准、多余框（分类：疑似标错类别）；一键加为标注、忽略、跳到标注页高亮问题框 |
-| 训练 | 检测：Faster R-CNN（MobileNetV3 / ResNet50）、单阶段 RetinaNet / FCOS / SSDLite；分割：Mask R-CNN；关键点：Keypoint R-CNN；分类：MobileNetV3 / EfficientNet-B0 / ResNet50。数据增强（预设 + 自定义，效果预览）；接着已有模型继续训练；导入外部 ONNX 模型（YOLOv5/v8、YOLOX、RT-DETR 等，用于预标注、评估）；实时曲线、日志、中途停止、训练记录、训练对比 |
+| 训练 | 检测：YOLOX（v0.3.0 起；Nano / Tiny / S / M / L，官方 Mosaic / MixUp 增强、EMA、COCO 预训练权重）、Faster R-CNN（MobileNetV3 / ResNet50）、单阶段 RetinaNet / FCOS / SSDLite；分割：Mask R-CNN；关键点：Keypoint R-CNN；分类：MobileNetV3 / EfficientNet-B0 / ResNet50。数据增强（预设 + 自定义，效果预览）；接着已有模型继续训练；导入外部 ONNX 模型（YOLOv5/v8、YOLOX、RT-DETR 等，用于预标注、评估）；实时曲线、日志、中途停止、训练记录、训练对比 |
 | 评估 | 检测类：mAP50、mAP50-95、精确率、召回率；分类：准确率、宏平均 F1；各类别指标、混淆矩阵、错例浏览（点击直接去改标注）；PR 曲线、阈值推荐；误报测试（拿不含目标的视频/视频流跑，统计每小时误报，误报帧一键加为负样本）；用当前数据重新评估；导出交付报告（单个 HTML） |
 | 部署 | 实时验证（RTSP 摄像头/本地视频，截图加入数据集）；导出 ONNX（动态/固定尺寸）、OpenVINO（软件内转换并验证）、TensorRT/RKNN 转换包（检测、分类）；生成推理服务包（检测；多路拉流、告警规则、Webhook/MQTT 推送、HTTP 检测接口、现场回流）；导入回流图片；上传到巡瞳 AI 平台（在平台上接摄像头、配告警） |
 | 设置 | 训练环境一键安装、安装位置、下载源、使用已有 Python 环境、巡瞳 AI 平台 |
@@ -117,7 +118,10 @@ worker/                     Python 训练与推理进程（随安装包分发）
    ├─ export.py             导出 ONNX / OpenVINO / TensorRT、RKNN 转换包
    ├─ live.py               实时验证（RTSP / 视频文件）
    ├─ metrics.py            mAP、分类指标、混淆矩阵（只依赖 numpy）
-   └─ models.py             torchvision 模型（检测、分割、关键点、分类）
+   ├─ models.py             内置模型列表（torchvision 检测、分割、关键点、分类；YOLOX）
+   ├─ yolox_det.py          YOLOX 接入：规格、预训练权重、推理包装、训练任务
+   ├─ yolox_data.py         YOLOX 数据增强（Mosaic、MixUp、随机仿射、HSV）
+   └─ yolox/               YOLOX 模型代码（摘自官方仓库，Apache-2.0，见 NOTICE）
 └─ service/                 推理服务包模板（只依赖 onnxruntime + OpenCV，含中文说明）
 ```
 
@@ -136,4 +140,4 @@ worker/                     Python 训练与推理进程（随安装包分发）
 
 ## 许可证
 
-[Apache-2.0](LICENSE)
+[Apache-2.0](LICENSE)。第三方代码（YOLOX，Apache-2.0）见 [NOTICE](NOTICE)。
