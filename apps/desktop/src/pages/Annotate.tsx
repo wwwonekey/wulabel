@@ -842,6 +842,15 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     setConf(Number(prefs.get(confKey(v), confDefault(v))));
   };
 
+  // 用文本提示时，给还没填英文提示词的中文类别按对照表自动补上（协作成员没有权限，忽略失败）
+  useEffect(() => {
+    if (aiSrc !== "text" || remote) return;
+    api
+      .fillLabelPrompts()
+      .then((n) => (n > 0 ? loadLabels() : undefined))
+      .catch(() => {});
+  }, [aiSrc, remote, labels.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** 把一次预测结果放进当前图（和已有标注重叠很大的不重复添加）。source：model / text / ai */
   const applyPreds = (preds: PredResult, source: string) => {
     const tagWord = source === "model" ? "模型" : source === "ai" ? "巡瞳 AI" : "文本提示";
@@ -1553,9 +1562,9 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           )}
           {aiSrc === "text" && (
             <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
-              按类别名在图里找目标（开放词汇检测{isSeg ? " + SAM 出轮廓" : ""}）。模型只懂英文：中文类别请在类别的
+              按类别名在图里找目标（开放词汇检测{isSeg ? " + SAM 出轮廓" : ""}）。模型只懂英文，常见的中文类别会自动对应英文（如 安全帽 → helmet，显示在类别名后面）；对不上或想改的，在类别的
               <EditOutlined style={{ margin: "0 2px" }} />
-              里填「英文提示词」，如 安全帽 → helmet。首次使用需要下载模型。
+              里填「英文提示词」。首次使用需要下载模型。
               {labels.some((l) => !l.prompt && /[^\x00-\x7f]/.test(l.name)) && (
                 <div style={{ color: "var(--warn)", marginTop: 4 }}>
                   还没填英文提示词：{labels.filter((l) => !l.prompt && /[^\x00-\x7f]/.test(l.name)).map((l) => l.name).join("、")}

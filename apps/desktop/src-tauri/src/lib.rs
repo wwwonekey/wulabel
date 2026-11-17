@@ -119,6 +119,7 @@ pub fn run() {
             commands::list_labels,
             commands::add_label,
             commands::update_label,
+            commands::fill_label_prompts,
             commands::delete_label,
             commands::split_summary,
             commands::assign_splits,

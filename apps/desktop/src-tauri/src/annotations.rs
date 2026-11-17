@@ -259,9 +259,28 @@ pub fn add_label(p: &Project, name: &str, color: &str) -> AppResult<Label> {
     let name = check_name(name)?;
     let conn = p.conn.lock();
     let sort: i64 = conn.query_row("SELECT COALESCE(MAX(sort), 0) + 1 FROM labels", [], |r| r.get(0))?;
-    conn.execute("INSERT INTO labels (name, color, sort) VALUES (?1, ?2, ?3)", params![name, color, sort])
+    // 中文类别名自动填上英文提示词（文本提示自动标注用），对不上的留空，用户可以自己改
+    let prompt = crate::assist::guess_prompt(&name).unwrap_or_default();
+    conn.execute("INSERT INTO labels (name, color, sort, prompt) VALUES (?1, ?2, ?3, ?4)", params![name, color, sort, prompt])
         .map_err(|e| map_unique(e, &name))?;
-    Ok(Label { id: conn.last_insert_rowid(), name, color: color.to_string(), count: 0, prompt: String::new(), description: String::new() })
+    Ok(Label { id: conn.last_insert_rowid(), name, color: color.to_string(), count: 0, prompt, description: String::new() })
+}
+
+/// 给还没有英文提示词的中文类别按对照表补上，返回补了几个
+pub fn fill_prompts(p: &Project) -> AppResult<usize> {
+    let conn = p.conn.lock();
+    let rows: Vec<(i64, String)> = conn
+        .prepare("SELECT id, name FROM labels WHERE prompt = ''")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut n = 0;
+    for (id, name) in rows {
+        if let Some(en) = crate::assist::guess_prompt(&name) {
+            conn.execute("UPDATE labels SET prompt = ?2 WHERE id = ?1", params![id, en])?;
+            n += 1;
+        }
+    }
+    Ok(n)
 }
 
 /// 改类别名、颜色；prompt 为 None 时不改英文提示词

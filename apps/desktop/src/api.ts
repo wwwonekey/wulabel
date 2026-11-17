@@ -594,6 +594,7 @@ export const api = {
   addLabel: (name: string, color: string) => invoke<Label>("add_label", { name, color }),
   updateLabel: (id: number, name: string, color: string, prompt?: string, description?: string) =>
     invoke<void>("update_label", { id, name, color, prompt: prompt ?? null, description: description ?? null }),
+  fillLabelPrompts: () => invoke<number>("fill_label_prompts"),
   samSegment: (imageId: number, points: number[][], box: number[] | null) =>
     invoke<SamResult>("sam_segment", { imageId, points, bbox: box }),
   textDetect: (imageId: number, conf: number) => invoke<PredResult>("text_detect", { imageId, conf }),

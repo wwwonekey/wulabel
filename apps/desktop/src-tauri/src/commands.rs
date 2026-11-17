@@ -986,6 +986,19 @@ pub async fn update_label(
     Ok(())
 }
 
+/// 中文类别没填英文提示词的，按对照表自动补上（文本提示自动标注用）
+#[tauri::command]
+pub async fn fill_label_prompts(state: State<'_, AppState>, share: State<'_, Share>) -> AppResult<usize> {
+    let project = state.current()?;
+    let n = annotations::fill_prompts(&project)?;
+    if n > 0 {
+        if let Some(h) = share.hub_for(&project) {
+            h.labels_changed(&h.host_member(), "自动补了英文提示词");
+        }
+    }
+    Ok(n)
+}
+
 #[tauri::command]
 pub async fn delete_label(state: State<'_, AppState>, share: State<'_, Share>, id: i64) -> AppResult<usize> {
     let project = state.current()?;
