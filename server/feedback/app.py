@@ -149,12 +149,69 @@ async def feedback(req: Request):
     finally:
         conn.close()
 
+    # 存一份，统计页上能看（发信失败也留着，不会丢）
+    fid = save_feedback(now, device_id, ip, app_version, osname, contact, message, screenshot)
+
     try:
         send_mail(message, contact, app_version, osname, device_id, ip, screenshot)
     except Exception as e:  # noqa: BLE001
+        mark_feedback(fid, f"发信失败：{e}")
         return err(f"服务端发送失败：{e}", 500)
 
+    mark_feedback(fid, "已发到邮箱")
     return {"ok": True}
+
+
+SHOT_DIR = Path(os.environ.get("SHOT_DIR", str(Path(__file__).with_name("feedback_shots"))))
+
+
+def feedback_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS feedbacks ("
+        "id INTEGER PRIMARY KEY, ts INTEGER, device TEXT, ip TEXT, version TEXT, os TEXT, "
+        "contact TEXT, message TEXT, shot TEXT, mail TEXT)"
+    )
+    return conn
+
+
+def save_feedback(ts, device_id, ip, app_version, osname, contact, message, screenshot) -> int | None:
+    try:
+        conn = feedback_db()
+        try:
+            cur = conn.execute(
+                "INSERT INTO feedbacks (ts, device, ip, version, os, contact, message, shot, mail) VALUES (?,?,?,?,?,?,?,?,?)",
+                (ts, device_id, ip, app_version, osname, contact, message, "", "发送中"),
+            )
+            fid = cur.lastrowid
+            if screenshot:
+                try:
+                    SHOT_DIR.mkdir(parents=True, exist_ok=True)
+                    name = f"{fid}.jpg"
+                    (SHOT_DIR / name).write_bytes(base64.b64decode(screenshot))
+                    conn.execute("UPDATE feedbacks SET shot=? WHERE id=?", (name, fid))
+                except Exception:  # noqa: BLE001
+                    pass
+            conn.commit()
+            return fid
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001  存不下也不影响发信
+        return None
+
+
+def mark_feedback(fid: int | None, status: str) -> None:
+    if fid is None:
+        return
+    try:
+        conn = feedback_db()
+        try:
+            conn.execute("UPDATE feedbacks SET mail=? WHERE id=?", (status[:200], fid))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 ID_RE = re.compile(r"^[0-9a-f]{8,64}$")
@@ -258,4 +315,4 @@ def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) 
 # 使用统计页（/stats），配置见 stats_page.py
 import stats_page  # noqa: E402
 
-stats_page.install(app, DB_PATH)
+stats_page.install(app, DB_PATH, SHOT_DIR)

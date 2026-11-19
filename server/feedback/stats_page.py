@@ -25,7 +25,7 @@ from pathlib import Path
 
 import blake3
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 STATS_KEY = os.environ.get("STATS_KEY", "")
 NGINX_ACCESS_LOG = os.environ.get("NGINX_ACCESS_LOG", "")
@@ -152,6 +152,13 @@ def collect(db_path: str) -> dict:
             d["dl_files"] = conn.execute(
                 "SELECT file, COUNT(DISTINCT who) FROM downloads GROUP BY file ORDER BY file DESC"
             ).fetchall()
+        try:
+            d["fb_total"] = one("SELECT COUNT(*) FROM feedbacks")
+            d["feedbacks"] = conn.execute(
+                "SELECT id, ts, version, os, contact, message, shot, mail FROM feedbacks ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        except sqlite3.OperationalError:  # 还没有人反馈过，表还没建
+            d["fb_total"], d["feedbacks"] = 0, []
         return d
     finally:
         conn.close()
@@ -174,6 +181,7 @@ svg.chart rect.hit{fill:transparent}svg.chart g:hover rect.b{fill:var(--bar-hi)}
 svg.chart text{fill:var(--muted);font-size:11px}svg.chart line{stroke:var(--line)}
 table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid var(--line)}td.n{text-align:right;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:0}
+.fb{padding:12px 0;border-bottom:1px solid var(--line)}.fb:last-child{border-bottom:0}.fb-msg{white-space:pre-wrap;margin-top:4px;word-break:break-word}
 form{max-width:320px;margin:80px auto}input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:15px}
 button{margin-top:10px;width:100%;padding:10px;border:0;border-radius:8px;background:var(--bar);color:#fff;font-size:15px;cursor:pointer}
 """
@@ -223,6 +231,32 @@ def _tile(k: str, v) -> str:
     return f'<div class="card tile"><div class="k">{k}</div><div class="v">{v}</div></div>'
 
 
+def _feedbacks(d: dict) -> str:
+    """用户在软件里提交的反馈，最新的在前"""
+    rows = d.get("feedbacks") or []
+    head = f'<h2>用户反馈 <span class="muted" style="font-weight:400">共 {d.get("fb_total", 0)} 条，显示最近 {len(rows)} 条</span></h2>'
+    if not rows:
+        return f'<div class="card" style="margin-top:12px">{head}<div class="muted">还没有人反馈</div></div>'
+    items = []
+    for fid, ts, version, osname, contact, message, shot, mail in rows:
+        when = time.strftime("%Y-%m-%d %H:%M", time.gmtime(int(ts) + 8 * 3600))
+        meta = " · ".join(
+            x for x in (when, f"v{version}" if version else "", osname or "", f"联系方式：{contact}" if contact else "未留联系方式") if x
+        )
+        shot_html = (
+            f'<a href="/stats/shot/{html.escape(shot)}" target="_blank"><img src="/stats/shot/{html.escape(shot)}" '
+            'style="max-width:220px;max-height:140px;border-radius:6px;border:1px solid var(--line);margin-top:8px"></a>'
+            if shot
+            else ""
+        )
+        items.append(
+            f'<div class="fb"><div class="muted" style="font-size:12px">{html.escape(meta)}'
+            f'<span style="float:right">{html.escape(mail or "")}</span></div>'
+            f'<div class="fb-msg">{html.escape(message or "")}</div>{shot_html}</div>'
+        )
+    return f'<div class="card" style="margin-top:12px">{head}{"".join(items)}</div>'
+
+
 def render(d: dict, gh) -> str:
     tiles = [
         _tile("今天在用", d["today"]),
@@ -235,6 +269,7 @@ def render(d: dict, gh) -> str:
     if gh:
         tiles.append(_tile("GitHub 下载", sum(c for _, _, c in gh["assets"])))
         tiles.append(_tile("GitHub 星标", gh["stars"]))
+    tiles.append(_tile("用户反馈", d.get("fb_total", 0)))
 
     body = [
         '<h1>Wulabel 使用统计</h1>',
@@ -255,6 +290,7 @@ def render(d: dict, gh) -> str:
     if gh:
         body.append(f'<div class="card"><h2>GitHub 下载（按安装包，次数）</h2>{_table([(n, c) for _, n, c in gh["assets"]])}</div>')
     body.append("</div>")
+    body.append(_feedbacks(d))
     body.append(
         '<p class="muted" style="margin-top:18px">在用人数来自软件的检查更新：每台电脑每天记一次，只有 v0.2.1 及以后的版本、并且没关掉自动检查的才会被统计。'
         "官网下载按不同 IP 计，同一个人换网络会算多次。GitHub 次数里也包含作者自己下载的。</p>"
@@ -269,7 +305,7 @@ LOGIN = _page(
 )
 
 
-def install(app: FastAPI, db_path: str) -> None:
+def install(app: FastAPI, db_path: str, shot_dir: Path | None = None) -> None:
     if not STATS_KEY:
         return
 
@@ -286,6 +322,16 @@ def install(app: FastAPI, db_path: str) -> None:
         if not authed(req):
             return nocache(HTMLResponse(LOGIN.replace("{msg}", "")))
         return nocache(HTMLResponse(render(collect(db_path), github_stats())))
+
+    @app.get("/stats/shot/{name}")
+    def stats_shot(name: str, req: Request):
+        """反馈附带的截图，登录后才能看"""
+        if not authed(req) or shot_dir is None or not re.fullmatch(r"\d+\.jpg", name):
+            return nocache(HTMLResponse("没有权限", status_code=403))
+        f = shot_dir / name
+        if not f.is_file():
+            return nocache(HTMLResponse("截图不存在", status_code=404))
+        return nocache(FileResponse(f, media_type="image/jpeg"))
 
     @app.post("/stats")
     async def stats_post(req: Request):
