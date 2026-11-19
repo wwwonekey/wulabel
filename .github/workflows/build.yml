@@ -25,10 +25,23 @@ jobs:
             args: "--target universal-apple-darwin"
             rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
             bundle: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - os: ubuntu-22.04
+            name: linux
+            args: ""
+            rust_targets: ""
+            bundle: |
+              apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+              apps/desktop/src-tauri/target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.os }}
     environment: WULABEL_FEEDBACK_SECRET
     steps:
       - uses: actions/checkout@v4
+
+      - name: 安装 Linux 编译依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
 
       - uses: actions/setup-node@v4
         with:
