@@ -149,12 +149,74 @@ async def feedback(req: Request):
     finally:
         conn.close()
 
+    # 存一份，统计页上能看（发信失败也留着，不会丢）
+    fid = save_feedback(now, device_id, ip, app_version, osname, contact, message, screenshot)
+
     try:
         send_mail(message, contact, app_version, osname, device_id, ip, screenshot)
     except Exception as e:  # noqa: BLE001
+        mark_feedback(fid, f"发信失败：{e}")
         return err(f"服务端发送失败：{e}", 500)
 
+    mark_feedback(fid, "已发到邮箱")
     return {"ok": True}
+
+
+SHOT_DIR = Path(os.environ.get("SHOT_DIR", str(Path(__file__).with_name("feedback_shots"))))
+
+
+def feedback_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS feedbacks ("
+        "id INTEGER PRIMARY KEY, ts INTEGER, device TEXT, ip TEXT, version TEXT, os TEXT, "
+        "contact TEXT, message TEXT, shot TEXT, mail TEXT)"
+    )
+    # 回复用户（统计页上写回复，发邮件给用户留的邮箱）
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(feedbacks)")}
+    if "reply" not in cols:
+        conn.execute("ALTER TABLE feedbacks ADD COLUMN reply TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE feedbacks ADD COLUMN replied_at INTEGER")
+    return conn
+
+
+def save_feedback(ts, device_id, ip, app_version, osname, contact, message, screenshot) -> int | None:
+    try:
+        conn = feedback_db()
+        try:
+            cur = conn.execute(
+                "INSERT INTO feedbacks (ts, device, ip, version, os, contact, message, shot, mail) VALUES (?,?,?,?,?,?,?,?,?)",
+                (ts, device_id, ip, app_version, osname, contact, message, "", "发送中"),
+            )
+            fid = cur.lastrowid
+            if screenshot:
+                try:
+                    SHOT_DIR.mkdir(parents=True, exist_ok=True)
+                    name = f"{fid}.jpg"
+                    (SHOT_DIR / name).write_bytes(base64.b64decode(screenshot))
+                    conn.execute("UPDATE feedbacks SET shot=? WHERE id=?", (name, fid))
+                except Exception:  # noqa: BLE001
+                    pass
+            conn.commit()
+            return fid
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001  存不下也不影响发信
+        return None
+
+
+def mark_feedback(fid: int | None, status: str) -> None:
+    if fid is None:
+        return
+    try:
+        conn = feedback_db()
+        try:
+            conn.execute("UPDATE feedbacks SET mail=? WHERE id=?", (status[:200], fid))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 ID_RE = re.compile(r"^[0-9a-f]{8,64}$")
@@ -255,7 +317,54 @@ def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) 
         s.send_message(msg)
 
 
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def reply_feedback(fid: int, text: str) -> str:
+    """把回复发到用户留的邮箱，并记下来。成功返回空字符串，失败返回原因"""
+    text = (text or "").strip()
+    if not text:
+        return "回复内容是空的"
+    conn = feedback_db()
+    try:
+        row = conn.execute("SELECT ts, contact, message FROM feedbacks WHERE id=?", (fid,)).fetchone()
+        if not row:
+            return "找不到这条反馈"
+        ts, contact, message = row
+        to = (contact or "").strip()
+        if not EMAIL_RE.match(to):
+            return "这条反馈没有留邮箱，没法回复"
+        when = time.strftime("%Y-%m-%d %H:%M", time.gmtime(int(ts) + 8 * 3600))
+        msg = EmailMessage()
+        msg["Subject"] = "关于你的 Wulabel 反馈"
+        msg["From"] = MAIL_FROM
+        msg["To"] = to
+        msg["Reply-To"] = MAIL_FROM
+        msg.set_content(
+            f"你好：\n\n{text}\n\n"
+            f"——\n你在 {when} 的反馈：\n{message}\n\n"
+            "有问题可以直接回复这封邮件。\n"
+            "Wulabel（小物标注）https://wulabel.xiaowuiot.com\n"
+        )
+        try:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as s:
+                s.login(SMTP_USER, SMTP_PASS)
+                s.send_message(msg)
+        except Exception as e:  # noqa: BLE001
+            return f"发信失败：{e}"
+        conn.execute("UPDATE feedbacks SET reply=?, replied_at=? WHERE id=?", (text, int(time.time()), fid))
+        conn.commit()
+        return ""
+    finally:
+        conn.close()
+
+
 # 使用统计页（/stats），配置见 stats_page.py
 import stats_page  # noqa: E402
 
-stats_page.install(app, DB_PATH)
+# 启动时建好反馈表（含回复字段），统计页直接读
+try:
+    feedback_db().close()
+except Exception:  # noqa: BLE001
+    pass
+stats_page.install(app, DB_PATH, SHOT_DIR, reply_feedback)

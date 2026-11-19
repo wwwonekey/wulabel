@@ -115,4 +115,4 @@ STATS_EXCLUDE_IPS=不计入下载的 IP，逗号分隔
 GITHUB_REPO=owner/repo（显示 GitHub 下载次数，不配就不显示）
 ```
 
-浏览器打开 `https://feedback.<域名>/stats`，输一次密码，之后半年内同一浏览器免登录。官网下载按 IP 去重计人数，库里只存 IP 的哈希。
+浏览器打开 `https://feedback.<域名>/stats`，输一次密码，之后半年内同一浏览器免登录。页面最下面是「用户反馈」：每条反馈的内容、截图、版本和系统，留了邮箱的可以直接写回复，发送后会发邮件给用户（截图存在 `feedback_shots/`，反馈存在 `feedback.db` 的 feedbacks 表）。官网下载按 IP 去重计人数，库里只存 IP 的哈希。
