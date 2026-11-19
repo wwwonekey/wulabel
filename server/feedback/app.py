@@ -20,7 +20,7 @@ from pathlib import Path
 
 import blake3
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 
 # —— 配置：优先环境变量，其次同目录下的 .env ——
@@ -289,6 +289,40 @@ def update(req: Request):
     if isinstance(dl, dict) and dl.get("url") and dl.get("sha256"):
         out["download"] = {"url": str(dl["url"]), "sha256": str(dl["sha256"]).lower()}
     return out
+
+
+
+
+# —— 全自动更新（Tauri 更新组件，v0.4.1 起的客户端用）——
+# 清单写在 updater.json（发版时用 make_updater.py 生成）：
+#   {"version": "0.4.1", "notes": "...", "pub_date": "...", "platforms": {"windows-x86_64": {"url": "...", "signature": "..."}, ...}}
+UPDATER_FILE = os.environ.get("UPDATER_FILE", str(Path(__file__).with_name("updater.json")))
+
+
+def _ver(v: str) -> tuple:
+    core = (v or "").strip().lstrip("v").split("-")[0]
+    parts = [int(p) if p.isdigit() else 0 for p in core.split(".")[:3]]
+    return tuple(parts + [0] * (3 - len(parts)))
+
+
+@app.get("/updater/{target}/{arch}/{current}")
+def updater(target: str, arch: str, current: str):
+    """没有新版本或这个平台没有更新包时返回 204（Tauri 约定），有的话返回下载地址和签名"""
+    try:
+        info = json.loads(Path(UPDATER_FILE).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return Response(status_code=204)
+    version = str(info.get("version") or "")
+    plat = (info.get("platforms") or {}).get(f"{target}-{arch}")
+    if not version or _ver(version) <= _ver(current) or not isinstance(plat, dict):
+        return Response(status_code=204)
+    return {
+        "version": version,
+        "notes": str(info.get("notes") or ""),
+        "pub_date": str(info.get("pub_date") or ""),
+        "url": str(plat.get("url") or ""),
+        "signature": str(plat.get("signature") or ""),
+    }
 
 
 def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) -> None:

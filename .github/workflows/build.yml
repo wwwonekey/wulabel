@@ -65,6 +65,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           WULABEL_FEEDBACK_SECRET: ${{ secrets.WULABEL_FEEDBACK_SECRET }}
+          # 全自动更新的签名私钥（和 tauri.conf.json 里的 pubkey 是一对），放在同一个 Environment 的 secrets 里
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           args: ${{ matrix.args }}

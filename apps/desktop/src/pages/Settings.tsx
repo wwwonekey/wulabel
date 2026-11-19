@@ -40,13 +40,11 @@ function UpdateCard() {
             <span>
               有新版本 <b>v{info.latest}</b>（当前 v{info.current}）
             </span>
-            {info.downloadUrl && info.sha256 && (
-              <Button type="primary" onClick={() => setInstalling(true)}>
-                立即更新
-              </Button>
-            )}
+            <Button type="primary" onClick={() => setInstalling(true)}>
+              立即更新
+            </Button>
             {info.url && (
-              <Button type={info.downloadUrl ? "default" : "primary"} onClick={() => api.openUrl(info.url).catch(() => {})}>
+              <Button onClick={() => api.openUrl(info.url).catch(() => {})}>
                 去下载
               </Button>
             )}

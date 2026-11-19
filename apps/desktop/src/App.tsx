@@ -76,19 +76,17 @@ export default function App() {
               <div>
                 <div>当前是 v{u.current}。{u.notes}</div>
                 <Space style={{ marginTop: 10 }} wrap>
-                  {u.downloadUrl && u.sha256 ? (
-                    <Button
-                      size="small"
-                      type="primary"
-                      onClick={() => {
-                        notification.destroy(key);
-                        setUpd(u);
-                      }}
-                    >
-                      立即更新
-                    </Button>
-                  ) : null}
-                  <Button size="small" type={u.downloadUrl ? "default" : "primary"} onClick={() => u.url && api.openUrl(u.url).catch(() => {})}>
+                  <Button
+                    size="small"
+                    type="primary"
+                    onClick={() => {
+                      notification.destroy(key);
+                      setUpd(u);
+                    }}
+                  >
+                    立即更新
+                  </Button>
+                  <Button size="small" onClick={() => u.url && api.openUrl(u.url).catch(() => {})}>
                     去下载
                   </Button>
                   <Button

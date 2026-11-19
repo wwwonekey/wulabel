@@ -558,6 +558,8 @@ export const api = {
   submitFeedback: (input: FeedbackInput) => invoke<void>("submit_feedback", { input }),
   checkUpdate: () => invoke<UpdateInfo>("check_update"),
   installUpdate: (url: string, sha256: string) => invoke<void>("install_update", { url, sha256 }),
+  /** 全自动更新：有新版本就下载安装并重启，返回 false 表示没有新版本 */
+  autoUpdate: () => invoke<boolean>("auto_update"),
   liveStart: (runId: number, source: string, conf: number) => invoke<void>("live_start", { runId, source, conf }),
   liveStop: () => invoke<void>("live_stop"),
   liveConf: (conf: number) => invoke<void>("live_conf", { conf }),
