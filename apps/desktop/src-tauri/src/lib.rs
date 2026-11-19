@@ -54,6 +54,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state::AppState::default())
         .manage(Arc::new(training::Jobs::default()))
         .manage(training::Predictor::default())
@@ -188,6 +189,7 @@ pub fn run() {
             feedback::submit_feedback,
             update::check_update,
             update::install_update,
+            update::auto_update,
         ])
         .build(tauri::generate_context!())
         .expect("程序启动失败")
