@@ -33,6 +33,7 @@ STATS_EXCLUDE_IPS = {s.strip() for s in os.environ.get("STATS_EXCLUDE_IPS", "").
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "")
 
 COOKIE = "wl_stats"
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 DAYS = 30
 MONTHS = {m: f"{i:02d}" for i, m in enumerate("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), 1)}
 DL_RE = re.compile(rb'^(\S+) \S+ \S+ \[(\d{2})/(\w{3})/(\d{4}):[^\]]*\] "GET /download/(Wulabel_[^ ?"]+)[^"]*" (\d{3}) ')
@@ -155,7 +156,7 @@ def collect(db_path: str) -> dict:
         try:
             d["fb_total"] = one("SELECT COUNT(*) FROM feedbacks")
             d["feedbacks"] = conn.execute(
-                "SELECT id, ts, version, os, contact, message, shot, mail FROM feedbacks ORDER BY id DESC LIMIT 50"
+                "SELECT id, ts, version, os, contact, message, shot, mail, reply, replied_at FROM feedbacks ORDER BY id DESC LIMIT 50"
             ).fetchall()
         except sqlite3.OperationalError:  # 还没有人反馈过，表还没建
             d["fb_total"], d["feedbacks"] = 0, []
@@ -182,6 +183,9 @@ svg.chart text{fill:var(--muted);font-size:11px}svg.chart line{stroke:var(--line
 table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid var(--line)}td.n{text-align:right;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:0}
 .fb{padding:12px 0;border-bottom:1px solid var(--line)}.fb:last-child{border-bottom:0}.fb-msg{white-space:pre-wrap;margin-top:4px;word-break:break-word}
+.fb-reply{margin-top:8px;padding:8px 10px;border-left:3px solid var(--bar);background:var(--bg)}
+.fb-form{margin:8px 0 0;max-width:none}.fb-form textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+.fb-form button{margin-top:6px;width:auto;padding:6px 16px;font-size:14px}.fb-tip{margin:6px 0 10px;padding:8px 10px;border-radius:8px;background:var(--bg)}
 form{max-width:320px;margin:80px auto}input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:15px}
 button{margin-top:10px;width:100%;padding:10px;border:0;border-radius:8px;background:var(--bar);color:#fff;font-size:15px;cursor:pointer}
 """
@@ -238,7 +242,7 @@ def _feedbacks(d: dict) -> str:
     if not rows:
         return f'<div class="card" style="margin-top:12px">{head}<div class="muted">还没有人反馈</div></div>'
     items = []
-    for fid, ts, version, osname, contact, message, shot, mail in rows:
+    for fid, ts, version, osname, contact, message, shot, mail, reply, replied_at in rows:
         when = time.strftime("%Y-%m-%d %H:%M", time.gmtime(int(ts) + 8 * 3600))
         meta = " · ".join(
             x for x in (when, f"v{version}" if version else "", osname or "", f"联系方式：{contact}" if contact else "未留联系方式") if x
@@ -249,12 +253,25 @@ def _feedbacks(d: dict) -> str:
             if shot
             else ""
         )
+        if reply:
+            rwhen = time.strftime("%Y-%m-%d %H:%M", time.gmtime(int(replied_at or 0) + 8 * 3600))
+            reply_html = f'<div class="fb-reply"><div class="muted" style="font-size:12px">已回复（{rwhen}，已发邮件）</div><div class="fb-msg">{html.escape(reply)}</div></div>'
+        elif contact and EMAIL_RE.match(contact.strip()):
+            reply_html = (
+                f'<form class="fb-form" method="post" action="/stats/reply"><input type="hidden" name="id" value="{fid}">'
+                '<textarea name="text" rows="3" placeholder="写回复，发送后会发邮件到用户的邮箱"></textarea>'
+                '<button type="submit">发送回复</button></form>'
+            )
+        else:
+            reply_html = ""
         items.append(
-            f'<div class="fb"><div class="muted" style="font-size:12px">{html.escape(meta)}'
+            f'<div class="fb" id="fb-{fid}"><div class="muted" style="font-size:12px">{html.escape(meta)}'
             f'<span style="float:right">{html.escape(mail or "")}</span></div>'
-            f'<div class="fb-msg">{html.escape(message or "")}</div>{shot_html}</div>'
+            f'<div class="fb-msg">{html.escape(message or "")}</div>{shot_html}{reply_html}</div>'
         )
-    return f'<div class="card" style="margin-top:12px">{head}{"".join(items)}</div>'
+    tip = d.get("reply_msg")
+    tip_html = f'<div class="fb-tip">{html.escape(tip)}</div>' if tip else ""
+    return f'<div class="card" style="margin-top:12px" id="feedback">{head}{tip_html}{"".join(items)}</div>'
 
 
 def render(d: dict, gh) -> str:
@@ -305,7 +322,8 @@ LOGIN = _page(
 )
 
 
-def install(app: FastAPI, db_path: str, shot_dir: Path | None = None) -> None:
+def install(app: FastAPI, db_path: str, shot_dir: Path | None = None, reply=None) -> None:
+    """reply(反馈 id, 回复内容) -> 出错原因（成功返回空字符串），发邮件给用户并记下回复"""
     if not STATS_KEY:
         return
 
@@ -321,7 +339,25 @@ def install(app: FastAPI, db_path: str, shot_dir: Path | None = None) -> None:
     def stats_get(req: Request):
         if not authed(req):
             return nocache(HTMLResponse(LOGIN.replace("{msg}", "")))
-        return nocache(HTMLResponse(render(collect(db_path), github_stats())))
+        d = collect(db_path)
+        d["reply_msg"] = req.query_params.get("msg", "")[:200]
+        return nocache(HTMLResponse(render(d, github_stats())))
+
+    @app.post("/stats/reply")
+    async def stats_reply(req: Request):
+        if not authed(req) or reply is None:
+            return nocache(HTMLResponse("没有权限", status_code=403))
+        import asyncio
+
+        form = urllib.parse.parse_qs((await req.body()).decode("utf-8", "replace"))
+        try:
+            fid = int((form.get("id") or ["0"])[0])
+        except ValueError:
+            fid = 0
+        text = (form.get("text") or [""])[0][:4000]
+        err = await asyncio.to_thread(reply, fid, text)
+        tip = err or "已回复，邮件已发到用户的邮箱"
+        return RedirectResponse(f"/stats?msg={urllib.parse.quote(tip)}#fb-{fid}", status_code=303)
 
     @app.get("/stats/shot/{name}")
     def stats_shot(name: str, req: Request):
