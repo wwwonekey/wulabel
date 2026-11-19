@@ -1,6 +1,6 @@
 [package]
 name = "xlabel"
-version = "0.3.0"
+version = "0.4.0"
 description = "离线 AI 标注训练桌面软件"
 license = "Apache-2.0"
 edition = "2021"
@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -36,6 +37,8 @@ futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 getrandom = "0.2"
 base64 = "0.22"
+# 软件内更新：核对安装包的 SHA-256
+sha2 = "0.10"
 
 [profile.dev.package."*"]
 # 依赖库用优化编译，开发时图片解码不至于太慢

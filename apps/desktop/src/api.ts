@@ -34,6 +34,15 @@ export interface RecentProject {
   exists: boolean;
 }
 
+/** 首页项目卡片的概况 */
+export interface ProjectSummary {
+  images: number;
+  labeled: number;
+  runs: number;
+  /** 封面缩略图（data URL），还没有缩略图时为空 */
+  cover: string | null;
+}
+
 export type ImageStatus = "todo" | "labeled" | "reviewed" | "skipped";
 
 export interface ImageItem {
@@ -540,11 +549,15 @@ export interface UpdateInfo {
   newer: boolean;
   url: string;
   notes: string;
+  /** 本系统安装包直链和 SHA-256，有的话可以「立即更新」 */
+  downloadUrl: string;
+  sha256: string;
 }
 
 export const api = {
   submitFeedback: (input: FeedbackInput) => invoke<void>("submit_feedback", { input }),
   checkUpdate: () => invoke<UpdateInfo>("check_update"),
+  installUpdate: (url: string, sha256: string) => invoke<void>("install_update", { url, sha256 }),
   liveStart: (runId: number, source: string, conf: number) => invoke<void>("live_start", { runId, source, conf }),
   liveStop: () => invoke<void>("live_stop"),
   liveConf: (conf: number) => invoke<void>("live_conf", { conf }),
@@ -590,6 +603,7 @@ export const api = {
   addLabel: (name: string, color: string) => invoke<Label>("add_label", { name, color }),
   updateLabel: (id: number, name: string, color: string, prompt?: string, description?: string) =>
     invoke<void>("update_label", { id, name, color, prompt: prompt ?? null, description: description ?? null }),
+  fillLabelPrompts: () => invoke<number>("fill_label_prompts"),
   samSegment: (imageId: number, points: number[][], box: number[] | null) =>
     invoke<SamResult>("sam_segment", { imageId, points, bbox: box }),
   textDetect: (imageId: number, conf: number) => invoke<PredResult>("text_detect", { imageId, conf }),
@@ -605,6 +619,7 @@ export const api = {
   closeProject: () => invoke<void>("close_project"),
   currentProject: () => invoke<ProjectInfo | null>("current_project"),
   recentProjects: () => invoke<RecentProject[]>("recent_projects"),
+  projectSummary: (path: string) => invoke<ProjectSummary | null>("project_summary", { path }),
   removeRecent: (path: string) => invoke<void>("remove_recent", { path }),
   importImages: (paths: string[], copy: boolean) => invoke<ImportResult>("import_images", { paths, copy }),
   extractVideo: (paths: string[], every: number, maxFrames: number) =>

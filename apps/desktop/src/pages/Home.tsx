@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Empty, Tag, Tooltip } from "antd";
+import { App, Button, Empty, Progress, Tag, Tooltip } from "antd";
 import { DeleteOutlined, FolderOpenOutlined, PlusOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, errText, RecentProject, taskName } from "../api";
+import { api, errText, ProjectSummary, RecentProject, taskName } from "../api";
 import { useApp } from "../store";
 import NewProjectModal from "../components/NewProjectModal";
+import GuideCard from "../components/GuideCard";
 
 function ago(ts: number) {
   const s = Date.now() / 1000 - ts;
@@ -18,6 +19,7 @@ function ago(ts: number) {
 export default function Home() {
   const [recent, setRecent] = useState<RecentProject[]>([]);
   const [showNew, setShowNew] = useState(false);
+  const [sums, setSums] = useState<Record<string, ProjectSummary | null>>({});
   const { message } = App.useApp();
   const setProject = useApp((s) => s.setProject);
 
@@ -26,6 +28,18 @@ export default function Home() {
   }, [message]);
 
   useEffect(load, [load]);
+
+  // 每个项目的概况（图片数、标注进度、训练次数、封面），读不到的不显示
+  useEffect(() => {
+    recent
+      .filter((r) => r.exists)
+      .forEach((r) =>
+        api
+          .projectSummary(r.path)
+          .then((s) => setSums((m) => ({ ...m, [r.path]: s })))
+          .catch(() => {}),
+      );
+  }, [recent]);
 
   const openPath = async (path: string) => {
     try {
@@ -50,6 +64,8 @@ export default function Home() {
     <div className="page">
       <h1>项目</h1>
       <p className="desc">一个项目就是一个文件夹，整个拷走就能在另一台电脑上打开。</p>
+
+      <GuideCard hasProject={recent.length > 0} onNewProject={() => setShowNew(true)} />
 
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ fontSize: 14, margin: 0 }}>最近项目</h2>
@@ -80,6 +96,14 @@ export default function Home() {
               style={r.exists ? undefined : { opacity: 0.6 }}
               onClick={() => r.exists && openPath(r.path)}
             >
+              {sums[r.path]?.cover && (
+                <img
+                  src={sums[r.path]!.cover!}
+                  alt=""
+                  draggable={false}
+                  style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 6, marginBottom: 10, display: "block", background: "#0e1013" }}
+                />
+              )}
               <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap" }}>
                 <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</strong>
                 <Tooltip title="从列表移除（不会删除文件）">
@@ -98,6 +122,21 @@ export default function Home() {
                 <Tag>{taskName(r.task)}</Tag>
                 {!r.exists && <Tag color="error">找不到文件夹</Tag>}
               </div>
+              {sums[r.path] && (
+                <div style={{ marginBottom: 6 }}>
+                  <div className="row" style={{ justifyContent: "space-between", fontSize: 12 }}>
+                    <span className="muted">
+                      {sums[r.path]!.images} 张图，已标 {sums[r.path]!.labeled} 张
+                    </span>
+                    <span className="dim">{sums[r.path]!.runs ? `训练过 ${sums[r.path]!.runs} 次` : "还没训练"}</span>
+                  </div>
+                  <Progress
+                    percent={sums[r.path]!.images ? Math.round((sums[r.path]!.labeled / sums[r.path]!.images) * 100) : 0}
+                    size="small"
+                    showInfo={false}
+                  />
+                </div>
+              )}
               <div className="dim" style={{ fontSize: 12, wordBreak: "break-all" }}>
                 {r.path}
               </div>

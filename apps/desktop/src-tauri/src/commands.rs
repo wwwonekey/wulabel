@@ -79,6 +79,14 @@ pub async fn recent_projects(app: AppHandle) -> AppResult<Vec<RecentProject>> {
     Ok(project::load_recent(&config_dir(&app)?))
 }
 
+/// 首页项目卡片的概况（图片数、已标注、训练次数、封面），项目不存在时返回 null
+#[tauri::command]
+pub async fn project_summary(path: String) -> AppResult<Option<project::ProjectSummary>> {
+    Ok(tauri::async_runtime::spawn_blocking(move || project::summary(std::path::Path::new(&path)))
+        .await
+        .unwrap_or(None))
+}
+
 #[tauri::command]
 pub async fn remove_recent(app: AppHandle, path: String) -> AppResult<()> {
     project::remove_recent(&config_dir(&app)?, &path)
@@ -534,6 +542,9 @@ pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: 
     let jobs = app.state::<Arc<Jobs>>().inner().clone();
     let a = app.clone();
     let sink: training::EventSink = Arc::new(move |id, ev| {
+        if ev["type"] == "finished" {
+            notify_training(&a, ev["status"].as_str().unwrap_or(""));
+        }
         let _ = a.emit("train-event", serde_json::json!({ "runId": id, "event": ev }));
     });
     tauri::async_runtime::spawn_blocking(move || {
@@ -542,6 +553,21 @@ pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: 
     })
     .await
     .map_err(|e| msg(format!("启动训练异常：{e}")))?
+}
+
+/// 训练结束：发系统通知、任务栏闪一下（训练常常要几十分钟，人多半不在电脑前）
+fn notify_training(app: &AppHandle, status: &str) {
+    use tauri_plugin_notification::NotificationExt;
+
+    let (title, body) = match status {
+        "done" => ("Wulabel 训练完成", "可以去评估页看效果，或者用训好的模型预标注剩下的图"),
+        "failed" => ("Wulabel 训练失败", "打开 Wulabel 的训练页看日志"),
+        _ => return,
+    };
+    let _ = app.notification().builder().title(title).body(body).show();
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    }
 }
 
 #[tauri::command]
@@ -984,6 +1010,19 @@ pub async fn update_label(
         h.labels_changed(&h.host_member(), &format!("修改类别「{name}」"));
     }
     Ok(())
+}
+
+/// 中文类别没填英文提示词的，按对照表自动补上（文本提示自动标注用）
+#[tauri::command]
+pub async fn fill_label_prompts(state: State<'_, AppState>, share: State<'_, Share>) -> AppResult<usize> {
+    let project = state.current()?;
+    let n = annotations::fill_prompts(&project)?;
+    if n > 0 {
+        if let Some(h) = share.hub_for(&project) {
+            h.labels_changed(&h.host_member(), "自动补了英文提示词");
+        }
+    }
+    Ok(n)
 }
 
 #[tauri::command]

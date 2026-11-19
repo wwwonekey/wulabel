@@ -29,6 +29,22 @@ class _ClsNet(torch.nn.Module):
 
 CLS_OUTPUTS = "probs [N, 类别数]，各类别概率（已 softmax），类别顺序见 classes"
 DET_OUTPUTS = "boxes [N,4] xyxy 像素坐标；labels [N] 类别序号从 1 开始（0 是背景）；scores [N]"
+SEG_OUTPUTS = DET_OUTPUTS + "；masks [N,1,H,W] 每个目标的掩膜概率（0~1，和输入同尺寸，大于 0.5 的是目标）"
+POSE_OUTPUTS = DET_OUTPUTS + "；keypoints [N,K,3] 每个关键点的 x、y（像素）和可见性；keypoints_scores [N,K] 每个点的分数"
+
+
+def _det_keys(key: str) -> list[str]:
+    """检测类模型导出的输出名：检测 3 个，分割多 masks，关键点多 keypoints、keypoints_scores"""
+    keys = ["boxes", "labels", "scores"]
+    if models.is_seg(key):
+        keys.append("masks")
+    elif models.is_pose(key):
+        keys += ["keypoints", "keypoints_scores"]
+    return keys
+
+
+def _det_outputs(key: str) -> str:
+    return SEG_OUTPUTS if models.is_seg(key) else POSE_OUTPUTS if models.is_pose(key) else DET_OUTPUTS
 # YOLOX 的固定尺寸导出用官方格式：没有 NMS，适合 TensorRT / RKNN 等边缘设备，巡瞳平台的 yolox 解码也认这个格式
 YOLOX_OUTPUTS = (
     "output [1, N, 5+类别数]，YOLOX 官方格式（已解码）：每行 cx, cy, w, h（输入尺寸上的像素）、目标分数 obj、各类别分数；"
@@ -111,21 +127,12 @@ def run(weights: str, out: str) -> None:
             "model": ck["model"],
         }
     else:
-        torch.onnx.export(
-            model,
-            ([torch.rand(3, size, size)],),
-            str(out_p),
-            opset_version=17,
-            input_names=["image"],
-            output_names=["boxes", "labels", "scores"],
-            dynamic_axes={"image": {1: "height", 2: "width"}, "boxes": {0: "n"}, "labels": {0: "n"}, "scores": {0: "n"}},
-            dynamo=False,
-        )
+        _export_onnx(model, size, out_p, True, _det_keys(ck["model"]))
         feed = np.random.rand(3, size, size).astype(np.float32)
         meta = {
             "classes": ck["classes"],
             "input": "image: float32 [3, H, W]，RGB，0~1，不需要归一化和缩放",
-            "outputs": DET_OUTPUTS,
+            "outputs": _det_outputs(ck["model"]),
             "model": ck["model"],
         }
     out_p.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -218,32 +225,34 @@ rknn.release()
 class _Batched(torch.nn.Module):
     """固定尺寸版本：输入带 batch 维度 [1, 3, H, W]，TensorRT、RKNN 等工具要求这种形状"""
 
-    def __init__(self, m):
+    def __init__(self, m, keys: list[str]):
         super().__init__()
         self.m = m
+        self.keys = keys
 
     def forward(self, x):
         o = self.m([x[0]])[0]
-        return o["boxes"], o["labels"], o["scores"]
+        return tuple(o[k] for k in self.keys)
 
 
-def _export_onnx(model, size: int, path: Path, dynamic: bool) -> None:
+def _export_onnx(model, size: int, path: Path, dynamic: bool, keys: list[str] | None = None) -> None:
+    """检测、分割、关键点模型导出 ONNX。keys：输出名（见 _det_keys）"""
+    keys = keys or ["boxes", "labels", "scores"]
     if dynamic:
         net, dummy = model, ([torch.rand(3, size, size)],)
     else:
-        net, dummy = _Batched(model).eval(), (torch.rand(1, 3, size, size),)
+        net, dummy = _Batched(model, keys).eval(), (torch.rand(1, 3, size, size),)
+    axes = {k: {0: "n"} for k in keys}
+    if dynamic:
+        axes["image"] = {1: "height", 2: "width"}
     torch.onnx.export(
         net,
         dummy,
         str(path),
         opset_version=17,
         input_names=["image"],
-        output_names=["boxes", "labels", "scores"],
-        dynamic_axes=(
-            {"image": {1: "height", 2: "width"}, "boxes": {0: "n"}, "labels": {0: "n"}, "scores": {0: "n"}}
-            if dynamic
-            else {"boxes": {0: "n"}, "labels": {0: "n"}, "scores": {0: "n"}}
-        ),
+        output_names=keys,
+        dynamic_axes=axes,
         dynamo=False,
     )
 
@@ -263,7 +272,7 @@ def run_formats(cfg: dict) -> None:
     meta = {
         "classes": ck["classes"],
         "model": ck["model"],
-        "outputs": CLS_OUTPUTS if cls else DET_OUTPUTS,
+        "outputs": CLS_OUTPUTS if cls else _det_outputs(ck["model"]),
     }
     results = []
 
@@ -283,7 +292,7 @@ def run_formats(cfg: dict) -> None:
         if cls:
             _export_cls(model, size, dyn)
         else:
-            _export_onnx(model, size, dyn, True)
+            _export_onnx(model, size, dyn, True, _det_keys(ck["model"]))
         (dyn.parent / "model.json").write_text(
             json.dumps({**meta, "input": cls_input if cls else "image: float32 [3, H, W]，RGB，0~1，任意尺寸"}, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -300,7 +309,7 @@ def run_formats(cfg: dict) -> None:
             _export_yolox_native(model, size, static)
             static_meta.update(outputs=YOLOX_OUTPUTS, format="yolox", inputSize=size)
         else:
-            _export_onnx(model, size, static, False)
+            _export_onnx(model, size, static, False, _det_keys(ck["model"]))
         if cls:
             static_input = cls_input
         elif yolox:
@@ -357,6 +366,14 @@ def run_formats(cfg: dict) -> None:
             text = text.replace("输出 `boxes`、`labels`、`scores`，含义同 ONNX", "输出 `probs`，各类别概率")
         if yolox:
             text = _yolox_readme(text, size)
+        if models.is_seg(ck["model"]) or models.is_pose(ck["model"]):
+            extra = (
+                "、`masks` [N,1,H,W]（掩膜概率，大于 0.5 的是目标）"
+                if models.is_seg(ck["model"])
+                else "、`keypoints` [N,K,3]（关键点 x、y、可见性）、`keypoints_scores` [N,K]"
+            )
+            text = text.replace("`scores` [N]。", "`scores` [N]" + extra + "。")
+            text = text.replace("输出 `boxes`、`labels`、`scores`，含义同 ONNX", "输出 `boxes`、`labels`、`scores`" + extra + "，含义同 ONNX")
         (d / "README.md").write_text(text, encoding="utf-8")
         for name, text in files.items():
             if yolox and name == "convert_rknn.py":

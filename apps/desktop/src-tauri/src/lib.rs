@@ -53,6 +53,7 @@ fn worker_dir(app: &tauri::App) -> PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state::AppState::default())
         .manage(Arc::new(training::Jobs::default()))
         .manage(training::Predictor::default())
@@ -74,6 +75,7 @@ pub fn run() {
             commands::current_project,
             commands::recent_projects,
             commands::remove_recent,
+            commands::project_summary,
             commands::import_images,
             commands::extract_video,
             commands::probe_stream,
@@ -119,6 +121,7 @@ pub fn run() {
             commands::list_labels,
             commands::add_label,
             commands::update_label,
+            commands::fill_label_prompts,
             commands::delete_label,
             commands::split_summary,
             commands::assign_splits,
@@ -184,6 +187,7 @@ pub fn run() {
             commands::open_url,
             feedback::submit_feedback,
             update::check_update,
+            update::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("程序启动失败")

@@ -431,10 +431,10 @@ pub fn ensure_deployable(p: &Project, id: i64, what: Deploy) -> AppResult<()> {
     let task = model_task(run.config["model"].as_str().unwrap_or(""));
     let err = match (task, what) {
         ("detect", _) => None,
-        ("classify", Deploy::Onnx) => None,
+        (_, Deploy::Onnx) => None,
         ("classify", _) => Some("分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型"),
-        ("segment", _) => Some("分割模型暂不支持导出和部署，可以在软件内直接用它做预标注"),
-        _ => Some("关键点模型暂不支持导出和部署，可以在软件内直接用它做预标注"),
+        ("segment", _) => Some("分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型"),
+        _ => Some("关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型"),
     };
     match err {
         Some(e) => Err(msg(e)),

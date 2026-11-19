@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { App, Button, Checkbox, Image, Input, Modal, Space } from "antd";
 import { api, errText } from "../api";
+import { prefs } from "../store";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function FeedbackModal({
   open,
@@ -13,7 +16,8 @@ export default function FeedbackModal({
 }) {
   const { message } = App.useApp();
   const [text, setText] = useState("");
-  const [contact, setContact] = useState("");
+  // 邮箱记在本机，下次反馈不用再填
+  const [contact, setContact] = useState(prefs.get("feedbackEmail", ""));
   const [withShot, setWithShot] = useState(true);
   const [sending, setSending] = useState(false);
 
@@ -26,16 +30,21 @@ export default function FeedbackModal({
       message.warning("请先填写问题描述");
       return;
     }
+    const email = contact.trim();
+    if (email && !EMAIL_RE.test(email)) {
+      message.warning("邮箱格式不对，检查一下；不想留可以空着");
+      return;
+    }
     setSending(true);
     try {
       await api.submitFeedback({
         message: text.trim(),
-        contact: contact.trim() || undefined,
+        contact: email || undefined,
         screenshot: withShot ? shot : null,
       });
-      message.success("反馈已提交，谢谢！");
+      prefs.set("feedbackEmail", email);
+      message.success(email ? "反馈已提交，处理好了会发邮件告诉你，谢谢！" : "反馈已提交，谢谢！");
       setText("");
-      setContact("");
       onClose();
     } catch (e) {
       message.error(errText(e));
@@ -76,7 +85,8 @@ export default function FeedbackModal({
           value={contact}
           onChange={(e) => setContact(e.target.value)}
           maxLength={120}
-          placeholder="联系方式（选填，方便回复你，如邮箱 / 微信）"
+          type="email"
+          placeholder="你的邮箱（选填）：问题处理好了会发邮件通知你"
         />
         {shot ? (
           <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>

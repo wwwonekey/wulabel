@@ -47,16 +47,18 @@ export const MODELS: {
 
 /** 各任务的默认训练参数 */
 const TASK_DEFAULTS: Record<Task, Partial<TrainConfig>> = {
-  detect: { model: "frcnn_mobilenet", imgSize: 640, batch: 4, epochs: 30, lr: 0.01 },
+  detect: { model: "yolox_s", imgSize: 640, batch: 4, epochs: 50, lr: 0.01 },
   segment: { model: "maskrcnn_r50", imgSize: 640, batch: 2, epochs: 30, lr: 0.01 },
   pose: { model: "keypointrcnn_r50", imgSize: 640, batch: 2, epochs: 40, lr: 0.01 },
   classify: { model: "cls_mobilenet", imgSize: 224, batch: 32, epochs: 30, lr: 0.01 },
 };
 
-/** 按显存推荐模型 */
+const isMac = navigator.userAgent.includes("Mac");
+
+/** 按显存推荐模型。检测用 YOLOX：没有独立显卡用 Tiny，4GB 以上 S，8GB 以上 M；Mac（Apple 芯片）用 S */
 const recommendModel = (task: Task, gpuMem: number) =>
   ({
-    detect: gpuMem >= 6000 ? "frcnn_resnet50" : "frcnn_mobilenet",
+    detect: isMac ? "yolox_s" : gpuMem >= 8000 ? "yolox_m" : gpuMem >= 3800 ? "yolox_s" : "yolox_tiny",
     segment: gpuMem >= 8000 ? "maskrcnn_r50_v2" : "maskrcnn_r50",
     pose: "keypointrcnn_r50",
     classify: gpuMem >= 6000 ? "cls_efficientnet" : "cls_mobilenet",
@@ -111,6 +113,12 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [prog, setProg] = useState<ProgressEv | null>(null);
   const [starting, setStarting] = useState(false);
+  // 高级设置（输入尺寸、批大小、数据增强、设备）默认收起，记住用户上次的选择
+  const [advOpen, setAdvOpen] = useState(prefs.get("trainAdv", "0") === "1");
+  const toggleAdv = (v: boolean) => {
+    setAdvOpen(v);
+    prefs.set("trainAdv", v ? "1" : "0");
+  };
   const [exporting, setExporting] = useState(false);
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
@@ -187,8 +195,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
         loadRuns();
         loadDetail(runId);
         const st = event.status as string;
-        if (st === "done") message.success("训练完成");
-        else if (st === "failed") message.error("训练失败，看下方日志");
+        // 训练完成的提示在 App 里统一弹（不在训练页也能看到）
+        if (st === "failed") message.error("训练失败，看下方日志");
       }
     });
     return () => {
@@ -214,7 +222,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
   /** 换模型：YOLOX 有自己的默认输入尺寸，从 YOLOX 换回其他模型时恢复 640 */
   const pickModel = (value: string) => {
     const next = MODELS.find((m) => m.value === value);
-    if (next?.defaultSize) update({ model: value, imgSize: next.defaultSize });
+    // YOLOX 要的轮数多一些，少于 50 轮时提到 50
+    if (next?.defaultSize) update({ model: value, imgSize: next.defaultSize, ...(next.yolox && cfg.epochs < 50 ? { epochs: 50 } : {}) });
     else if (picked?.defaultSize && task !== "classify") update({ model: value, imgSize: 640 });
     else update({ model: value });
   };
@@ -341,7 +350,16 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   ]}
                 />
               </Form.Item>
-              <Form.Item label="模型" extra={baseRun ? "接着训练时沿用那次的模型" : undefined}>
+              <Form.Item
+                label="模型"
+                extra={
+                  baseRun
+                    ? "接着训练时沿用那次的模型"
+                    : `标「推荐」的是按这台电脑推荐的（${
+                        isMac ? "Apple 芯片" : gpuMem ? `显卡 ${Math.round(gpuMem / 1024)}GB 显存` : "没有检测到 NVIDIA 显卡，CPU 训练选轻一点的"
+                      }）`
+                }
+              >
                 <Radio.Group value={cfg.model} disabled={!!baseRun} onChange={(e) => pickModel(e.target.value)}>
                   <Space direction="vertical">
                     {models.map((m) => (
@@ -356,10 +374,26 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   </Space>
                 </Radio.Group>
               </Form.Item>
+              <Form.Item label="训练轮数" tooltip="数据越少需要的轮数越多；一般 20~50，YOLOX 建议 50 以上">
+                <InputNumber min={1} max={500} value={cfg.epochs} onChange={(v) => update({ epochs: Number(v ?? 30) })} />
+              </Form.Item>
+              <Form.Item label="训练数据" tooltip="选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存">
+                <Select
+                  style={{ width: "100%" }}
+                  value={cfg.version != null && versions.some((v) => v.id === cfg.version) ? cfg.version : 0}
+                  onChange={(v) => update({ version: v === 0 ? null : v })}
+                  options={[
+                    { value: 0, label: `当前数据（${trainable} 张）` },
+                    ...versions.map((v) => ({ value: v.id, label: `版本「${v.name}」（${v.images} 张，${new Date(v.createdAt * 1000).toLocaleDateString()}）` })),
+                  ]}
+                />
+              </Form.Item>
+              <Button type="link" size="small" style={{ padding: 0, marginBottom: 10 }} onClick={() => toggleAdv(!advOpen)}>
+                {advOpen ? "收起高级设置 ▴" : "高级设置：输入尺寸、批大小、数据增强、设备 ▾"}
+              </Button>
+              {advOpen && (
+                <>
               <Space wrap>
-                <Form.Item label="训练轮数" tooltip="数据越少需要的轮数越多；一般 20~50">
-                  <InputNumber min={1} max={500} value={cfg.epochs} onChange={(v) => update({ epochs: Number(v ?? 30) })} />
-                </Form.Item>
                 <Form.Item
                   label="输入尺寸"
                   tooltip={
@@ -393,17 +427,6 @@ export default function Train({ project }: { project: ProjectInfo }) {
               ) : (
                 <AugPanel value={cfg.aug} task={task} imgSize={picked?.fixedSize ?? cfg.imgSize} fixedSize={!!picked?.fixedSize} onChange={(aug) => update({ aug })} />
               )}
-              <Form.Item label="训练数据" tooltip="选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存">
-                <Select
-                  style={{ width: "100%" }}
-                  value={cfg.version != null && versions.some((v) => v.id === cfg.version) ? cfg.version : 0}
-                  onChange={(v) => update({ version: v === 0 ? null : v })}
-                  options={[
-                    { value: 0, label: `当前数据（${trainable} 张）` },
-                    ...versions.map((v) => ({ value: v.id, label: `版本「${v.name}」（${v.images} 张，${new Date(v.createdAt * 1000).toLocaleDateString()}）` })),
-                  ]}
-                />
-              </Form.Item>
               <Form.Item label="设备">
                 <Radio.Group value={cfg.device} onChange={(e) => update({ device: e.target.value })}>
                   <Radio value="auto">自动（有显卡用显卡）</Radio>
@@ -415,6 +438,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   只用已审核的图片
                 </Checkbox>
               </Form.Item>
+                </>
+              )}
               <Button
                 type="primary"
                 block
