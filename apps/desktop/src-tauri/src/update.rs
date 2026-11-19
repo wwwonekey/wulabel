@@ -104,6 +104,34 @@ struct Progress {
     total: u64,
 }
 
+/// 全自动更新（v0.4.1 起）：用 Tauri 官方更新组件，后台下载、校验签名、安装，然后自动重启。
+/// Windows 用安装程序的「被动模式」（只显示进度条，不用点下一步）；Mac 直接替换应用；Linux 只支持 AppImage。
+/// 返回 false 表示没有新版本；出错时界面退回旧的「下载安装包打开安装程序」方式。
+#[tauri::command]
+pub async fn auto_update(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri::Emitter;
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app.updater().map_err(|e| format!("自动更新不可用：{e}"))?;
+    let Some(update) = updater.check().await.map_err(|e| format!("检查更新失败：{e}"))? else {
+        return Ok(false);
+    };
+    let a = app.clone();
+    let mut downloaded = 0u64;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let _ = a.emit("update-progress", Progress { downloaded, total: total.unwrap_or(0) });
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| format!("自动更新失败：{e}"))?;
+    // Windows 上安装程序会自己结束软件；Mac / Linux 换好文件后重启
+    app.restart();
+}
+
 /// 下载新版安装包、核对 SHA-256，然后打开安装程序并退出软件。
 /// Windows：运行安装程序，按提示点「下一步」即可覆盖安装；macOS：打开 .dmg，把 Wulabel 拖进「应用程序」替换。
 #[tauri::command]
