@@ -26,8 +26,8 @@ from pathlib import Path
 REPO = "xiaowu-iot/wulabel"
 
 
-def get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "wulabel-release", "Accept": "application/octet-stream"})
+def get(url: str, accept: str = "application/octet-stream") -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "wulabel-release", "Accept": accept})
     with urllib.request.urlopen(req, timeout=600) as r:
         return r.read()
 
@@ -41,7 +41,7 @@ def main() -> None:
     args = ap.parse_args()
     v = args.version.lstrip("v")
 
-    rel = json.loads(get(f"https://api.github.com/repos/{REPO}/releases/tags/v{v}"))
+    rel = json.loads(get(f"https://api.github.com/repos/{REPO}/releases/tags/v{v}", "application/vnd.github+json"))
     assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
 
     # (平台, GitHub 上的文件名, 官网上的文件名)
