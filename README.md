@@ -10,7 +10,7 @@
 
 [![最新版本](https://img.shields.io/github/v/release/xiaowu-iot/wulabel?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/xiaowu-iot/wulabel/releases)
 [![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-blue)](LICENSE)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS-lightgrey)](#下载)
+[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#下载)
 
 </div>
 
@@ -27,12 +27,13 @@
 
 ## 下载
 
-最新版 **v0.3.0**（Windows 10 / 11 64 位、macOS 11 及以上，Mac 版 Apple 芯片和 Intel 通用）：
+最新版 **v0.4.0**（Windows 10 / 11 64 位、macOS 11 及以上、Linux x86_64；Mac 版 Apple 芯片和 Intel 通用）：
 
 | 系统 | 官网下载（国内推荐） | GitHub 下载 |
 |---|---|---|
-| Windows | [Wulabel_0.3.0_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.3.0_x64-setup.exe) | [Wulabel_0.3.0_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.3.0/Wulabel_0.3.0_x64-setup.exe) |
-| macOS | [Wulabel_0.3.0_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.3.0_universal.dmg) | [Wulabel_0.3.0_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.3.0/Wulabel_0.3.0_universal.dmg) |
+| Windows | [Wulabel_0.4.0_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_x64-setup.exe) | [Wulabel_0.4.0_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.0/Wulabel_0.4.0_x64-setup.exe) |
+| macOS | [Wulabel_0.4.0_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_universal.dmg) | [Wulabel_0.4.0_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.0/Wulabel_0.4.0_universal.dmg) |
+| Linux（Ubuntu、Debian、统信 UOS、麒麟等） | [Wulabel_0.4.0_amd64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_amd64.deb) · [Wulabel_0.4.0_amd64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_amd64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.0/Wulabel_0.4.0_amd64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.0/Wulabel_0.4.0_amd64.AppImage) |
 
 历史版本：[GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases) · [Gitee 发行版](https://gitee.com/xiaowu-iot/wulabel/releases) · [官网](https://wulabel.xiaowuiot.com/#download)
 
@@ -40,6 +41,7 @@
 
 - **Windows**：双击安装。弹出「Windows 已保护你的电脑」时，点「更多信息」→「仍要运行」（安装包还没有代码签名）。
 - **macOS**：打开 .dmg，把 Wulabel 拖进「应用程序」。提示「无法验证开发者」时，在「应用程序」里右键 Wulabel →「打开」；macOS 15 以后到「系统设置 → 隐私与安全性」点「仍要打开」。提示「已损坏」的话，在终端执行 `xattr -cr /Applications/Wulabel.app`。
+- **Linux**：.deb 用 `sudo apt install ./Wulabel_0.4.0_amd64.deb` 安装，装好后在应用菜单里找 Wulabel；也可以用 .AppImage：`chmod +x Wulabel_0.4.0_amd64.AppImage` 后双击运行，不用安装。目前只有 x86_64 版，ARM 版（飞腾、鲲鹏）后续加上。
 - 装好后到「设置」页点「一键安装训练环境」。只标注、不训练可以跳过。
 
 ## 功能一览
@@ -55,12 +57,13 @@
 - **团队协作**：实时协作：你的电脑当主机，成员用浏览器登录就能标，局域网或在线都行；角色、分配任务、按张加锁、审核打回、工作量统计、水印。离线分包：分成几个标注包，标完合并回来
 - **设置**：训练环境一键安装、下载源、使用已有 Python 环境、巡瞳 AI 账号、检查更新
 
-已知限制：分割、关键点模型可以导出 ONNX、OpenVINO 等格式自己集成，推理服务包和实时验证目前只支持检测模型；分割、关键点的评估按目标框计算指标。
+已知限制：Linux 版目前只有 x86_64；分割、关键点模型可以导出 ONNX、OpenVINO 等格式自己集成，推理服务包和实时验证目前只支持检测模型；分割、关键点的评估按目标框计算指标。
 
 ## 版本历史
 
 | 版本 | 日期 | 主要内容 |
 |---|---|---|
+| [v0.4.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.4.0) | 2026-11-19 | 新增 Linux 版；软件内一键升级；首页新手引导和项目进度；检测默认 YOLOX-S、按显卡推荐规格、训练结束提醒；文本提示中文类别名自动对应英文；分割、关键点模型可导出 ONNX；反馈可留邮箱、作者回复会发邮件；标注页快捷键面板，训练页高级设置收起 |
 | [v0.3.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.3.0) | 2026-11-17 | 新增 YOLO 系列训练：YOLOX Nano / Tiny / S / M / L，官方数据增强和 COCO 预训练权重，可导出 ONNX / OpenVINO / TensorRT / RKNN、上传巡瞳 |
 | [v0.2.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.1) | 2026-11-12 | 检查更新；标注页缩略图条可拖动调整大小；Windows 安装界面改为中文 |
 | [v0.2.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.2.0) | 2026-11-10 | 首个 Mac 版；实例分割、分类、关键点；SAM、文本提示、巡瞳 AI 辅助标注；视频抽帧和跟踪；数据集版本、训练对比；单阶段检测模型；实时多人协作；巡瞳平台对接 |
