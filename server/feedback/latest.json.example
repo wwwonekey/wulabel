@@ -10,6 +10,10 @@
     "macos": {
       "url": "https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_universal.dmg",
       "sha256": "安装包的 SHA-256（小写十六进制）"
+    },
+    "linux": {
+      "url": "https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_amd64.deb",
+      "sha256": "安装包的 SHA-256（小写十六进制）"
     }
   }
 }

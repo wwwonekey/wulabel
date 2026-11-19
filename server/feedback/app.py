@@ -306,14 +306,20 @@ def _ver(v: str) -> tuple:
 
 
 @app.get("/updater/{target}/{arch}/{current}")
-def updater(target: str, arch: str, current: str):
-    """没有新版本或这个平台没有更新包时返回 204（Tauri 约定），有的话返回下载地址和签名"""
+def updater(target: str, arch: str, current: str, bundle: str = ""):
+    """没有新版本或这个平台没有更新包时返回 204（Tauri 约定），有的话返回下载地址和签名。
+
+    bundle 是客户端的安装方式（deb、appimage、nsis…，v0.4.2 起的客户端会带上）：
+    先找「系统-架构-安装方式」的更新包（比如 linux-x86_64-deb），没有再用「系统-架构」的。
+    """
     try:
         info = json.loads(Path(UPDATER_FILE).read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return Response(status_code=204)
     version = str(info.get("version") or "")
-    plat = (info.get("platforms") or {}).get(f"{target}-{arch}")
+    platforms = info.get("platforms") or {}
+    bundle = bundle.strip().lower()[:16]
+    plat = (platforms.get(f"{target}-{arch}-{bundle}") if bundle else None) or platforms.get(f"{target}-{arch}")
     if not version or _ver(version) <= _ver(current) or not isinstance(plat, dict):
         return Response(status_code=204)
     return {
