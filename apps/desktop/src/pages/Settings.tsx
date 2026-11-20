@@ -7,6 +7,7 @@ import { AiModel, api, EnvStatus, errText, SpeedResult, UpdateInfo, XtAccount } 
 import { prefs } from "../store";
 import UpdateModal from "../components/UpdateModal";
 import { LANGS, langSetting, setLangSetting, systemLang, t, type Lang } from "../i18n";
+import { setThemeSetting, themeSetting, type ThemeSetting } from "../theme";
 
 /** 把译文里的 {key} 换成一个元素（比如加粗的部分） */
 const fill = (s: string, key: string, node: ReactNode) => {
@@ -34,6 +35,30 @@ function LanguageCard() {
       <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
         {t("译文由 AI 翻译，可能有不准确的地方，欢迎通过右上角「反馈」告诉我们。")}
       </div>
+    </div>
+  );
+}
+
+/** 外观：浅色 / 深色，默认跟随系统，改了之后重新加载界面 */
+function ThemeCard() {
+  const [value, setValue] = useState<ThemeSetting>(themeSetting());
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ fontSize: 15, marginTop: 0 }}>{t("外观")}</h2>
+      <Radio.Group
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setThemeSetting(e.target.value);
+          location.reload();
+        }}
+        optionType="button"
+        options={[
+          { value: "auto", label: t("跟随系统") },
+          { value: "light", label: t("浅色") },
+          { value: "dark", label: t("深色") },
+        ]}
+      />
     </div>
   );
 }
@@ -443,7 +468,7 @@ export default function Settings() {
             {(installing || lines.length > 0) && (
               <div
                 ref={logBox}
-                style={{ marginTop: 12, height: 220, overflow: "auto", background: "#0e1013", borderRadius: 6, padding: 10, font: "12px/1.6 Consolas, monospace", color: "#b8c0c9", whiteSpace: "pre-wrap", userSelect: "text" }}
+                style={{ marginTop: 12, height: 220, overflow: "auto", background: "var(--log-bg)", borderRadius: 6, padding: 10, font: "12px/1.6 Consolas, monospace", color: "var(--log-text)", whiteSpace: "pre-wrap", userSelect: "text" }}
               >
                 {lines.join("\n")}
               </div>
@@ -630,6 +655,7 @@ export default function Settings() {
         )}
       </div>
       <LanguageCard />
+      <ThemeCard />
       <UpdateCard />
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Steps } from "antd";
-import { CloseOutlined, ReadOutlined } from "@ant-design/icons";
+import { Button } from "antd";
+import { CheckOutlined, CloseOutlined, ReadOutlined } from "@ant-design/icons";
 import { api } from "../api";
 import { prefs, useApp } from "../store";
 import { t } from "../i18n";
@@ -68,7 +68,7 @@ export default function GuideCard({ hasProject, onNewProject }: { hasProject: bo
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 12, flexWrap: "nowrap" }}>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 12, alignItems: "flex-start" }}>
         <div>
           <h2 style={{ fontSize: 15, margin: 0 }}>{t("第一次用？跟着这六步走一遍")}</h2>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
@@ -91,20 +91,19 @@ export default function GuideCard({ hasProject, onNewProject }: { hasProject: bo
           />
         </div>
       </div>
-      <Steps
-        size="small"
-        current={current < 0 ? steps.length : current}
-        items={steps.map((s) => ({
-          title: s.title,
-          status: s.done ? "finish" : undefined,
-          description: (
-            <div style={{ fontSize: 12 }}>
-              {s.description}
+      {/* 自动换行的网格：宽屏一行六步，窗口窄或文字长（英文等）时排成两三行，不会挤在一起 */}
+      <div className="guide-steps">
+        {steps.map((s, i) => (
+          <div key={s.title} className={"guide-step" + (s.done ? " done" : i === current ? " cur" : "")}>
+            <div className="n">{s.done ? <CheckOutlined /> : i + 1}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="tt">{s.title}</div>
+              <div className="dd">{s.description}</div>
               {s.action && <div style={{ marginTop: 6 }}>{s.action}</div>}
             </div>
-          ),
-        }))}
-      />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

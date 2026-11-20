@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App as AntApp, ConfigProvider, theme } from "antd";
 import type { Locale } from "antd/es/locale";
 import { initI18n, type Lang } from "./i18n";
+import { initTheme } from "./theme";
 import { isRemote } from "./transport";
 import "./styles.css";
 
@@ -31,6 +32,7 @@ const FONTS: Partial<Record<Lang, string>> = {
 
 // 先加载语言包，再加载界面（界面模块顶层的常量里也用了 t()）
 async function start() {
+  const dark = initTheme() === "dark";
   const lang = await initI18n();
   if (!isRemote) {
     // 后端的提示和训练日志也用同一种语言
@@ -46,14 +48,25 @@ async function start() {
       <ConfigProvider
         locale={antdLocale}
         theme={{
-          algorithm: theme.darkAlgorithm,
+          algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
-            colorPrimary: "#3d8bfd",
-            colorBgBase: "#14161a",
-            colorBgContainer: "#1b1e23",
-            colorBgElevated: "#22262c",
-            colorBorder: "#2e333a",
-            colorBorderSecondary: "#2e333a",
+            ...(dark
+              ? {
+                  colorPrimary: "#3d8bfd",
+                  colorBgBase: "#14161a",
+                  colorBgContainer: "#1b1e23",
+                  colorBgElevated: "#22262c",
+                  colorBorder: "#2e333a",
+                  colorBorderSecondary: "#2e333a",
+                }
+              : {
+                  colorPrimary: "#2f7cf6",
+                  colorBgLayout: "#f4f6f9",
+                  colorBgContainer: "#ffffff",
+                  colorBgElevated: "#ffffff",
+                  colorBorder: "#d9dee5",
+                  colorBorderSecondary: "#e6e9ee",
+                }),
             borderRadius: 6,
             fontFamily: FONTS[lang] ?? 'system-ui,"Segoe UI",Roboto,"Microsoft YaHei UI",sans-serif',
           },

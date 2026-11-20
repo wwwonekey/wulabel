@@ -1308,5 +1308,11 @@
   "模糊@@图片质量": "Floue",
   "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "Édition internationale : l'interface est disponible en 12 langues (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). Elle suit la langue du système par défaut et vous pouvez la changer dans les Paramètres.",
   "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Les journaux d'entraînement, les messages d'erreur, les rapports et les instructions du package de service d'inférence utilisent aussi la langue de l'interface.",
-  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "Le site web et le guide d'utilisation sont aussi disponibles dans ces langues. Les traductions sont faites par IA ; si vous repérez une erreur, signalez-la via « Commentaires » en haut à droite."
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "Le site web et le guide d'utilisation sont aussi disponibles dans ces langues. Les traductions sont faites par IA ; si vous repérez une erreur, signalez-la via « Commentaires » en haut à droite.",
+  "外观": "Apparence",
+  "跟随系统": "Selon le système",
+  "浅色": "Clair",
+  "深色": "Sombre",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Nouveau thème clair : suit par défaut le mode clair ou sombre du système, et se change dans Paramètres → Apparence. Les zones d'image, comme le canevas d'annotation, restent sombres pour mieux juger les images.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Dans une fenêtre étroite ou une langue aux mots plus longs (comme l'anglais), le guide de démarrage et la barre latérale ne sont plus à l'étroit."
 }

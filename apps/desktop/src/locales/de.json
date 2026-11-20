@@ -1308,5 +1308,11 @@
   "模糊@@图片质量": "Unschärfe",
   "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "Internationale Version: Die Oberfläche gibt es jetzt in 12 Sprachen (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). Standardmäßig wird die Systemsprache verwendet, umstellen kannst du sie in den Einstellungen.",
   "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Trainingsprotokolle, Fehlermeldungen, Berichte und die Anleitung des Inferenz-Dienstpakets erscheinen ebenfalls in der Sprache der Oberfläche.",
-  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "Website und Benutzerhandbuch gibt es ebenfalls in diesen Sprachen. Die Übersetzungen stammen von einer KI – wenn dir etwas auffällt, sag uns über „Feedback“ oben rechts Bescheid."
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "Website und Benutzerhandbuch gibt es ebenfalls in diesen Sprachen. Die Übersetzungen stammen von einer KI – wenn dir etwas auffällt, sag uns über „Feedback“ oben rechts Bescheid.",
+  "外观": "Darstellung",
+  "跟随系统": "Wie System",
+  "浅色": "Hell",
+  "深色": "Dunkel",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Neues helles Design: folgt standardmäßig dem hellen oder dunklen Modus des Systems und lässt sich unter Einstellungen → Darstellung umstellen. Bildbereiche wie die Annotationsfläche bleiben dunkel, damit Bilder besser zu beurteilen sind.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "In schmalen Fenstern oder Sprachen mit längeren Wörtern (z. B. Englisch) sind die Einstiegshilfe auf der Startseite und die linke Leiste nicht mehr gequetscht."
 }

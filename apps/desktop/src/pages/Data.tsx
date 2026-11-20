@@ -846,7 +846,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
             bottom: 20,
             zIndex: 1000,
             background: "var(--panel, #20242b)",
-            border: "1px solid var(--border, #3a3f47)",
+            border: "1px solid var(--line)",
             borderRadius: 8,
             padding: "10px 14px",
             boxShadow: "0 4px 16px rgba(0,0,0,.35)",

@@ -1308,5 +1308,11 @@
   "模糊@@图片质量": "Borrada",
   "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "Edição internacional: a interface está disponível em 12 idiomas (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). Por padrão segue o idioma do sistema, e você pode mudar em Configurações.",
   "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Logs de treinamento, mensagens de erro, relatórios de entrega e as instruções do pacote de serviço de inferência também usam o idioma da interface.",
-  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "O site e o guia de uso também estão disponíveis nesses idiomas. As traduções foram feitas por IA; se encontrar algo errado, avise pelo botão de feedback no canto superior direito."
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "O site e o guia de uso também estão disponíveis nesses idiomas. As traduções foram feitas por IA; se encontrar algo errado, avise pelo botão de feedback no canto superior direito.",
+  "外观": "Aparência",
+  "跟随系统": "Seguir o sistema",
+  "浅色": "Claro",
+  "深色": "Escuro",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Novo tema claro: por padrão segue o modo claro ou escuro do sistema, e você pode mudar em Configurações → Aparência. Áreas de imagem, como a tela de anotação, continuam escuras para ver melhor as imagens.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Em janelas estreitas ou idiomas com palavras mais longas (como o inglês), o guia inicial e a barra lateral não ficam mais apertados."
 }
