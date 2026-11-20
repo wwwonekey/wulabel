@@ -27,6 +27,7 @@ import Deploy from "./pages/Deploy";
 import Team from "./pages/Team";
 import FeedbackModal from "./components/FeedbackModal";
 import UpdateModal from "./components/UpdateModal";
+import WhatsNew from "./components/WhatsNew";
 import html2canvas from "html2canvas";
 
 const NAV: { key: PageKey; label: string; icon: ReactNode; needProject: boolean }[] = [
@@ -252,6 +253,7 @@ export default function App() {
 
       <FeedbackModal open={fbOpen} shot={fbShot} onClose={() => setFbOpen(false)} />
       <UpdateModal info={upd} open={!!upd} onClose={() => setUpd(null)} />
+      <WhatsNew />
     </div>
   );
 }

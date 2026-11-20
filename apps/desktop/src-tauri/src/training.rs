@@ -335,6 +335,21 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                 Some("log") => {
                     let _ = writeln!(log_file.lock(), "{}", ev["msg"].as_str().unwrap_or(""));
                 }
+                Some("batch") => {
+                    // 显存不够自动调小了批大小：训练记录里改成实际用的，原来设的另存一份
+                    if let Some(b) = ev["batch"].as_u64() {
+                        let conn = p.conn.lock();
+                        let saved: Option<String> =
+                            conn.query_row("SELECT config_json FROM runs WHERE id = ?1", [id], |r| r.get(0)).ok();
+                        if let Some(mut c) = saved.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()) {
+                            if c.get("batchRequested").is_none() {
+                                c["batchRequested"] = c["batch"].clone();
+                            }
+                            c["batch"] = serde_json::json!(b);
+                            let _ = conn.execute("UPDATE runs SET config_json = ?2 WHERE id = ?1", params![id, c.to_string()]);
+                        }
+                    }
+                }
                 Some("metric") => {
                     // 记录被选为最好模型的那一轮的 mAP50
                     if let (Some(m), true) = (ev["map50"].as_f64(), ev["best"] == true) {

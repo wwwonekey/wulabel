@@ -32,6 +32,14 @@ jobs:
             bundle: |
               apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
               apps/desktop/src-tauri/target/release/bundle/deb/*.deb
+          # ARM64 Linux（飞腾、鲲鹏等），GitHub 给公开仓库免费提供 ARM 机器
+          - os: ubuntu-22.04-arm
+            name: linux-arm64
+            args: ""
+            rust_targets: ""
+            bundle: |
+              apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+              apps/desktop/src-tauri/target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.os }}
     environment: WULABEL_FEEDBACK_SECRET
     steps:

@@ -549,7 +549,14 @@ fn parse_version(v: &str) -> Vec<u32> {
 
 /// 当前平台和 Python 3.11 对应的 wheel 文件名结尾
 fn wheel_suffix() -> &'static str {
-    if cfg!(windows) { "-cp311-cp311-win_amd64.whl" } else { "-cp311-cp311-manylinux_2_28_x86_64.whl" }
+    if cfg!(windows) {
+        "-cp311-cp311-win_amd64.whl"
+    } else if cfg!(target_arch = "aarch64") {
+        // ARM64 Linux（飞腾、鲲鹏等），PyTorch 官方有 CPU 和 CUDA 两种
+        "-cp311-cp311-manylinux_2_28_aarch64.whl"
+    } else {
+        "-cp311-cp311-manylinux_2_28_x86_64.whl"
+    }
 }
 
 /// 从下载页里找某个包的所有版本（文件名形如 torch-2.11.0+cu128-cp311-cp311-win_amd64.whl，「+」可能被转义）
@@ -663,6 +670,10 @@ pub fn torch_variant(gpu: Option<&Gpu>) -> &'static str {
     let Some(g) = gpu else { return "cpu" };
     let mut it = g.cuda.split('.').map(|x| x.parse::<u32>().unwrap_or(0));
     let v = (it.next().unwrap_or(0), it.next().unwrap_or(0));
+    // ARM64 Linux 只有较新的 CUDA 版本有现成的 PyTorch，驱动太旧就用 CPU
+    if cfg!(target_arch = "aarch64") {
+        return if v >= (12, 8) { "cu128" } else { "cpu" };
+    }
     if v >= (13, 0) {
         "cu130"
     } else if v >= (12, 8) {

@@ -13,6 +13,9 @@
     windows-x86_64            Wulabel_<版本>_x64-setup.exe
     darwin-aarch64 / x86_64   Wulabel_universal.app.tar.gz（官网上叫 Wulabel_<版本>_universal.app.tar.gz）
     linux-x86_64              Wulabel_<版本>_amd64.AppImage
+    linux-x86_64-deb          Wulabel_<版本>_amd64.deb（用 .deb 装的客户端，v0.4.2 起会带上安装方式）
+    linux-aarch64             Wulabel_<版本>_aarch64.AppImage（ARM64，v0.4.2 起）
+    linux-aarch64-deb         Wulabel_<版本>_arm64.deb
 """
 
 from __future__ import annotations
@@ -49,6 +52,9 @@ def main() -> None:
         (["windows-x86_64"], f"Wulabel_{v}_x64-setup.exe", f"Wulabel_{v}_x64-setup.exe"),
         (["darwin-aarch64", "darwin-x86_64"], "Wulabel_universal.app.tar.gz", f"Wulabel_{v}_universal.app.tar.gz"),
         (["linux-x86_64"], f"Wulabel_{v}_amd64.AppImage", f"Wulabel_{v}_amd64.AppImage"),
+        (["linux-x86_64-deb"], f"Wulabel_{v}_amd64.deb", f"Wulabel_{v}_amd64.deb"),
+        (["linux-aarch64"], f"Wulabel_{v}_aarch64.AppImage", f"Wulabel_{v}_aarch64.AppImage"),
+        (["linux-aarch64-deb"], f"Wulabel_{v}_arm64.deb", f"Wulabel_{v}_arm64.deb"),
     ]
     out_dir = Path(args.download_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
