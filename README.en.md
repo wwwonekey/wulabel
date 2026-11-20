@@ -64,7 +64,7 @@ Updates: the app checks for new versions on startup; click "Update now" and it d
 
 ## Development
 
-Requires Node.js 20+ and Rust (stable); on Windows also the Visual Studio C++ build tools and WebView2.
+Requires Node.js 22+ and Rust (stable); on Windows also the Visual Studio C++ build tools and WebView2.
 
 ```bash
 cd apps/desktop

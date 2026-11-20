@@ -49,6 +49,7 @@ import { prefs, useApp } from "../store";
 import AnnotCanvas, { Box, Poly, RectXYWH, Tool } from "../components/AnnotCanvas";
 import AiRulesDrawer from "../components/AiRulesDrawer";
 import { t } from "../i18n";
+import { xuntongEnabled } from "../features";
 
 const PALETTE = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6", "#f472b6", "#a3e635", "#f97316", "#60a5fa"];
 const FILTERS = [
@@ -794,7 +795,8 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const [models, setModels] = useState<RunInfo[]>([]);
   const [modelId, setModelId] = useState<number | null>(null);
   const [aiSrc, setAiSrc] = useState<AiSrc>(() => {
-    const saved = (prefs.get("aiSrc", "model") as AiSrc) || "model";
+    let saved = (prefs.get("aiSrc", "model") as AiSrc) || "model";
+    if (saved === "ai" && !xuntongEnabled()) saved = "model";
     return isCls || (team.remote && saved === "ai") ? "model" : saved;
   });
   const [conf, setConf] = useState(() => Number(prefs.get(confKey(aiSrc), confDefault(aiSrc))));
@@ -1321,7 +1323,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const srcOptions = [
     { label: t("我的模型"), value: "model" },
     // 协作成员不能直接用巡瞳 AI（用的是发起人的额度），可以用「识别规则」和 AI 聊
-    ...(isCls ? [] : [{ label: t("文本提示"), value: "text" }, ...(remote ? [] : [{ label: t("巡瞳 AI"), value: "ai" }])]),
+    ...(isCls ? [] : [{ label: t("文本提示"), value: "text" }, ...(remote || !xuntongEnabled() ? [] : [{ label: t("巡瞳 AI"), value: "ai" }])]),
   ];
   const filterOpts = [
     ...FILTERS.map((f) => (f.value === "all" && isAnnotator ? { ...f, label: t("我的全部") } : f)),
@@ -1636,7 +1638,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         <section>
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
             <h3 style={{ margin: 0 }}>{t("AI 辅助")}</h3>
-            {!isCls && (
+            {!isCls && xuntongEnabled() && (
               <Tooltip title={t("告诉巡瞳 AI 每个类别具体指什么；可以和 AI 聊，它帮你整理规则、在这张图上试识别")}>
                 <Button size="small" type="link" icon={<MessageOutlined />} style={{ padding: 0 }} onClick={() => setRulesOpen(true)}>
                   {t("识别规则")}
@@ -2099,7 +2101,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 />
               </div>
             )}
-            {!isCls && (
+            {!isCls && xuntongEnabled() && (
               <div style={{ marginTop: 12 }}>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
                   {t("识别说明（巡瞳 AI「按项目类别识别」用：这个类别具体指什么、什么情况算 / 不算，可不填）")}

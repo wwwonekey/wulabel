@@ -87,11 +87,23 @@ pub async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
         newer: version_gt(&latest, &current),
         current,
         latest,
-        url: r.url.unwrap_or_default(),
+        url: localize_site(r.url.unwrap_or_default()),
         notes: r.notes.unwrap_or_default(),
         download_url: if trusted_url(&download_url) { download_url } else { String::new() },
         sha256: dl.sha256.unwrap_or_default().to_lowercase(),
     })
+}
+
+/// 官网链接换成界面语言的版本（中文在根目录，其他语言在 /<语言>/ 下）
+fn localize_site(url: String) -> String {
+    const SITE: &str = "https://wulabel.xiaowuiot.com/";
+    let lang = crate::i18n::lang();
+    if let Some(rest) = url.strip_prefix(SITE) {
+        if lang != "zh" && !rest.starts_with(&format!("{lang}/")) {
+            return format!("{SITE}{lang}/{rest}");
+        }
+    }
+    url
 }
 
 /// 只从官网和 GitHub 发行版下载安装包

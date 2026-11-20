@@ -1314,5 +1314,10 @@
   "浅色": "Claro",
   "深色": "Escuro",
   "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Novo tema claro: por padrão segue o modo claro ou escuro do sistema, e você pode mudar em Configurações → Aparência. Áreas de imagem, como a tela de anotação, continuam escuras para ver melhor as imagens.",
-  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Em janelas estreitas ou idiomas com palavras mais longas (como o inglês), o guia inicial e a barra lateral não ficam mais apertados."
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Em janelas estreitas ou idiomas com palavras mais longas (como o inglês), o guia inicial e a barra lateral não ficam mais apertados.",
+  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "O Xuntong AI é uma plataforma chinesa de reconhecimento por IA (anotação automática, envio de modelos, busca de imagens de alarme, retransmissão oficial). Ao ativar, os recursos aparecem nas páginas Anotar, Dados, Implantar e Colaboração.",
+  "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "O botão de ver o guia e os links do site nos avisos de atualização agora abrem a página no idioma da interface; as mensagens do servidor ao enviar feedback ou verificar atualizações também seguem esse idioma.",
+  "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "O Xuntong AI é uma plataforma chinesa, por isso seus recursos ficam ocultos por padrão em interfaces que não estão em chinês. Ative em Configurações → Xuntong AI se precisar.",
+  "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Corrigimos algumas traduções estranhas ou inconsistentes em vietnamita, russo, indonésio, espanhol e alemão.",
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "No Linux, ao extrair quadros de vídeos, o ffmpeg agora é baixado automaticamente; não é mais preciso instalá-lo manualmente."
 }

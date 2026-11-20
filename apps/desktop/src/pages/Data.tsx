@@ -36,6 +36,7 @@ import {
 } from "../api";
 import { prefs, useApp } from "../store";
 import { t } from "../i18n";
+import { xuntongEnabled } from "../features";
 import ImageViewer from "../components/ImageViewer";
 import ExportModal from "../components/ExportModal";
 import VersionsModal from "../components/VersionsModal";
@@ -483,7 +484,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
                         ? t("导入带标注的数据集（YOLO-pose / COCO 关键点）")
                         : t("导入带标注的数据集（YOLO / COCO / VOC）"),
                 },
-                ...(project.task === "classify" ? [] : [{ key: "xuntong", icon: <CloudDownloadOutlined />, label: t("从巡瞳 AI 拉取告警图片") }]),
+                ...(project.task === "classify" || !xuntongEnabled() ? [] : [{ key: "xuntong", icon: <CloudDownloadOutlined />, label: t("从巡瞳 AI 拉取告警图片") }]),
               ],
               onClick: ({ key }) => {
                 if (key === "files") pickFiles();

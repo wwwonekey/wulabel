@@ -1314,5 +1314,10 @@
   "浅色": "Light",
   "深色": "Dark",
   "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "New light theme: follows your system's light or dark mode by default, and you can switch it in Settings → Appearance. Image areas such as the annotation canvas stay dark so images are easier to judge.",
-  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "In narrow windows or languages with longer words (such as English), the home page guide and the left sidebar no longer get squeezed."
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "In narrow windows or languages with longer words (such as English), the home page guide and the left sidebar no longer get squeezed.",
+  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI is an AI recognition platform in China (auto-labeling, model upload, fetching alert images, official relay). When turned on, related features appear on the Annotate, Data, Deploy and Collaborate pages.",
+  "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "The \"View tutorial\" button and the website links in update notices now open the page in your interface language; messages from the server for feedback and update checks follow the interface language too.",
+  "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI is a platform in China, so its features are hidden by default in non-Chinese interfaces. Turn them on in Settings → Xuntong AI if you need them.",
+  "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Fixed some awkward or inconsistent translations in Vietnamese, Russian, Indonesian, Spanish and German.",
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "On Linux, extracting frames from videos now downloads ffmpeg automatically, so you no longer need to install it yourself."
 }
