@@ -94,4 +94,4 @@ Missing entries fall back to English, then Chinese. Run `python apps/desktop/scr
 
 [Apache-2.0](LICENSE). Third-party code (YOLOX, Apache-2.0) is listed in [NOTICE](NOTICE).
 
-Author: 小物学长. Questions and feature requests: [GitHub Issues](https://github.com/xiaowu-iot/wulabel/issues).
+Author: 小物学长 (177183719@qq.com). Questions and feature requests: [GitHub Issues](https://github.com/xiaowu-iot/wulabel/issues) or email.
