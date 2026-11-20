@@ -27,13 +27,14 @@
 
 ## 下载
 
-最新版 **v0.4.1**（Windows 10 / 11 64 位、macOS 11 及以上、Linux x86_64；Mac 版 Apple 芯片和 Intel 通用）：
+最新版 **v0.4.2**（Windows 10 / 11 64 位、macOS 11 及以上、Linux x86_64 和 ARM64；Mac 版 Apple 芯片和 Intel 通用）：
 
 | 系统 | 官网下载（国内推荐） | GitHub 下载 |
 |---|---|---|
-| Windows | [Wulabel_0.4.1_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.1_x64-setup.exe) | [Wulabel_0.4.1_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.1/Wulabel_0.4.1_x64-setup.exe) |
-| macOS | [Wulabel_0.4.1_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.1_universal.dmg) | [Wulabel_0.4.1_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.1/Wulabel_0.4.1_universal.dmg) |
-| Linux（Ubuntu、Debian、统信 UOS、麒麟等） | [Wulabel_0.4.1_amd64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.1_amd64.deb) · [Wulabel_0.4.1_amd64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.1_amd64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.1/Wulabel_0.4.1_amd64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.1/Wulabel_0.4.1_amd64.AppImage) |
+| Windows | [Wulabel_0.4.2_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.2_x64-setup.exe) | [Wulabel_0.4.2_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.2/Wulabel_0.4.2_x64-setup.exe) |
+| macOS | [Wulabel_0.4.2_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.2_universal.dmg) | [Wulabel_0.4.2_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.2/Wulabel_0.4.2_universal.dmg) |
+| Linux（Ubuntu、Debian、统信 UOS、麒麟等） | [Wulabel_0.4.2_amd64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.2_amd64.deb) · [Wulabel_0.4.2_amd64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.2_amd64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.2/Wulabel_0.4.2_amd64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.2/Wulabel_0.4.2_amd64.AppImage) |
+| Linux ARM64（飞腾、鲲鹏等） | [Wulabel_0.4.2_arm64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.2_arm64.deb) · [Wulabel_0.4.2_aarch64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.4.2_aarch64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.2/Wulabel_0.4.2_arm64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.4.2/Wulabel_0.4.2_aarch64.AppImage) |
 
 历史版本：[GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases) · [Gitee 发行版](https://gitee.com/xiaowu-iot/wulabel/releases) · [官网](https://wulabel.xiaowuiot.com/#download)
 
@@ -41,7 +42,7 @@
 
 - **Windows**：双击安装。弹出「Windows 已保护你的电脑」时，点「更多信息」→「仍要运行」（安装包还没有代码签名）。
 - **macOS**：打开 .dmg，把 Wulabel 拖进「应用程序」。提示「无法验证开发者」时，在「应用程序」里右键 Wulabel →「打开」；macOS 15 以后到「系统设置 → 隐私与安全性」点「仍要打开」。提示「已损坏」的话，在终端执行 `xattr -cr /Applications/Wulabel.app`。
-- **Linux**：.deb 用 `sudo apt install ./Wulabel_0.4.1_amd64.deb` 安装，装好后在应用菜单里找 Wulabel；也可以用 .AppImage：`chmod +x Wulabel_0.4.1_amd64.AppImage` 后双击运行，不用安装。目前只有 x86_64 版，ARM 版（飞腾、鲲鹏）后续加上。
+- **Linux**：.deb 用 `sudo apt install ./Wulabel_0.4.2_amd64.deb` 安装，装好后在应用菜单里找 Wulabel；也可以用 .AppImage：`chmod +x Wulabel_0.4.2_amd64.AppImage` 后双击运行，不用安装。ARM 电脑（飞腾、鲲鹏）下载文件名带 arm64 / aarch64 的，用法一样。
 - 装好后到「设置」页点「一键安装训练环境」。只标注、不训练可以跳过。
 
 ## 功能一览
@@ -57,12 +58,13 @@
 - **团队协作**：实时协作：你的电脑当主机，成员用浏览器登录就能标，局域网或在线都行；角色、分配任务、按张加锁、审核打回、工作量统计、水印。离线分包：分成几个标注包，标完合并回来
 - **设置**：训练环境一键安装、下载源、使用已有 Python 环境、巡瞳 AI 账号、检查更新
 
-已知限制：Linux 版目前只有 x86_64；分割、关键点模型可以导出 ONNX、OpenVINO 等格式自己集成，推理服务包和实时验证目前只支持检测模型；分割、关键点的评估按目标框计算指标。
+已知限制：分割、关键点模型可以导出 ONNX、OpenVINO 等格式自己集成，推理服务包和实时验证目前只支持检测模型；分割、关键点的评估按目标框计算指标。
 
 ## 版本历史
 
 | 版本 | 日期 | 主要内容 |
 |---|---|---|
+| [v0.4.2](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.4.2) | 2026-11-20 | 新增 ARM64 Linux 版（飞腾、鲲鹏）；显存不够自动调小批大小重训；更新后显示本次更新内容；反馈可附带运行日志；.deb 安装版也能全自动更新；修复 RTSP 抽帧超时不生效，TCP 连不上自动改用 UDP |
 | [v0.4.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.4.1) | 2026-11-19 | 全自动更新：点「立即更新」后软件自己下载、校验签名、安装并重启，不用再跑安装程序（从 0.4.1 升级到以后的版本生效） |
 | [v0.4.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.4.0) | 2026-11-19 | 新增 Linux 版；软件内一键升级；首页新手引导和项目进度；检测默认 YOLOX-S、按显卡推荐规格、训练结束提醒；文本提示中文类别名自动对应英文；分割、关键点模型可导出 ONNX；反馈可留邮箱、作者回复会发邮件；标注页快捷键面板，训练页高级设置收起 |
 | [v0.3.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.3.0) | 2026-11-17 | 新增 YOLO 系列训练：YOLOX Nano / Tiny / S / M / L，官方数据增强和 COCO 预训练权重，可导出 ONNX / OpenVINO / TensorRT / RKNN、上传巡瞳 |
@@ -107,7 +109,7 @@ cd worker
 python -m unittest discover -s tests
 ```
 
-GitHub Actions：`release` 推送 `v*` 标签时打 Windows 和 Mac 安装包；`build` 手动运行，只打测试包；`worker-test` 改了 worker 代码时自动跑 Python 测试。
+GitHub Actions：`release` 推送 `v*` 标签时打 Windows、Mac、Linux（x86_64 和 ARM64）安装包；`build` 手动运行，只打测试包；`worker-test` 改了 worker 代码时自动跑 Python 测试。
 
 ## 目录结构
 
@@ -177,4 +179,4 @@ docs/                        使用教程、对接接口、打包发布
 
 [Apache-2.0](LICENSE)。第三方代码（YOLOX，Apache-2.0）见 [NOTICE](NOTICE)。
 
-作者：小物学长。使用问题、功能建议欢迎提 [Issue](https://github.com/xiaowu-iot/wulabel/issues)，或到[官网](https://wulabel.xiaowuiot.com/#contact)找作者、进交流群。
+作者：小物学长，邮箱 177183719@qq.com。使用问题、功能建议欢迎提 [Issue](https://github.com/xiaowu-iot/wulabel/issues)、发邮件，或到[官网](https://wulabel.xiaowuiot.com/#contact)找作者、进交流群。
