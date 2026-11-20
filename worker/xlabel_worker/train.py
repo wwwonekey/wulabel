@@ -10,11 +10,15 @@
 
 在 out 目录下创建 STOP 文件即可让训练在当前迭代结束后停止。
 
+显存（或内存）不够时自动把批大小减半、从头再训，直到批大小为 1；
+每次调整会发一个 batch 事件（batch=新的批大小，was=原来的）。
+
 分类没有 mAP：metric 事件里 map50 = 准确率，map = 宏平均 F1（界面按任务改名显示）。
 """
 
 from __future__ import annotations
 
+import gc
 import json
 import math
 import os
@@ -177,7 +181,45 @@ def split_report(r, classes: list[str], images: int) -> dict:
 # ---------- 训练主流程 ----------
 
 
+def is_oom(e: BaseException) -> bool:
+    """显卡（CUDA / Apple MPS）或内存不够"""
+    if isinstance(e, (torch.cuda.OutOfMemoryError, MemoryError)):
+        return True
+    return isinstance(e, RuntimeError) and "out of memory" in str(e).lower()
+
+
+def free_memory() -> None:
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available() and hasattr(torch, "mps"):
+        torch.mps.empty_cache()
+
+
 def run(cfg: dict) -> None:
+    out = Path(cfg["out"])
+    while True:
+        batch = int(cfg.get("batch", 4))
+        try:
+            return run_once(cfg)
+        except Exception as e:  # noqa: BLE001
+            if not is_oom(e) or batch <= 1 or (out / "STOP").exists():
+                raise
+        # 出了 except 再清显存：异常的调用栈还引用着上一次的张量
+        free_memory()
+        new = max(1, batch // 2)
+        log(f"显存不够，批大小从 {batch} 自动调到 {new}，从头重新训练")
+        emit("batch", batch=new, was=batch)
+        for f in ("metrics.jsonl", "best.pt", "last.pt", "eval.json"):
+            try:
+                (out / f).unlink(missing_ok=True)
+            except OSError:
+                pass
+        cfg["batch"] = new
+
+
+def run_once(cfg: dict) -> None:
     root = Path(cfg["dataset"])
     out = Path(cfg["out"])
     out.mkdir(parents=True, exist_ok=True)

@@ -327,6 +327,8 @@ export interface RunInfo {
     versionName?: string;
     /** 接着哪次训练继续训的（那次的名字） */
     baseRunName?: string;
+    /** 显存不够自动调小了批大小时，原来设的批大小（batch 是实际用的） */
+    batchRequested?: number;
   };
   bestMap50: number | null;
   createdAt: number;

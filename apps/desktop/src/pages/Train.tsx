@@ -190,6 +190,11 @@ export default function Train({ project }: { project: ProjectInfo }) {
       const t = event.type;
       if (t === "progress") setProg(event as unknown as ProgressEv);
       else if (t === "metric" || t === "log" || t === "error") loadDetail(runId);
+      else if (t === "batch") {
+        message.warning(`显存不够，批大小已从 ${event.was} 自动调到 ${event.batch}，重新开始训练`);
+        loadRuns();
+        loadDetail(runId);
+      }
       else if (t === "finished") {
         setProg(null);
         loadRuns();
@@ -471,6 +476,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                       {run.config?.images
                         ? `训练 ${run.config.images.train} 张 / 验证 ${run.config.images.val} 张 / ${run.config.images.anns ?? run.config.images.boxes} 个标注`
                         : ""}
+                      {run.config?.batchRequested ? ` · 批大小 ${run.config.batch}（显存不够，从 ${run.config.batchRequested} 自动调小）` : ""}
                     </span>
                   </div>
                   <Space>
