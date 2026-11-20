@@ -102,7 +102,7 @@ export default function Home() {
                   src={sums[r.path]!.cover!}
                   alt=""
                   draggable={false}
-                  style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 6, marginBottom: 10, display: "block", background: "#0e1013" }}
+                  style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 6, marginBottom: 10, display: "block", background: "var(--thumb-bg)" }}
                 />
               )}
               <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap" }}>

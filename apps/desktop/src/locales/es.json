@@ -1308,5 +1308,9 @@
   "模糊@@图片质量": "Borrosa",
   "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "Edición internacional: la interfaz está disponible en 12 idiomas (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). Por defecto usa el idioma del sistema y puedes cambiarlo en Ajustes.",
   "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Los registros de entrenamiento, los mensajes de error, los informes de entrega y las instrucciones del paquete de servicio de inferencia también usan el idioma de la interfaz.",
-  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "El sitio web y la guía de uso también están disponibles en estos idiomas. Las traducciones las hizo una IA; si ves algún error, avísanos desde «Comentarios», arriba a la derecha."
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "El sitio web y la guía de uso también están disponibles en estos idiomas. Las traducciones las hizo una IA; si ves algún error, avísanos desde «Comentarios», arriba a la derecha.",
+  "外观": "Apariencia",
+  "跟随系统": "Según el sistema",
+  "浅色": "Claro",
+  "深色": "Oscuro"
 }
