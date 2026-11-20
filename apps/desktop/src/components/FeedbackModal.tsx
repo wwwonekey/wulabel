@@ -103,7 +103,7 @@ export default function FeedbackModal({
           placeholder={t("你的邮箱（选填）：问题处理好了会发邮件通知你")}
         />
         {shot ? (
-          <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>
+          <div style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 8 }}>
             <Checkbox checked={withShot} onChange={(e) => setWithShot(e.target.checked)} style={{ marginBottom: withShot ? 8 : 0 }}>
               {t("附带当前界面截图")}
             </Checkbox>
@@ -117,7 +117,7 @@ export default function FeedbackModal({
           <div className="dim" style={{ fontSize: 12 }}>{t("（这次没能自动截到界面，直接文字描述即可）")}</div>
         )}
         {logs && (
-          <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>
+          <div style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 8 }}>
             <Checkbox checked={withLogs} onChange={(e) => setWithLogs(e.target.checked)}>
               {t("附带运行日志（训练环境、最近两次训练的日志和出错信息，不含图片和标注）")}
             </Checkbox>

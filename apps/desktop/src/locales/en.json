@@ -1308,5 +1308,9 @@
   "模糊@@图片质量": "Blurry",
   "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "International edition: the interface is available in 12 languages (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). It follows your system language by default, and you can change it in Settings.",
   "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Training logs, error messages, delivery reports and the inference service package's instructions also use the interface language.",
-  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "The website and user guide are now available in these languages too. Translations are done by AI — if you spot something wrong, let us know via Feedback in the top-right corner."
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "The website and user guide are now available in these languages too. Translations are done by AI — if you spot something wrong, let us know via Feedback in the top-right corner.",
+  "外观": "Appearance",
+  "跟随系统": "Follow system",
+  "浅色": "Light",
+  "深色": "Dark"
 }
