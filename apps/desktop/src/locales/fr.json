@@ -1315,5 +1315,9 @@
   "深色": "Sombre",
   "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Nouveau thème clair : suit par défaut le mode clair ou sombre du système, et se change dans Paramètres → Apparence. Les zones d'image, comme le canevas d'annotation, restent sombres pour mieux juger les images.",
   "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Dans une fenêtre étroite ou une langue aux mots plus longs (comme l'anglais), le guide de démarrage et la barre latérale ne sont plus à l'étroit.",
-  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI est une plateforme chinoise de reconnaissance par IA (annotation automatique, envoi de modèles, récupération d'images d'alerte, relais officiel). Une fois activée, ses fonctions apparaissent dans les pages Annotation, Données, Déploiement et Collaborer."
+  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI est une plateforme chinoise de reconnaissance par IA (annotation automatique, envoi de modèles, récupération d'images d'alerte, relais officiel). Une fois activée, ses fonctions apparaissent dans les pages Annotation, Données, Déploiement et Collaborer.",
+  "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "Le bouton du guide et les liens vers le site dans les notifications de mise à jour ouvrent désormais la page dans la langue de l'interface ; les messages du serveur lors de l'envoi de commentaires ou de la vérification des mises à jour suivent aussi cette langue.",
+  "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI est une plateforme chinoise : ses fonctions sont masquées par défaut dans les interfaces non chinoises. Activez-les dans Paramètres → Xuntong AI si besoin.",
+  "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Correction de quelques traductions maladroites ou incohérentes en vietnamien, russe, indonésien, espagnol et allemand.",
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Sous Linux, l'extraction d'images depuis des vidéos télécharge maintenant ffmpeg automatiquement ; plus besoin de l'installer soi-même."
 }

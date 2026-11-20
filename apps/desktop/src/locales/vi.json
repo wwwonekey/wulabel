@@ -1315,5 +1315,9 @@
   "深色": "Tối",
   "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Thêm giao diện sáng: mặc định theo chế độ sáng hoặc tối của hệ thống, có thể đổi trong Cài đặt → Giao diện. Các vùng xem ảnh như khung gán nhãn vẫn giữ màu tối để nhìn ảnh chính xác hơn.",
   "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Khi cửa sổ hẹp hoặc dùng ngôn ngữ có từ dài hơn (như tiếng Anh), phần hướng dẫn trên trang chủ và thanh điều hướng bên trái không còn bị chen chúc.",
-  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI là nền tảng nhận dạng AI của Trung Quốc (gán nhãn tự động, tải mô hình lên, lấy ảnh cảnh báo, máy chủ trung chuyển chính thức). Khi bật, các tính năng liên quan sẽ xuất hiện ở trang Gán nhãn, Dữ liệu, Triển khai và Cộng tác."
+  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI là nền tảng nhận dạng AI của Trung Quốc (gán nhãn tự động, tải mô hình lên, lấy ảnh cảnh báo, máy chủ trung chuyển chính thức). Khi bật, các tính năng liên quan sẽ xuất hiện ở trang Gán nhãn, Dữ liệu, Triển khai và Cộng tác.",
+  "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "Nút xem hướng dẫn và liên kết trang web trong thông báo cập nhật giờ mở trang theo ngôn ngữ giao diện; thông báo từ máy chủ khi gửi phản hồi hay kiểm tra cập nhật cũng theo ngôn ngữ giao diện.",
+  "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI là nền tảng của Trung Quốc nên các tính năng liên quan được ẩn mặc định khi giao diện không phải tiếng Trung. Nếu cần, hãy bật trong Cài đặt → Xuntong AI.",
+  "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Sửa một số bản dịch chưa tự nhiên hoặc không thống nhất trong tiếng Việt, Nga, Indonesia, Tây Ban Nha và Đức.",
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Trên Linux, khi trích khung hình từ video sẽ tự tải ffmpeg, không cần cài thủ công nữa."
 }

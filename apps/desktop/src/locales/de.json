@@ -1315,5 +1315,9 @@
   "深色": "Dunkel",
   "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Neues helles Design: folgt standardmäßig dem hellen oder dunklen Modus des Systems und lässt sich unter Einstellungen → Darstellung umstellen. Bildbereiche wie die Annotationsfläche bleiben dunkel, damit Bilder besser zu beurteilen sind.",
   "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "In schmalen Fenstern oder Sprachen mit längeren Wörtern (z. B. Englisch) sind die Einstiegshilfe auf der Startseite und die linke Leiste nicht mehr gequetscht.",
-  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI ist eine chinesische KI-Erkennungsplattform (automatische Annotation, Modell-Upload, Abruf von Alarmbildern, offizielles Relay). Wenn aktiviert, erscheinen die zugehörigen Funktionen auf den Seiten Annotieren, Daten, Bereitstellen und Zusammenarbeit."
+  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI ist eine chinesische KI-Erkennungsplattform (automatische Annotation, Modell-Upload, Abruf von Alarmbildern, offizielles Relay). Wenn aktiviert, erscheinen die zugehörigen Funktionen auf den Seiten Annotieren, Daten, Bereitstellen und Zusammenarbeit.",
+  "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "Die Schaltfläche für die Anleitung und die Website-Links in Update-Hinweisen öffnen jetzt die Seite in der Sprache der Oberfläche; Meldungen des Servers bei Feedback und Update-Prüfung erscheinen ebenfalls in dieser Sprache.",
+  "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI ist eine chinesische Plattform, daher sind ihre Funktionen in nicht-chinesischen Oberflächen standardmäßig ausgeblendet. Bei Bedarf unter Einstellungen → Xuntong AI einschalten.",
+  "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Einige holprige oder uneinheitliche Übersetzungen in Vietnamesisch, Russisch, Indonesisch, Spanisch und Deutsch wurden korrigiert.",
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Unter Linux wird ffmpeg beim Extrahieren von Videoframes jetzt automatisch heruntergeladen – eine manuelle Installation ist nicht mehr nötig."
 }
