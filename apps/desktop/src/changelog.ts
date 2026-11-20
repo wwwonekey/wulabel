@@ -3,6 +3,14 @@ import { t } from "./i18n";
 /** 各版本更新内容，更新后第一次打开软件时显示（新版本在前）。发版时在最前面加一条。 */
 export const CHANGELOG: { version: string; items: string[] }[] = [
   {
+    version: "0.5.0",
+    items: [
+      t("国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。"),
+      t("训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。"),
+      t("官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。"),
+    ],
+  },
+  {
     version: "0.4.2",
     items: [
       t("训练时显存不够不再直接失败：自动把批大小减半、从头重新训练，训练记录里会注明实际用的批大小。"),

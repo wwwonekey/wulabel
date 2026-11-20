@@ -1304,5 +1304,9 @@
   "，或者复制地址：": ", hoặc sao chép địa chỉ: ",
   "，碰到后面手动标过的帧停下": ", dừng lại khi gặp khung hình đã gán nhãn thủ công phía sau",
   "；": "; ",
-  "主题@@MQTT": "Topic"
+  "主题@@MQTT": "Topic",
+  "模糊@@图片质量": "Mờ",
+  "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "Phiên bản quốc tế: giao diện hỗ trợ 12 ngôn ngữ (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). Mặc định theo ngôn ngữ hệ thống, có thể đổi trong Cài đặt.",
+  "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Nhật ký huấn luyện, thông báo lỗi, báo cáo bàn giao và hướng dẫn của gói dịch vụ suy luận cũng hiển thị theo ngôn ngữ giao diện.",
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "Trang web và hướng dẫn sử dụng cũng đã có các phiên bản ngôn ngữ. Bản dịch do AI thực hiện, nếu thấy chỗ nào chưa đúng hãy báo cho chúng tôi qua nút Phản hồi ở góc trên bên phải."
 }

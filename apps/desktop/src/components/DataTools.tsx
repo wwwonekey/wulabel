@@ -7,7 +7,7 @@ import { modelName } from "../pages/Train";
 import { t } from "../i18n";
 
 const ISSUE: Record<string, { text: string; color: string }> = {
-  blur: { text: t("模糊"), color: "orange" },
+  blur: { text: t("模糊@@图片质量"), color: "orange" },
   dark: { text: t("过暗"), color: "purple" },
   bright: { text: t("过曝"), color: "gold" },
   flat: { text: t("对比度低"), color: "default" },

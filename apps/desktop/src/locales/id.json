@@ -1304,5 +1304,9 @@
   "，或者复制地址：": ", atau salin alamatnya: ",
   "，碰到后面手动标过的帧停下": ", berhenti di frame berikutnya yang sudah dianotasi manual",
   "；": "; ",
-  "主题@@MQTT": "Topik"
+  "主题@@MQTT": "Topik",
+  "模糊@@图片质量": "Buram",
+  "国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。": "Edisi internasional: antarmuka kini tersedia dalam 12 bahasa (简体中文, 繁體中文, English, 日本語, 한국어, Español, Português, Русский, Deutsch, Français, Tiếng Việt, Bahasa Indonesia). Secara default mengikuti bahasa sistem, dan bisa diganti di Pengaturan.",
+  "训练日志、出错提示、交付报告和推理服务包的说明也按界面语言显示。": "Log pelatihan, pesan kesalahan, laporan serah terima, dan petunjuk paket layanan inferensi juga memakai bahasa antarmuka.",
+  "官网和使用教程也有了各语言版本。译文由 AI 翻译，发现不准确的地方欢迎点右上角「反馈」告诉我们。": "Situs web dan panduan penggunaan juga tersedia dalam bahasa-bahasa ini. Terjemahan dibuat oleh AI; jika ada yang kurang tepat, beri tahu kami lewat tombol Masukan di kanan atas."
 }
