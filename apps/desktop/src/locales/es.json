@@ -1314,5 +1314,6 @@
   "浅色": "Claro",
   "深色": "Oscuro",
   "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Nuevo tema claro: por defecto sigue el modo claro u oscuro del sistema, y puedes cambiarlo en Ajustes → Apariencia. Las zonas de imagen, como el lienzo de anotación, siguen oscuras para ver mejor las imágenes.",
-  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Con ventanas estrechas o idiomas con palabras más largas (como el inglés), la guía de inicio y la barra lateral ya no se amontonan."
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Con ventanas estrechas o idiomas con palabras más largas (como el inglés), la guía de inicio y la barra lateral ya no se amontonan.",
+  "巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。": "Xuntong AI es una plataforma china de reconocimiento por IA (anotación automática, subida de modelos, descarga de imágenes de alarma, retransmisión oficial). Al activarla, sus funciones aparecen en las páginas Anotar, Datos, Desplegar y Colaborar."
 }

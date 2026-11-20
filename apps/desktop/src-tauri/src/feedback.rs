@@ -100,6 +100,25 @@ pub(crate) fn device_id(app: &tauri::AppHandle) -> String {
     id
 }
 
+/// 反馈服务返回的是中文提示，按界面语言翻译（服务端的原话就是词条的键）
+fn server_error(s: &str) -> String {
+    match s {
+        "今天提交的反馈已经比较多了，明天再试吧" => t!("今天提交的反馈已经比较多了，明天再试吧"),
+        "截图太大" => t!("截图太大"),
+        "提交太频繁，请过一会儿再试" => t!("提交太频繁，请过一会儿再试"),
+        "服务器繁忙，请稍后再试" => t!("服务器繁忙，请稍后再试"),
+        "签名校验失败" => t!("签名校验失败"),
+        "设备时间和服务器相差太大，请校准时间后重试" => t!("设备时间和服务器相差太大，请校准时间后重试"),
+        "请求参数不完整" => t!("请求参数不完整"),
+        "请求格式不对" => t!("请求格式不对"),
+        "运行日志太长" => t!("运行日志太长"),
+        "问题描述不能为空" => t!("问题描述不能为空"),
+        "问题描述太长" => t!("问题描述太长"),
+        _ if s.starts_with("服务端发送失败") => t!("服务端发送邮件失败，请稍后再试"),
+        _ => s.to_string(),
+    }
+}
+
 #[tauri::command]
 pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Result<(), String> {
     let message = input.message.trim().to_string();
@@ -154,7 +173,7 @@ pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Res
             let text = resp.into_string().unwrap_or_default();
             let msg = serde_json::from_str::<serde_json::Value>(&text)
                 .ok()
-                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(server_error))
                 .unwrap_or_else(|| match code {
                     429 => t!("提交太频繁，请稍后再试"),
                     _ => t!("提交失败（{code}）", code = code),

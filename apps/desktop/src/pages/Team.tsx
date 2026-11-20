@@ -38,6 +38,7 @@ import {
 import { listen } from "../transport";
 import { useApp } from "../store";
 import { t } from "../i18n";
+import { xuntongEnabled } from "../features";
 
 const ACTIONS: Record<string, string> = {
   login: t("登录"),
@@ -321,7 +322,7 @@ export default function Team({ project }: { project: ProjectInfo }) {
             <Radio.Group value={opts.mode} onChange={(e) => setOpt("mode", e.target.value)}>
               <Radio.Button value="lan">{t("局域网")}</Radio.Button>
               <Radio.Button value="relay">{t("在线 · 自建中转")}</Radio.Button>
-              <Radio.Button value="xuntong">{t("在线 · 巡瞳官方中转")}</Radio.Button>
+              {(xuntongEnabled() || opts.mode === "xuntong") && <Radio.Button value="xuntong">{t("在线 · 巡瞳官方中转")}</Radio.Button>}
             </Radio.Group>
             <div className="muted" style={{ fontSize: 12 }}>
               {opts.mode === "lan" && t("成员和你在同一个局域网（同一个公司网络、同一个 Wi-Fi），速度最快，数据不出公司。")}

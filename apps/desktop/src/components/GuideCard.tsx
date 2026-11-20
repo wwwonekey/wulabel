@@ -3,9 +3,13 @@ import { Button } from "antd";
 import { CheckOutlined, CloseOutlined, ReadOutlined } from "@ant-design/icons";
 import { api } from "../api";
 import { prefs, useApp } from "../store";
-import { t } from "../i18n";
+import { currentLang, t } from "../i18n";
 
-const GUIDE_URL = "https://wulabel.xiaowuiot.com/guide.html";
+/** 官网教程：中文在根目录，其他语言在 /<语言>/ 下 */
+const guideUrl = () => {
+  const l = currentLang();
+  return `https://wulabel.xiaowuiot.com/${l === "zh" ? "" : l + "/"}guide.html`;
+};
 
 /** 首页的新手引导：从装训练环境到部署的六步，能判断的步骤自动打勾 */
 export default function GuideCard({ hasProject, onNewProject }: { hasProject: boolean; onNewProject: () => void }) {
@@ -76,7 +80,7 @@ export default function GuideCard({ hasProject, onNewProject }: { hasProject: bo
           </div>
         </div>
         <div className="row" style={{ flexWrap: "nowrap" }}>
-          <Button size="small" icon={<ReadOutlined />} onClick={() => api.openUrl(GUIDE_URL).catch(() => {})}>
+          <Button size="small" icon={<ReadOutlined />} onClick={() => api.openUrl(guideUrl()).catch(() => {})}>
             {t("看使用教程")}
           </Button>
           <Button

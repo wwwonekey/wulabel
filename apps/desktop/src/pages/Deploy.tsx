@@ -30,6 +30,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errText, FormatResult, Label, ProjectInfo, RunInfo } from "../api";
 import { prefs, useApp } from "../store";
 import { t } from "../i18n";
+import { xuntongEnabled } from "../features";
 import { rgba } from "../components/AnnotCanvas";
 import { XuntongUpload } from "../components/Xuntong";
 
@@ -381,7 +382,7 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
           ))}
         </div>
       )}
-      <XuntongUpload run={run} project={project} />
+      {xuntongEnabled() && <XuntongUpload run={run} project={project} />}
     </div>
   );
 }
