@@ -252,13 +252,97 @@ fn is_stream_url(url: &str) -> bool {
     url.contains("://")
 }
 
-/// RTSP 默认走 TCP（摄像头用 UDP 常丢包花屏）
-fn stream_input_args(c: &mut std::process::Command, url: &str, rw_timeout_us: u64) {
-    if url.starts_with("rtsp") {
-        c.args(["-rtsp_transport", "tcp"]);
+/// ffmpeg 的主版本号（读不出来当作新版本；自己编译的开发版版本号不是数字，也当作新版本）
+fn ffmpeg_major(ffmpeg: &Path) -> u32 {
+    static CACHE: Mutex<Option<(PathBuf, u32)>> = Mutex::new(None);
+    if let Some((p, v)) = CACHE.lock().unwrap().as_ref() {
+        if p == ffmpeg {
+            return *v;
+        }
     }
-    // 多少微秒没数据就判定断开，避免地址不通时一直卡着
-    c.args(["-rw_timeout", &rw_timeout_us.to_string()]);
+    let text = command(ffmpeg).arg("-version").stdin(Stdio::null()).output().map(|o| o.stdout).unwrap_or_default();
+    let text = String::from_utf8_lossy(&text);
+    let v = text
+        .split("ffmpeg version ")
+        .nth(1)
+        .map(|s| s.trim_start_matches(['n', 'N']).chars().take_while(|c| c.is_ascii_digit()).collect::<String>())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(99);
+    *CACHE.lock().unwrap() = Some((ffmpeg.to_path_buf(), v));
+    v
+}
+
+/// 测试连接时发现只能走 UDP 的 RTSP 地址，抽帧时也走 UDP
+static RTSP_UDP: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// RTSP 默认走 TCP（摄像头用 UDP 常丢包花屏），测试连接时 TCP 不通会再试 UDP。
+/// 超时：多少微秒没数据就判定断开，避免地址不通时一直卡着。
+/// RTSP 不认 -rw_timeout，要用它自己的选项：ffmpeg 5 起叫 -timeout，4.x 叫 -stimeout
+/// （4.x 的 -timeout 是「等对方连进来」的意思，不能用）。
+fn stream_input_args(c: &mut std::process::Command, ffmpeg: &Path, url: &str, timeout_us: u64, udp: bool) {
+    let us = timeout_us.to_string();
+    if url.starts_with("rtsp") {
+        c.args(["-rtsp_transport", if udp { "udp" } else { "tcp" }]);
+        c.args([if ffmpeg_major(ffmpeg) >= 5 { "-timeout" } else { "-stimeout" }, &us]);
+    } else {
+        c.args(["-rw_timeout", &us]);
+    }
+}
+
+/// 把 ffmpeg 的常见报错换成好懂的话
+fn explain_stream_error(text: &str) -> Option<&'static str> {
+    let t = text.to_ascii_lowercase();
+    if t.contains("401") || t.contains("unauthorized") {
+        Some("账号或密码不对（地址格式：rtsp://账号:密码@IP:端口/路径，密码里有 @ # 等符号要换成 %40 %23）")
+    } else if t.contains("404") {
+        Some("地址里的路径不对，查一下摄像头或录像机说明书里的 RTSP 地址格式")
+    } else if t.contains("connection refused") || t.contains("10061") {
+        Some("对方拒绝连接：IP 或端口不对，或者摄像头没开 RTSP")
+    } else if t.contains("461") || t.contains("unsupported transport") {
+        Some("摄像头不支持这种传输方式")
+    } else {
+        None
+    }
+}
+
+/// 探测一次：成功返回 ffmpeg 输出；失败返回（是否超时，输出）
+fn probe_once(ffmpeg: &Path, url: &str, udp: bool) -> Result<String, (bool, String)> {
+    let mut c = command(ffmpeg);
+    c.args(["-hide_banner"]);
+    stream_input_args(&mut c, ffmpeg, url, 8_000_000, udp);
+    c.arg("-i").arg(url);
+    c.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+    let mut child = c.spawn().map_err(|e| (false, format!("无法启动 ffmpeg：{e}")))?;
+    let err = child.stderr.take().unwrap();
+    let buf = Arc::new(Mutex::new(String::new()));
+    let b2 = buf.clone();
+    let t = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = BufReader::new(err).read_to_string(&mut s);
+        *b2.lock().unwrap() = s;
+    });
+    // 最多等 15 秒（有的摄像头关键帧间隔长，分析流信息要多等一会儿）
+    let mut timed_out = true;
+    for _ in 0..30 {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            timed_out = false;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    if timed_out {
+        let _ = child.kill();
+    }
+    let _ = child.wait();
+    let _ = t.join();
+    let text = buf.lock().unwrap().clone();
+    if text.contains("Video:") {
+        Ok(text)
+    } else {
+        // ffmpeg 自己的超时（-timeout）也算超时
+        let t = text.to_ascii_lowercase();
+        Err((timed_out || t.contains("timed out") || t.contains("-138") || t.contains("10060"), text))
+    }
 }
 
 /// 从 ffmpeg stderr 里解析分辨率、编码、帧率、时长
@@ -313,43 +397,36 @@ pub fn probe_stream(rt: &Runtime, url: &str, log: &(dyn Fn(String) + Sync), prog
         return Err(msg("请填写视频流地址（rtsp:// 或 http(s):// 开头）"));
     }
     let ffmpeg = rt.ffmpeg(log, &|_f, d, t, s| progress("download", d, t, s, "正在下载 ffmpeg（首次使用，约 90MB）"))?;
-    let mut c = command(&ffmpeg);
-    c.args(["-hide_banner"]);
-    stream_input_args(&mut c, url, 10_000_000);
-    c.arg("-i").arg(url);
-    c.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
-    let mut child = c.spawn().map_err(|e| msg(format!("无法启动 ffmpeg：{e}")))?;
-    let err = child.stderr.take().unwrap();
-    let buf = Arc::new(Mutex::new(String::new()));
-    let b2 = buf.clone();
-    let t = std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = BufReader::new(err).read_to_string(&mut s);
-        *b2.lock().unwrap() = s;
-    });
-    let mut timed_out = true;
-    for _ in 0..24 {
-        if matches!(child.try_wait(), Ok(Some(_))) {
-            timed_out = false;
-            break;
+    let rtsp = url.starts_with("rtsp");
+    let (timed_out, text) = match probe_once(&ffmpeg, url, false) {
+        Ok(text) => {
+            RTSP_UDP.lock().unwrap().retain(|u| u != url);
+            return Ok(parse_stream_info(&text));
         }
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        Err(e) => e,
+    };
+    // TCP 不通再试 UDP（有的摄像头、录像机不支持 RTSP over TCP）；账号密码、路径错了就不用试了
+    if rtsp && !matches!(explain_stream_error(&text), Some(s) if !s.contains("传输方式")) {
+        log("TCP 方式连不上，改用 UDP 再试一次".into());
+        if let Ok(t2) = probe_once(&ffmpeg, url, true) {
+            let mut list = RTSP_UDP.lock().unwrap();
+            if !list.iter().any(|u| u == url) {
+                list.push(url.to_string());
+            }
+            return Ok(parse_stream_info(&t2));
+        }
+    }
+    if let Some(why) = explain_stream_error(&text) {
+        return Err(msg(format!("读不到视频流：{why}")));
     }
     if timed_out {
-        let _ = child.kill();
+        return Err(msg(
+            "连接超时：等了十几秒没收到画面。确认 IP、端口（RTSP 一般是 554）、账号密码都对，这台电脑和摄像头在同一个网络里；可以先用 VLC 打开同一个地址试试",
+        ));
     }
-    let _ = child.wait();
-    let _ = t.join();
-    let text = buf.lock().unwrap().clone();
-    if !text.contains("Video:") {
-        if timed_out {
-            return Err(msg("连接超时，确认地址正确、网络能连上"));
-        }
-        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        let tail = lines[lines.len().saturating_sub(3)..].join("；");
-        return Err(msg(format!("读不到视频流：{}", if tail.is_empty() { "地址可能不对".to_string() } else { tail })));
-    }
-    Ok(parse_stream_info(&text))
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    let tail = lines[lines.len().saturating_sub(3)..].join("；");
+    Err(msg(format!("读不到视频流：{}", if tail.is_empty() { "地址可能不对".to_string() } else { tail })))
 }
 
 /// 采集文件夹 / 文件名前缀：地址里的主机名 + 开始时间，例如 119.3.176.149_20261110_153012
@@ -409,7 +486,8 @@ pub fn extract_stream(
 
     let mut c = command(&ffmpeg);
     c.args(["-nostdin", "-hide_banner", "-loglevel", "error", "-y"]);
-    stream_input_args(&mut c, url, 30_000_000);
+    let udp = RTSP_UDP.lock().unwrap().iter().any(|u| u == url);
+    stream_input_args(&mut c, &ffmpeg, url, 30_000_000, udp);
     c.arg("-i").arg(url);
     let vf = if dedup { format!("fps={fps},mpdecimate") } else { format!("fps={fps}") };
     c.args(["-vf", &vf, "-q:v", "2"]);
