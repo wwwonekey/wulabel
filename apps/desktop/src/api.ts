@@ -40,9 +40,7 @@ export interface ProjectSummary {
   labeled: number;
   runs: number;
   /** 封面缩略图（data URL），还没有缩略图时为空 */
-  cover: string |  screenshot?: string | null;
-  /** 运行日志（feedbackLogs 取到的），用户勾选了才带 */
-  logs?: string | null;
+  cover: string | null;
 }
 
 export type ImageStatus = "todo" | "labeled" | "reviewed" | "skipped";
