@@ -40,7 +40,9 @@ export interface ProjectSummary {
   labeled: number;
   runs: number;
   /** 封面缩略图（data URL），还没有缩略图时为空 */
-  cover: string | null;
+  cover: string |  screenshot?: string | null;
+  /** 运行日志（feedbackLogs 取到的），用户勾选了才带 */
+  logs?: string | null;
 }
 
 export type ImageStatus = "todo" | "labeled" | "reviewed" | "skipped";
@@ -541,6 +543,8 @@ export interface FeedbackInput {
   message: string;
   contact?: string;
   screenshot?: string | null;
+  /** 运行日志（feedbackLogs 取到的），用户勾选了才带 */
+  logs?: string | null;
 }
 
 export interface UpdateInfo {
@@ -556,6 +560,8 @@ export interface UpdateInfo {
 
 export const api = {
   submitFeedback: (input: FeedbackInput) => invoke<void>("submit_feedback", { input }),
+  /** 反馈附带的运行日志：训练环境、当前项目最近两次训练的日志和出错信息 */
+  feedbackLogs: () => invoke<string>("feedback_logs"),
   checkUpdate: () => invoke<UpdateInfo>("check_update"),
   installUpdate: (url: string, sha256: string) => invoke<void>("install_update", { url, sha256 }),
   /** 全自动更新：有新版本就下载安装并重启，返回 false 表示没有新版本 */

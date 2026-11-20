@@ -187,6 +187,7 @@ pub fn run() {
             commands::xt_logout,
             commands::open_url,
             feedback::submit_feedback,
+            feedback::feedback_logs,
             update::check_update,
             update::install_update,
             update::auto_update,

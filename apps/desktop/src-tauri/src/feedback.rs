@@ -31,6 +31,8 @@ pub struct FeedbackInput {
     pub contact: Option<String>,
     /// 截图，dataURL（data:image/...;base64,xxx）或纯 base64，可空。
     pub screenshot: Option<String>,
+    /// 运行日志（v0.4.2 起，用户勾选了才有），见 feedback_logs
+    pub logs: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -41,6 +43,8 @@ struct FeedbackPayload {
     os: String,
     device_id: String,
     screenshot: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    logs: String,
     ts: u64,
     sign: String,
 }
@@ -59,12 +63,17 @@ fn hex_hash(bytes: &[u8]) -> String {
 }
 
 /// 对关键字段签名，防篡改 + 防重放（带时间戳）。服务端用同样算法重算比对。
-fn sign(ts: u64, device_id: &str, message: &str, shot_b64: &str) -> String {
-    let input = format!(
+/// 带日志时多签一行日志的哈希（老版本没有这一行，服务端两种都认）。
+fn sign(ts: u64, device_id: &str, message: &str, shot_b64: &str, logs: &str) -> String {
+    let mut input = format!(
         "{ts}\n{device_id}\n{}\n{}",
         hex_hash(message.as_bytes()),
         hex_hash(shot_b64.as_bytes()),
     );
+    if !logs.is_empty() {
+        input.push('\n');
+        input.push_str(&hex_hash(logs.as_bytes()));
+    }
     blake3::keyed_hash(&sign_key(), input.as_bytes()).to_hex().to_string()
 }
 
@@ -111,7 +120,8 @@ pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Res
     let ts = now_secs();
     let app_version = env!("CARGO_PKG_VERSION").to_string();
     let os = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
-    let sign = sign(ts, &device, &message, &shot);
+    let logs: String = input.logs.unwrap_or_default().chars().take(MAX_LOGS_CHARS + 100).collect();
+    let sign = sign(ts, &device, &message, &shot, &logs);
 
     let payload = FeedbackPayload {
         message,
@@ -120,6 +130,7 @@ pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Res
         os,
         device_id: device,
         screenshot: shot,
+        logs,
         ts,
         sign,
     };
@@ -155,3 +166,76 @@ pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Res
 // 让 ALLOW_SKEW_SECS 在客户端也有意义：时间偏差过大时服务端会拒，这里仅做个本地提示的占位。
 #[allow(dead_code)]
 const _SKEW: u64 = ALLOW_SKEW_SECS;
+
+const MAX_LOGS_CHARS: usize = 200_000;
+
+/// 把路径里的用户目录换成 ~，免得日志里带出电脑用户名
+fn hide_home(s: &str) -> String {
+    let mut out = s.to_string();
+    for var in ["USERPROFILE", "HOME"] {
+        if let Ok(h) = std::env::var(var) {
+            let h = h.trim_end_matches(['/', '\\']);
+            if h.len() > 3 {
+                out = out.replace(h, "~").replace(&h.replace('\\', "/"), "~");
+            }
+        }
+    }
+    out
+}
+
+fn tail(text: &str, n: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    lines[lines.len().saturating_sub(n)..].join("\n")
+}
+
+/// 反馈附带的运行日志：训练环境（不含设置里的 AI 密钥等）、当前项目最近两次训练的日志和出错信息。
+/// 不含图片、标注和项目数据。
+#[tauri::command]
+pub async fn feedback_logs(app: tauri::AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::fmt::Write;
+        let mut s = String::new();
+        let _ = writeln!(s, "Wulabel {} · {} {}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
+
+        let env = app.state::<crate::runtime::Runtime>().status(false);
+        let _ = writeln!(s, "\n## 训练环境");
+        let _ = writeln!(s, "托管环境：{}，可用：{}，推荐 PyTorch：{}", env.managed, env.ready, env.variant);
+        if let Some(g) = &env.gpu {
+            let _ = writeln!(s, "显卡：{}", serde_json::to_string(g).unwrap_or_default());
+        }
+        if let Some(i) = &env.info {
+            let _ = writeln!(s, "检查结果：{i}");
+        }
+        if let Some(e) = &env.error {
+            let _ = writeln!(s, "环境错误：{e}");
+        }
+
+        if let Some(p) = app.state::<crate::state::AppState>().try_current() {
+            let _ = writeln!(s, "\n## 当前项目\n任务：{}", p.meta.task);
+            if let Ok(runs) = crate::training::list_runs(&p) {
+                for r in runs.iter().take(2) {
+                    let dir = std::path::Path::new(&r.dir);
+                    let mut cfg = r.config.clone();
+                    if let Some(o) = cfg.as_object_mut() {
+                        o.remove("classes");
+                    }
+                    let _ = writeln!(s, "\n### 训练 {}（{}）\n配置：{cfg}", r.name, r.status);
+                    if let Ok(e) = std::fs::read_to_string(dir.join("error.txt")) {
+                        let _ = writeln!(s, "出错信息：\n{}", tail(&e, 80));
+                    }
+                    if let Ok(l) = std::fs::read_to_string(dir.join("log.txt")) {
+                        let _ = writeln!(s, "日志（最后 150 行）：\n{}", tail(&l, 150));
+                    }
+                }
+            }
+        }
+        let s = hide_home(&s);
+        if s.chars().count() > MAX_LOGS_CHARS {
+            let cut: String = s.chars().rev().take(MAX_LOGS_CHARS).collect::<Vec<_>>().into_iter().rev().collect();
+            return format!("（前面的内容太长已省略）\n{cut}");
+        }
+        s
+    })
+    .await
+    .map_err(|e| e.to_string())
+}

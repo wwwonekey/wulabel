@@ -56,6 +56,7 @@ GLOBAL_DAY = int(os.environ.get("GLOBAL_DAY", "500"))
 
 MAX_MESSAGE_CHARS = 2000
 MAX_SHOT_BASE64 = 3_000_000
+MAX_LOGS_CHARS = 200_100
 ALLOW_SKEW = 300
 
 # 由共享密钥派生 32 字节 keyed-hash 密钥，和桌面端 feedback.rs 完全一致。
@@ -66,11 +67,14 @@ def _hex(data: bytes) -> str:
     return blake3.blake3(data).hexdigest()
 
 
-def expected_sign(ts: int, device_id: str, message: str, screenshot: str) -> str:
+def expected_sign(ts: int, device_id: str, message: str, screenshot: str, logs: str = "") -> str:
     sign_input = (
         f"{ts}\n{device_id}\n"
         f"{_hex(message.encode('utf-8'))}\n{_hex(screenshot.encode('utf-8'))}"
     )
+    # v0.4.2 起可以带运行日志，带了就多签一行（老版本没有这一行）
+    if logs:
+        sign_input += f"\n{_hex(logs.encode('utf-8'))}"
     return blake3.blake3(sign_input.encode("utf-8"), key=SIGN_KEY).hexdigest()
 
 
@@ -105,6 +109,7 @@ async def feedback(req: Request):
     osname = str(data.get("os") or "")
     device_id = str(data.get("device_id") or "")
     screenshot = data.get("screenshot") or ""
+    logs = data.get("logs") or ""
     ts = data.get("ts")
     sign = str(data.get("sign") or "")
 
@@ -114,6 +119,8 @@ async def feedback(req: Request):
         return err("问题描述太长")
     if not isinstance(screenshot, str) or len(screenshot) > MAX_SHOT_BASE64:
         return err("截图太大")
+    if not isinstance(logs, str) or len(logs) > MAX_LOGS_CHARS:
+        return err("运行日志太长")
     if not device_id or not sign or not isinstance(ts, int):
         return err("请求参数不完整")
 
@@ -121,7 +128,7 @@ async def feedback(req: Request):
     if abs(now - ts) > ALLOW_SKEW:
         return err("设备时间和服务器相差太大，请校准时间后重试")
 
-    if not hmac.compare_digest(sign, expected_sign(ts, device_id, message, screenshot)):
+    if not hmac.compare_digest(sign, expected_sign(ts, device_id, message, screenshot, logs)):
         return err("签名校验失败", 403)
 
     xff = req.headers.get("x-forwarded-for") or ""
@@ -150,10 +157,10 @@ async def feedback(req: Request):
         conn.close()
 
     # 存一份，统计页上能看（发信失败也留着，不会丢）
-    fid = save_feedback(now, device_id, ip, app_version, osname, contact, message, screenshot)
+    fid = save_feedback(now, device_id, ip, app_version, osname, contact, message, screenshot, logs)
 
     try:
-        send_mail(message, contact, app_version, osname, device_id, ip, screenshot)
+        send_mail(message, contact, app_version, osname, device_id, ip, screenshot, logs)
     except Exception as e:  # noqa: BLE001
         mark_feedback(fid, f"发信失败：{e}")
         return err(f"服务端发送失败：{e}", 500)
@@ -180,7 +187,7 @@ def feedback_db() -> sqlite3.Connection:
     return conn
 
 
-def save_feedback(ts, device_id, ip, app_version, osname, contact, message, screenshot) -> int | None:
+def save_feedback(ts, device_id, ip, app_version, osname, contact, message, screenshot, logs="") -> int | None:
     try:
         conn = feedback_db()
         try:
@@ -195,6 +202,12 @@ def save_feedback(ts, device_id, ip, app_version, osname, contact, message, scre
                     name = f"{fid}.jpg"
                     (SHOT_DIR / name).write_bytes(base64.b64decode(screenshot))
                     conn.execute("UPDATE feedbacks SET shot=? WHERE id=?", (name, fid))
+                except Exception:  # noqa: BLE001
+                    pass
+            if logs:
+                try:
+                    SHOT_DIR.mkdir(parents=True, exist_ok=True)
+                    (SHOT_DIR / f"{fid}.log.txt").write_text(logs, encoding="utf-8")
                 except Exception:  # noqa: BLE001
                     pass
             conn.commit()
@@ -331,7 +344,7 @@ def updater(target: str, arch: str, current: str, bundle: str = ""):
     }
 
 
-def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) -> None:
+def send_mail(message, contact, app_version, osname, device_id, ip, screenshot, logs="") -> None:
     msg = EmailMessage()
     subject = message.replace("\n", " ")[:30]
     msg["Subject"] = f"[Wulabel 反馈] {subject}"
@@ -352,6 +365,8 @@ def send_mail(message, contact, app_version, osname, device_id, ip, screenshot) 
             msg.add_attachment(raw, maintype="image", subtype="jpeg", filename="screenshot.jpg")
         except Exception:
             pass
+    if logs:
+        msg.add_attachment(logs.encode("utf-8"), maintype="text", subtype="plain", filename="logs.txt")
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as s:
         s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
