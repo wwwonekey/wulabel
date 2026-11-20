@@ -406,7 +406,9 @@ pub fn probe_stream(rt: &Runtime, url: &str, log: &(dyn Fn(String) + Sync), prog
         Err(e) => e,
     };
     // TCP 不通再试 UDP（有的摄像头、录像机不支持 RTSP over TCP）；账号密码、路径错了就不用试了
-    if rtsp && !matches!(explain_stream_error(&text), Some(s) if !s.contains("传输方式")) {
+    let lower = text.to_ascii_lowercase();
+    let transport_issue = lower.contains("461") || lower.contains("unsupported transport");
+    if rtsp && (transport_issue || explain_stream_error(&text).is_none()) {
         log("TCP 方式连不上，改用 UDP 再试一次".into());
         if let Ok(t2) = probe_once(&ffmpeg, url, true) {
             let mut list = RTSP_UDP.lock().unwrap();

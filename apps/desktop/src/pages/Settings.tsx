@@ -6,6 +6,31 @@ import { listen } from "@tauri-apps/api/event";
 import { AiModel, api, EnvStatus, errText, SpeedResult, UpdateInfo, XtAccount } from "../api";
 import { prefs } from "../store";
 import UpdateModal from "../components/UpdateModal";
+import { LANGS, langSetting, setLangSetting, systemLang, t, type Lang } from "../i18n";
+
+/** 界面语言：默认跟随系统，改了之后重新加载界面 */
+function LanguageCard() {
+  const [value, setValue] = useState<Lang | "auto">(langSetting());
+  const sys = LANGS.find((l) => l.value === systemLang())?.label ?? "English";
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ fontSize: 15, marginTop: 0 }}>{t("语言")} / Language</h2>
+      <Select
+        style={{ width: 260 }}
+        value={value}
+        onChange={(v) => {
+          setValue(v);
+          setLangSetting(v);
+          location.reload();
+        }}
+        options={[{ value: "auto", label: t("跟随系统（{sys}）", { sys }) }, ...LANGS]}
+      />
+      <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+        {t("译文由 AI 翻译，可能有不准确的地方，欢迎通过右上角「反馈」告诉我们。")}
+      </div>
+    </div>
+  );
+}
 
 /** 关于与更新：当前版本、手动检查更新、自动检查开关 */
 function UpdateCard() {
@@ -598,6 +623,7 @@ export default function Settings() {
           <Alert style={{ marginTop: 10 }} type="info" showIcon message="正在使用你指定的 Python 环境。清空后保存可改回软件自己管理的环境。" />
         )}
       </div>
+      <LanguageCard />
       <UpdateCard />
     </div>
   );

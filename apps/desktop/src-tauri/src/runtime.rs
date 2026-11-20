@@ -154,7 +154,9 @@ impl Runtime {
             .env("TORCH_HOME", self.root().join("torch"))
             // SAM、文本提示等辅助模型从 Hugging Face 下载，缓存放训练环境目录
             .env("HF_HOME", self.root().join("hf"))
-            .env("HF_HUB_DISABLE_TELEMETRY", "1");
+            .env("HF_HUB_DISABLE_TELEMETRY", "1")
+            // 训练日志、报错用界面的语言
+            .env("WULABEL_LANG", crate::i18n::lang());
         if self.settings().mirror == "china" {
             c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
