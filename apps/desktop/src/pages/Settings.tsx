@@ -8,6 +8,7 @@ import { prefs } from "../store";
 import UpdateModal from "../components/UpdateModal";
 import { LANGS, langSetting, setLangSetting, systemLang, t, type Lang } from "../i18n";
 import { setThemeSetting, themeSetting, type ThemeSetting } from "../theme";
+import { setXuntongEnabled, xuntongEnabled } from "../features";
 
 /** 把译文里的 {key} 换成一个元素（比如加粗的部分） */
 const fill = (s: string, key: string, node: ReactNode) => {
@@ -154,6 +155,7 @@ const VARIANTS = [
 ];
 
 export default function Settings() {
+  const [xtOn, setXtOn] = useState(xuntongEnabled());
   const { message, modal } = App.useApp();
   const [st, setSt] = useState<EnvStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -504,7 +506,23 @@ export default function Settings() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 15, marginTop: 0 }}>{t("巡瞳 AI")}</h2>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: xtOn ? 8 : 0 }}>
+          <h2 style={{ fontSize: 15, margin: 0 }}>{t("巡瞳 AI")}</h2>
+          <Switch
+            checked={xtOn}
+            onChange={(v) => {
+              setXtOn(v);
+              setXuntongEnabled(v);
+            }}
+          />
+        </div>
+        {!xtOn && (
+          <div className="dim" style={{ fontSize: 12 }}>
+            {t("巡瞳 AI 是国内的 AI 识别平台（自动标注、上传模型、拉取告警图片、官方中转）。打开后，标注、数据、部署、协作页会出现相关功能。")}
+          </div>
+        )}
+        {xtOn && (
+          <>
         <p className="muted" style={{ marginTop: 0 }}>
           {t("登录巡瞳 AI 账号后可以：标注页用巡瞳 AI 自动标注（专用模型批量标注很快，也可以用大模型或按项目类别识别）、和 AI 聊识别规则；部署页把模型上传到巡瞳平台；数据页拉取平台的告警图片；协作用「巡瞳官方中转」让外网成员连进来。识别、聊天会消耗账号的额度。")}
         </p>
@@ -602,6 +620,9 @@ export default function Settings() {
             </Space>
           )}
         </Space>
+      
+          </>
+        )}
       </div>
 
       <Modal
