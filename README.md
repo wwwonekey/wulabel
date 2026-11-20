@@ -88,7 +88,7 @@
 
 ## 开发
 
-需要 Node.js 20+、Rust（stable）；Windows 上还需要 Visual Studio C++ 生成工具和 WebView2。
+需要 Node.js 22+、Rust（stable）；Windows 上还需要 Visual Studio C++ 生成工具和 WebView2。
 
 ```bash
 cd apps/desktop
