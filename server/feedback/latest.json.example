@@ -14,6 +14,10 @@
     "linux": {
       "url": "https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_amd64.deb",
       "sha256": "安装包的 SHA-256（小写十六进制）"
+    },
+    "linux-aarch64": {
+      "url": "https://wulabel.xiaowuiot.com/download/Wulabel_0.4.0_arm64.deb",
+      "sha256": "安装包的 SHA-256（小写十六进制）"
     }
   }
 }

@@ -1,4 +1,4 @@
-# 打安装包：Windows（.exe）、macOS（.dmg，Apple 芯片和 Intel 通用）、Linux（.AppImage 和 .deb）。
+# 打安装包：Windows（.exe）、macOS（.dmg，Apple 芯片和 Intel 通用）、Linux x86_64 和 ARM64（.AppImage 和 .deb）。
 # 触发：推送 v 开头的标签（如 v0.2.0），或在 GitHub 的 Actions 页面手动运行。
 # 打好的包放进一个「草稿」Release，检查没问题后在 GitHub 上点发布。
 # 反馈服务的密钥放在仓库 Settings → Environments → WULABEL_FEEDBACK_SECRET 里，secret 名也叫 WULABEL_FEEDBACK_SECRET。
@@ -26,6 +26,10 @@ jobs:
             args: "--target universal-apple-darwin"
             rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
           - os: ubuntu-22.04
+            args: ""
+            rust_targets: ""
+          # ARM64 Linux（飞腾、鲲鹏等）
+          - os: ubuntu-22.04-arm
             args: ""
             rust_targets: ""
     runs-on: ${{ matrix.os }}

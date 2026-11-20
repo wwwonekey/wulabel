@@ -285,7 +285,11 @@ def update(req: Request):
         "notes": str(info.get("notes") or ""),
     }
     # 本系统的安装包直链和 SHA-256（有的话客户端可以「立即更新」）
-    dl = (info.get("downloads") or {}).get(osname)
+    # 先找带架构的（如 linux-aarch64），没有再用只写系统的；只写系统的是 x86_64 的包（Mac 是通用包）
+    downloads = info.get("downloads") or {}
+    dl = downloads.get(f"{osname}-{arch}")
+    if dl is None and (arch in ("", "x86_64") or osname == "macos"):
+        dl = downloads.get(osname)
     if isinstance(dl, dict) and dl.get("url") and dl.get("sha256"):
         out["download"] = {"url": str(dl["url"]), "sha256": str(dl["sha256"]).lower()}
     return out
