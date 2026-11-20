@@ -28,6 +28,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 STATS_KEY = os.environ.get("STATS_KEY", "")
+_SHOT_DIR: Path | None = None  # install() 时设置，渲染反馈时看有没有日志文件
 NGINX_ACCESS_LOG = os.environ.get("NGINX_ACCESS_LOG", "")
 STATS_EXCLUDE_IPS = {s.strip() for s in os.environ.get("STATS_EXCLUDE_IPS", "").split(",") if s.strip()}
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "")
@@ -253,6 +254,9 @@ def _feedbacks(d: dict) -> str:
             if shot
             else ""
         )
+        # v0.4.2 起反馈可以带运行日志
+        if _SHOT_DIR is not None and (_SHOT_DIR / f"{fid}.log.txt").is_file():
+            shot_html += f'<div style="margin-top:6px"><a href="/stats/shot/{fid}.log.txt" target="_blank">查看运行日志</a></div>'
         if reply:
             rwhen = time.strftime("%Y-%m-%d %H:%M", time.gmtime(int(replied_at or 0) + 8 * 3600))
             reply_html = f'<div class="fb-reply"><div class="muted" style="font-size:12px">已回复（{rwhen}，已发邮件）</div><div class="fb-msg">{html.escape(reply)}</div></div>'
@@ -324,8 +328,10 @@ LOGIN = _page(
 
 def install(app: FastAPI, db_path: str, shot_dir: Path | None = None, reply=None) -> None:
     """reply(反馈 id, 回复内容) -> 出错原因（成功返回空字符串），发邮件给用户并记下回复"""
+    global _SHOT_DIR
     if not STATS_KEY:
         return
+    _SHOT_DIR = shot_dir
 
     def authed(req: Request) -> bool:
         c = req.cookies.get(COOKIE, "")
@@ -361,13 +367,14 @@ def install(app: FastAPI, db_path: str, shot_dir: Path | None = None, reply=None
 
     @app.get("/stats/shot/{name}")
     def stats_shot(name: str, req: Request):
-        """反馈附带的截图，登录后才能看"""
-        if not authed(req) or shot_dir is None or not re.fullmatch(r"\d+\.jpg", name):
+        """反馈附带的截图和运行日志，登录后才能看"""
+        if not authed(req) or shot_dir is None or not re.fullmatch(r"\d+\.(jpg|log\.txt)", name):
             return nocache(HTMLResponse("没有权限", status_code=403))
         f = shot_dir / name
         if not f.is_file():
-            return nocache(HTMLResponse("截图不存在", status_code=404))
-        return nocache(FileResponse(f, media_type="image/jpeg"))
+            return nocache(HTMLResponse("文件不存在", status_code=404))
+        media = "image/jpeg" if name.endswith(".jpg") else "text/plain; charset=utf-8"
+        return nocache(FileResponse(f, media_type=media))
 
     @app.post("/stats")
     async def stats_post(req: Request):
