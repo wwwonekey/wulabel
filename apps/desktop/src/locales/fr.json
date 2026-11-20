@@ -1312,5 +1312,7 @@
   "外观": "Apparence",
   "跟随系统": "Selon le système",
   "浅色": "Clair",
-  "深色": "Sombre"
+  "深色": "Sombre",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Nouveau thème clair : suit par défaut le mode clair ou sombre du système, et se change dans Paramètres → Apparence. Les zones d'image, comme le canevas d'annotation, restent sombres pour mieux juger les images.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Dans une fenêtre étroite ou une langue aux mots plus longs (comme l'anglais), le guide de démarrage et la barre latérale ne sont plus à l'étroit."
 }

@@ -3,6 +3,13 @@ import { t } from "./i18n";
 /** 各版本更新内容，更新后第一次打开软件时显示（新版本在前）。发版时在最前面加一条。 */
 export const CHANGELOG: { version: string; items: string[] }[] = [
   {
+    version: "0.5.1",
+    items: [
+      t("新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。"),
+      t("窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。"),
+    ],
+  },
+  {
     version: "0.5.0",
     items: [
       t("国际版：界面支持 12 种语言（简体中文、繁體中文、English、日本語、한국어、Español、Português、Русский、Deutsch、Français、Tiếng Việt、Bahasa Indonesia），默认跟随系统语言，可以在「设置」里切换。"),

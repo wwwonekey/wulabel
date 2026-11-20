@@ -1312,5 +1312,7 @@
   "外观": "Darstellung",
   "跟随系统": "Wie System",
   "浅色": "Hell",
-  "深色": "Dunkel"
+  "深色": "Dunkel",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Neues helles Design: folgt standardmäßig dem hellen oder dunklen Modus des Systems und lässt sich unter Einstellungen → Darstellung umstellen. Bildbereiche wie die Annotationsfläche bleiben dunkel, damit Bilder besser zu beurteilen sind.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "In schmalen Fenstern oder Sprachen mit längeren Wörtern (z. B. Englisch) sind die Einstiegshilfe auf der Startseite und die linke Leiste nicht mehr gequetscht."
 }

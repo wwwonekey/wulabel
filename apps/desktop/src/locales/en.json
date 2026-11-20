@@ -1312,5 +1312,7 @@
   "外观": "Appearance",
   "跟随系统": "Follow system",
   "浅色": "Light",
-  "深色": "Dark"
+  "深色": "Dark",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "New light theme: follows your system's light or dark mode by default, and you can switch it in Settings → Appearance. Image areas such as the annotation canvas stay dark so images are easier to judge.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "In narrow windows or languages with longer words (such as English), the home page guide and the left sidebar no longer get squeezed."
 }

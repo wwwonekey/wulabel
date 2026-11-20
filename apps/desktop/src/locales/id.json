@@ -1312,5 +1312,7 @@
   "外观": "Tampilan",
   "跟随系统": "Ikuti sistem",
   "浅色": "Terang",
-  "深色": "Gelap"
+  "深色": "Gelap",
+  "新增浅色主题：默认跟随系统的浅色或深色，也可以在「设置 → 外观」里切换。标注画布等看图的区域仍是深色，看图更准。": "Tema terang baru: secara default mengikuti mode terang atau gelap sistem, dan bisa diganti di Pengaturan → Tampilan. Area gambar seperti kanvas anotasi tetap gelap agar gambar lebih mudah dinilai.",
+  "窗口较窄或使用英文等较长的语言时，首页新手引导和左侧导航不再挤在一起。": "Di jendela sempit atau bahasa dengan kata yang lebih panjang (seperti bahasa Inggris), panduan di beranda dan bilah samping kiri tidak lagi berdesakan."
 }
