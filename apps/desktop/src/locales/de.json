@@ -782,7 +782,7 @@
   "标一小批": "Eine kleine Menge annotieren",
   "标一小批 → 训练 → 用模型预标注剩下的 → 再训，越标越快": "Eine kleine Menge annotieren → trainieren → den Rest mit dem Modell vorannotieren → erneut trainieren; so geht es immer schneller",
   "标了框，但模型在这个位置什么都没看到": "Hier ist eine Box annotiert, aber das Modell erkennt an dieser Stelle nichts",
-  "标准": "Standard",
+  "标准": "Mittel",
   "标出人体或物体的关键点和骨架": "Keypoints und Skelette von Personen oder Objekten markieren",
   "标注": "Annotieren",
   "标注@@数量": "Annotationen",
