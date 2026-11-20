@@ -79,7 +79,7 @@ curl -X POST --data-binary @test.jpg "http://127.0.0.1:8090/predict?conf=0.4"
 ## Retorno de datos de campo
 
 Los fotogramas en los que el modelo duda (confianza entre `low` y `high`) se guardan en `reflux/` (como máximo uno por transmisión cada `interval` segundos).
-Copia de vez en cuando la carpeta `reflux`, haz clic en «Importar imágenes devueltas desde campo» en la página «Desplegar» de Wulabel, anótalas y vuelve a entrenar: el modelo se vuelve más preciso cuanto más se usa.
+Copia de vez en cuando la carpeta `reflux`, haz clic en «Importar imágenes de campo» en la página «Desplegar» de Wulabel, anótalas y vuelve a entrenar: el modelo se vuelve más preciso cuanto más se usa.
 
 ## Archivos
 
