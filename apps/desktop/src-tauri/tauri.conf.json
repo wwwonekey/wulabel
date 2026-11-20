@@ -40,6 +40,7 @@
       "../../../worker/xlabel_worker/locales/*.json": "worker/xlabel_worker/locales/",
       "../../../worker/xlabel_worker/yolox/LICENSE": "worker/xlabel_worker/yolox/LICENSE",
       "../../../worker/service/*": "worker/service/",
+      "../../../worker/service-i18n/*": "worker/service-i18n/",
       "../../../NOTICE": "NOTICE"
     },
     "icon": [

@@ -250,6 +250,22 @@ pub fn build_service(
     for f in SERVICE_FILES {
         fs::copy(template.join(f), out.join(f))?;
     }
+    // 界面不是中文时，说明、启动脚本和服务提示换成对应语言（worker/service-i18n/，没有的语言用英文）
+    let lang = crate::i18n::lang();
+    if lang != "zh" {
+        let i18n = rt.worker_dir.join("service-i18n");
+        let pick = |name: &dyn Fn(&str) -> String| {
+            [lang.as_str(), "en"].iter().map(|l| i18n.join(name(l))).find(|p| p.exists())
+        };
+        for (f, stem, ext) in [("README.md", "README", "md"), ("run.bat", "run", "bat"), ("run.sh", "run", "sh")] {
+            if let Some(src) = pick(&|l| format!("{stem}.{l}.{ext}")) {
+                fs::copy(src, out.join(f))?;
+            }
+        }
+        if let Some(src) = pick(&|l| format!("{l}.json")) {
+            fs::copy(src, out.join("locale.json"))?;
+        }
+    }
     let mut cfg = config.clone();
     cfg["model"] = serde_json::json!("model.onnx");
     fs::write(out.join("config.json"), serde_json::to_string_pretty(&cfg)?)?;
