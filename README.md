@@ -177,4 +177,4 @@ docs/                        使用教程、对接接口、打包发布
 
 [Apache-2.0](LICENSE)。第三方代码（YOLOX，Apache-2.0）见 [NOTICE](NOTICE)。
 
-作者：小物学长。使用问题、功能建议欢迎提 [Issue](https://github.com/xiaowu-iot/wulabel/issues)，或到[官网](https://wulabel.xiaowuiot.com/#contact)找作者、进交流群。
+作者：小物学长，邮箱 177183719@qq.com。使用问题、功能建议欢迎提 [Issue](https://github.com/xiaowu-iot/wulabel/issues)、发邮件，或到[官网](https://wulabel.xiaowuiot.com/#contact)找作者、进交流群。
