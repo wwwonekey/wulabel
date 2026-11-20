@@ -761,7 +761,7 @@ fn download_ffmpeg(
             ("ffmpeg", vec![intel])
         }
     } else {
-        return Err(msg(t!("没有找到 ffmpeg，请先用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径")));
+        return download_ffmpeg_linux(bin, log, progress);
     };
     fs::create_dir_all(bin)?;
     let out = bin.join(exe);
@@ -784,6 +784,81 @@ fn download_ffmpeg(
         }
     }
     Err(msg(t!("下载 ffmpeg 失败：{errors}。可以手动安装 ffmpeg 后在设置里指定路径", errors = errors.join("；"))))
+}
+
+/// Linux：下载静态编译的 ffmpeg（.tar.xz，用系统自带的 tar 解压），x86_64 和 ARM64 各有两个下载源
+fn download_ffmpeg_linux(
+    bin: &Path,
+    log: &(dyn Fn(String) + Sync),
+    progress: &(dyn Fn(&str, u64, u64, u64) + Sync),
+) -> AppResult<PathBuf> {
+    let sources: &[&str] = if cfg!(target_arch = "aarch64") {
+        &[
+            "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linuxarm64-gpl.tar.xz",
+            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz",
+        ]
+    } else {
+        &[
+            "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz",
+            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+        ]
+    };
+    fs::create_dir_all(bin)?;
+    let out = bin.join("ffmpeg");
+    let pkg = bin.join("ffmpeg-download.tar.xz");
+    let tmp = bin.join("ffmpeg-extract");
+    let mut errors = Vec::new();
+    for url in sources {
+        log(t!("下载 ffmpeg：{url}", url = url));
+        let _ = fs::remove_dir_all(&tmp);
+        let r = download_file(url, &pkg, &|d, t, s| progress("ffmpeg", d, t, s)).and_then(|_| {
+            fs::create_dir_all(&tmp)?;
+            let st = command("tar")
+                .arg("-xJf")
+                .arg(&pkg)
+                .arg("-C")
+                .arg(&tmp)
+                .status()
+                .map_err(|e| msg(t!("解压失败：{e}", e = e)))?;
+            if !st.success() {
+                return Err(msg(t!("解压失败：{e}", e = st)));
+            }
+            let found = find_file(&tmp, "ffmpeg").ok_or_else(|| msg(t!("压缩包里没有 {exe}", exe = "ffmpeg")))?;
+            fs::copy(&found, &out)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&out, fs::Permissions::from_mode(0o755))?;
+            }
+            Ok(out.clone())
+        });
+        let _ = fs::remove_file(&pkg);
+        let _ = fs::remove_dir_all(&tmp);
+        match r {
+            Ok(p) => return Ok(p),
+            Err(e) => {
+                log(t!("下载失败：{e}", e = e));
+                errors.push(e.to_string());
+            }
+        }
+    }
+    let errors = errors.join("；");
+    Err(msg(t!("下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径", errors = errors)))
+}
+
+/// 在文件夹里（含子文件夹）找某个文件名
+fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
+    for e in fs::read_dir(dir).ok()?.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            if let Some(f) = find_file(&p, name) {
+                return Some(f);
+            }
+        } else if p.file_name().and_then(|n| n.to_str()) == Some(name) {
+            return Some(p);
+        }
+    }
+    None
 }
 
 fn http_get(url: &str) -> AppResult<Vec<u8>> {
