@@ -145,7 +145,6 @@
   "不选表示所有类别都告警": "Leave empty to alert on all classes",
   "不限": "unlimited",
   "中转地址": "Relay URL",
-  "主题": "Topic",
   "之间": "range",
   "也可以直接把图片或文件夹拖进窗口": "You can also drag images or folders into the window",
   "亮度": "Brightness",
@@ -1304,5 +1303,6 @@
   "，或者勾选「冲突时用包里的覆盖」再合并一次。": ", or check \"On conflict, overwrite with the package version\" and merge again.",
   "，或者复制地址：": ", or copy the address: ",
   "，碰到后面手动标过的帧停下": ", stopped at a later manually labeled frame",
-  "；": "; "
+  "；": "; ",
+  "主题@@MQTT": "Topic"
 }

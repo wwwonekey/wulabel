@@ -564,7 +564,7 @@ function ServiceTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
               <Input value={f.mqttHost} placeholder={t("服务器地址（不填则不推送）")} onChange={(e) => set({ mqttHost: e.target.value })} />
               <InputNumber style={{ width: 90 }} value={f.mqttPort} onChange={(v) => set({ mqttPort: Number(v ?? 1883) })} />
             </Space.Compact>
-            <Input value={f.mqttTopic} addonBefore={t("主题")} style={{ marginBottom: 6 }} onChange={(e) => set({ mqttTopic: e.target.value })} />
+            <Input value={f.mqttTopic} addonBefore={t("主题@@MQTT")} style={{ marginBottom: 6 }} onChange={(e) => set({ mqttTopic: e.target.value })} />
             <Space.Compact style={{ width: "100%" }}>
               <Input value={f.mqttUser} placeholder={t("用户名（可选）")} onChange={(e) => set({ mqttUser: e.target.value })} />
               <Input.Password value={f.mqttPass} placeholder={t("密码（可选）")} onChange={(e) => set({ mqttPass: e.target.value })} />
