@@ -1,0 +1,19 @@
+{
+  "模型已加载：%s，类别 %s，推理设备 %s": "Model dimuat: %s, kelas %s, perangkat %s",
+  "MQTT 连接被拒绝：": "Koneksi MQTT ditolak: ",
+  "告警推送队列已满，丢弃一条告警": "Antrean alarm penuh, satu alarm dibuang",
+  "Webhook 推送失败：%s": "Gagal mengirim ke Webhook: %s",
+  "MQTT 推送失败：%s": "Gagal mengirim via MQTT: %s",
+  "[%s] 连接失败，10 秒后重试": "[%s] Gagal terhubung, mencoba lagi dalam 10 detik",
+  "[%s] 已连接": "[%s] Terhubung",
+  "[%s] 断开，5 秒后重连": "[%s] Terputus, menyambung ulang dalam 5 detik",
+  "[%s] 检测出错": "[%s] Kesalahan deteksi",
+  "[%s] 告警：%s": "[%s] Alarm: %s",
+  "、": ", ",
+  "文件不存在": "File tidak ditemukan",
+  "接口不存在": "Endpoint tidak ditemukan",
+  "JSON 需要 image 字段（base64 图片）": "JSON memerlukan field image (gambar base64)",
+  "图片解码失败": "Gagal mendekode gambar",
+  "推理服务已启动：%d 路视频，HTTP 接口 http://%s:%d": "Layanan inferensi dimulai: %d stream, API HTTP di http://%s:%d",
+  "已停止": "Dihentikan"
+}

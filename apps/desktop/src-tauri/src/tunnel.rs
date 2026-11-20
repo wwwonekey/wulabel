@@ -25,6 +25,7 @@ use tower::ServiceExt;
 
 use crate::runtime::Runtime;
 use crate::share::{self, Hub, RelayStatus};
+use crate::t;
 
 /// 转发的一个请求最大多大（上传标注、图片都在这以内）
 const MAX_BODY: usize = 64 * 1024 * 1024;
@@ -40,11 +41,11 @@ fn endpoint(hub: &Hub) -> Result<(String, String), String> {
     let (base, auth) = match o.mode.as_str() {
         "relay" => (o.relay_url.clone(), o.relay_secret.clone()),
         "xuntong" => (o.xuntong_relay_url.clone(), hub.app.state::<Runtime>().settings().ai_key.unwrap_or_default()),
-        _ => return Err("没有开在线模式".into()),
+        _ => return Err(t!("没有开在线模式")),
     };
     let mut base = base.trim().to_string();
     if base.is_empty() {
-        return Err("没有填中转服务器地址".into());
+        return Err(t!("没有填中转服务器地址"));
     }
     if let Some(rest) = base.strip_prefix("https://") {
         base = format!("wss://{rest}");
@@ -79,10 +80,10 @@ pub fn start(hub: Arc<Hub>) {
                 backoff = 2;
             }
             let e = match r {
-                Ok(()) => "和中转服务器的连接断开了".to_string(),
+                Ok(()) => t!("和中转服务器的连接断开了"),
                 Err(e) => e,
             };
-            set_state(&hub, "error", "", &format!("{e}，{backoff} 秒后重连"));
+            set_state(&hub, "error", "", &t!("{e}，{backoff} 秒后重连", e = e, backoff = backoff));
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(backoff)) => {}
                 _ = closed.changed() => break,
@@ -94,12 +95,12 @@ pub fn start(hub: Arc<Hub>) {
 
 async fn run_once(hub: &Arc<Hub>) -> Result<(), String> {
     let (url, auth) = endpoint(hub)?;
-    let mut req = url.as_str().into_client_request().map_err(|e| format!("中转地址不对：{e}"))?;
+    let mut req = url.as_str().into_client_request().map_err(|e| t!("中转地址不对：{e}", e = e))?;
     if !auth.is_empty() {
-        let v = HeaderValue::from_str(&format!("Bearer {auth}")).map_err(|_| "密钥里有不能用的字符".to_string())?;
+        let v = HeaderValue::from_str(&format!("Bearer {auth}")).map_err(|_| t!("密钥里有不能用的字符"))?;
         req.headers_mut().insert("Authorization", v);
     }
-    let (ws, _) = tokio_tungstenite::connect_async(req).await.map_err(|e| format!("连不上中转服务器：{e}"))?;
+    let (ws, _) = tokio_tungstenite::connect_async(req).await.map_err(|e| t!("连不上中转服务器：{e}", e = e))?;
     let (mut sink, mut stream) = ws.split();
     let (out_tx, mut out_rx) = mpsc::channel::<String>(256);
     let writer = tokio::spawn(async move {
@@ -109,7 +110,7 @@ async fn run_once(hub: &Arc<Hub>) -> Result<(), String> {
             }
         }
     });
-    let router = hub.router.lock().clone().ok_or_else(|| "协作服务没有启动".to_string())?;
+    let router = hub.router.lock().clone().ok_or_else(|| t!("协作服务没有启动"))?;
     let mut tunnels: HashMap<String, mpsc::Sender<String>> = HashMap::new();
     let mut closed = hub.closed_rx();
     let result = loop {
@@ -121,7 +122,7 @@ async fn run_once(hub: &Arc<Hub>) -> Result<(), String> {
                     }
                 }
                 Some(Ok(TMessage::Close(_))) | None => break Ok(()),
-                Some(Err(e)) => break Err(format!("中转连接出错：{e}")),
+                Some(Err(e)) => break Err(t!("中转连接出错：{e}", e = e)),
                 Some(Ok(_)) => {}
             },
             _ = closed.changed() => break Ok(()),
@@ -148,7 +149,7 @@ async fn handle(
     let kind = v["type"].as_str().unwrap_or("").to_string();
     match kind.as_str() {
         "ready" => set_state(hub, "online", v["url"].as_str().unwrap_or(""), ""),
-        "error" => return Some(v["message"].as_str().unwrap_or("中转服务器拒绝了连接").to_string()),
+        "error" => return Some(v["message"].as_str().map(String::from).unwrap_or_else(|| t!("中转服务器拒绝了连接"))),
         "req" => {
             let router = router.clone();
             let out = out.clone();
@@ -222,7 +223,7 @@ async fn forward(router: &Router, v: &Value) -> (u16, Value, String) {
     let body = match v["body"].as_str() {
         Some(b) if !b.is_empty() => match B64.decode(b) {
             Ok(b) => b,
-            Err(_) => return fail(400, "请求内容不对"),
+            Err(_) => return fail(400, &t!("请求内容不对")),
         },
         _ => Vec::new(),
     };
@@ -240,11 +241,11 @@ async fn forward(router: &Router, v: &Value) -> (u16, Value, String) {
     }
     let req = match b.body(Body::from(body)) {
         Ok(r) => r,
-        Err(_) => return fail(400, "请求格式不对"),
+        Err(_) => return fail(400, &t!("请求格式不对")),
     };
     let resp = match router.clone().oneshot(req).await {
         Ok(r) => r,
-        Err(_) => return fail(500, "处理请求失败"),
+        Err(_) => return fail(500, &t!("处理请求失败")),
     };
     let status = resp.status().as_u16();
     let mut headers = serde_json::Map::new();
@@ -257,6 +258,6 @@ async fn forward(router: &Router, v: &Value) -> (u16, Value, String) {
     }
     match axum::body::to_bytes(resp.into_body(), MAX_BODY).await {
         Ok(bytes) => (status, Value::Object(headers), B64.encode(&bytes)),
-        Err(_) => fail(500, "响应太大"),
+        Err(_) => fail(500, &t!("响应太大")),
     }
 }

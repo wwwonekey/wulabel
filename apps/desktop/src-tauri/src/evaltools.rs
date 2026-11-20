@@ -15,6 +15,7 @@ use crate::error::{msg, AppResult};
 use crate::project::Project;
 use crate::runtime::Runtime;
 use crate::training::{self, EXTERNAL};
+use crate::t;
 
 /// 跑一个一次性的 worker 命令：stdout 每行 JSON 事件交给 on_event；出错时带上 worker 报的错误信息。
 /// on_stdin 拿到子进程的标准输入（误报测试用来发停止命令）
@@ -28,7 +29,7 @@ pub fn worker_events(
     c.stdin(if on_stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = c.spawn().map_err(|e| msg(format!("无法启动 worker：{e}")))?;
+    let mut child = c.spawn().map_err(|e| msg(t!("无法启动 worker：{e}", e = e)))?;
     if let Some(f) = on_stdin {
         f(child.stdin.take());
     }
@@ -60,7 +61,7 @@ pub fn worker_events(
     if !status.success() {
         let t = tail.lock().unwrap();
         let lines: Vec<&str> = t.lines().filter(|l| !l.trim().is_empty()).collect();
-        return Err(msg(format!("worker 异常退出：{}", lines[lines.len().saturating_sub(4)..].join("\n"))));
+        return Err(msg(t!("worker 异常退出：{e}", e = lines[lines.len().saturating_sub(4)..].join("\n"))));
     }
     Ok(())
 }
@@ -70,7 +71,7 @@ pub fn worker_events(
 /// 识别 ONNX 模型的格式、类别名、输入尺寸（worker 的 onnx-info 原样返回）
 pub fn inspect_onnx(rt: &Runtime, path: &str) -> AppResult<serde_json::Value> {
     if !Path::new(path).is_file() {
-        return Err(msg("模型文件不存在"));
+        return Err(msg(t!("模型文件不存在")));
     }
     let mut info = None;
     worker_events(rt, &["onnx-info", path], &mut |v| {
@@ -78,7 +79,7 @@ pub fn inspect_onnx(rt: &Runtime, path: &str) -> AppResult<serde_json::Value> {
             info = Some(v.clone());
         }
     }, None)?;
-    info.ok_or_else(|| msg("读不出模型信息"))
+    info.ok_or_else(|| msg(t!("读不出模型信息")))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -99,14 +100,14 @@ pub struct ExternalModel {
 /// 导入外部模型：复制到 runs/ 下，记一条训练记录（engine = external），之后就能像训练出的模型一样用来预标注、体检、评估
 pub fn import_onnx(p: &Project, path: &str, m: &ExternalModel) -> AppResult<i64> {
     if p.meta.task != "detect" {
-        return Err(msg("外部模型目前只支持目标检测项目"));
+        return Err(msg(t!("外部模型目前只支持目标检测项目")));
     }
     if m.classes.is_empty() || m.classes.iter().any(|c| c.trim().is_empty()) {
-        return Err(msg("请填写模型的类别名（和模型输出的顺序一致）"));
+        return Err(msg(t!("请填写模型的类别名（和模型输出的顺序一致）")));
     }
     const KINDS: [&str; 7] = ["yolov8", "yolov5", "yolo_e2e", "yolox", "rtdetr", "detr", "wulabel"];
     if !KINDS.contains(&m.kind.as_str()) {
-        return Err(msg(format!("不支持的模型格式：{}", m.kind)));
+        return Err(msg(t!("不支持的模型格式：{kind}", kind = m.kind)));
     }
     let base = format!("外部_{}", chrono::Local::now().format("%Y%m%d_%H%M%S"));
     let mut name = base.clone();
@@ -117,7 +118,7 @@ pub fn import_onnx(p: &Project, path: &str, m: &ExternalModel) -> AppResult<i64>
     }
     let dir = p.root.join("runs").join(&name);
     fs::create_dir_all(&dir)?;
-    fs::copy(path, dir.join("model.onnx")).map_err(|e| msg(format!("复制模型失败：{e}")))?;
+    fs::copy(path, dir.join("model.onnx")).map_err(|e| msg(t!("复制模型失败：{e}", e = e)))?;
     write_info(&dir, m, path)?;
     let config = serde_json::json!({
         "model": "external", "displayName": m.name.trim(), "kind": m.kind, "classes": m.classes,
@@ -144,7 +145,7 @@ fn write_info(dir: &Path, m: &ExternalModel, source: &str) -> AppResult<()> {
 pub fn update_external(p: &Project, run_id: i64, m: &ExternalModel) -> AppResult<()> {
     let run = training::get_run(p, run_id)?;
     if run.engine != EXTERNAL {
-        return Err(msg("只有导入的外部模型可以改类别"));
+        return Err(msg(t!("只有导入的外部模型可以改类别")));
     }
     let dir = PathBuf::from(&run.dir);
     write_info(&dir, m, run.config["source"].as_str().unwrap_or(""))?;
@@ -202,7 +203,7 @@ pub fn aug_preview(p: &Project, rt: &Runtime, aug: &serde_json::Value, img_size:
         out
     };
     if items.is_empty() {
-        return Err(msg("还没有已标注的图片，没法预览"));
+        return Err(msg(t!("还没有已标注的图片，没法预览")));
     }
     let dir = p.root.join(".cache");
     fs::create_dir_all(&dir)?;
@@ -293,7 +294,7 @@ pub fn anonymize(
     let cfg_arg = cfg_path.to_string_lossy().to_string();
     let total = items.len();
     let mut regions = 0;
-    log(format!("正在给 {total} 张图打码…"));
+    log(t!("正在给 {total} 张图打码…", total = total));
     let r = worker_events(rt, &["anonymize", cfg_arg.as_str()], &mut |v| match v["type"].as_str() {
         Some("progress") => progress(v["done"].as_u64().unwrap_or(0) as usize, total),
         Some("log") => log(v["msg"].as_str().unwrap_or("").to_string()),
@@ -315,7 +316,7 @@ pub fn evaluate_run(p: &Project, rt: &Runtime, run_id: i64, log: &(dyn Fn(String
     let ds = dir.join("eval_dataset");
     let _ = fs::remove_dir_all(&ds);
     let format = if p.meta.task == "classify" { Format::Cls } else { Format::Coco };
-    log("导出当前数据…".into());
+    log(t!("导出当前数据…"));
     let res = dataset::export(p, &ExportOptions { format, out_dir: ds.clone(), only_reviewed: false, ratios: [0.8, 0.2, 0.0], copy_files: false }, &|_, _| {})?;
     let cfg = serde_json::json!({ "dataset": ds, "out": dir, "weights": weights, "classes": res.classes });
     let cfg_path = dir.join("eval_config.json");
@@ -324,7 +325,7 @@ pub fn evaluate_run(p: &Project, rt: &Runtime, run_id: i64, log: &(dyn Fn(String
     let mut map50 = 0.0;
     let r = worker_events(rt, &["evaluate", cfg_arg.as_str()], &mut |v| match v["type"].as_str() {
         Some("log") => log(v["msg"].as_str().unwrap_or("").to_string()),
-        Some("progress") => log(format!("评估中 {}/{}", v["done"], v["total"])),
+        Some("progress") => log(t!("评估中 {done}/{total}", done = v["done"], total = v["total"])),
         Some("done") => map50 = v["map50"].as_f64().unwrap_or(0.0),
         _ => {}
     }, None);
@@ -390,10 +391,10 @@ pub fn fp_test(
 ) -> AppResult<serde_json::Value> {
     let source = cfg.source.trim();
     if source.is_empty() {
-        return Err(msg("请选择视频文件或填写视频流地址"));
+        return Err(msg(t!("请选择视频文件或填写视频流地址")));
     }
     if !source.contains("://") && !Path::new(source).is_file() {
-        return Err(msg("视频文件不存在"));
+        return Err(msg(t!("视频文件不存在")));
     }
     let weights = training::weights_of(p, cfg.run_id)?;
     let out = p.root.join(".cache").join("fptest").join(chrono::Local::now().format("%Y%m%d_%H%M%S").to_string());
@@ -417,7 +418,7 @@ pub fn fp_test(
     // 配置里有原始的视频流地址（可能带密码），用完就删，不留在项目文件夹里
     let _ = fs::remove_file(&cfg_path);
     r?;
-    let mut s = summary.ok_or_else(|| msg("误报测试没有返回结果"))?;
+    let mut s = summary.ok_or_else(|| msg(t!("误报测试没有返回结果")))?;
     s["dir"] = serde_json::json!(out.to_string_lossy());
     // 记到训练记录里，交付报告会用到最近一次的结果
     let mut rec = s.clone();
@@ -440,7 +441,7 @@ pub fn fp_test(
 pub fn import_negatives(p: &Project, paths: &[String]) -> AppResult<usize> {
     let files: Vec<PathBuf> = paths.iter().map(PathBuf::from).filter(|f| f.is_file()).collect();
     if files.is_empty() {
-        return Err(msg("没有可加入的图片"));
+        return Err(msg(t!("没有可加入的图片")));
     }
     let (_, ids) = crate::images::import_mapped(p, &files, true, &|_, _| {})?;
     let conn = p.conn.lock();

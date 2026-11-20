@@ -35,6 +35,7 @@ import {
   VideoProgress,
 } from "../api";
 import { prefs, useApp } from "../store";
+import { t } from "../i18n";
 import ImageViewer from "../components/ImageViewer";
 import ExportModal from "../components/ExportModal";
 import VersionsModal from "../components/VersionsModal";
@@ -47,17 +48,17 @@ const IMAGE_EXTS = ["jpg", "jpeg", "png", "bmp", "webp", "tif", "tiff"];
 const VIDEO_EXTS = ["mp4", "mov", "mkv", "avi", "webm", "flv", "wmv", "m4v", "ts"];
 
 const STATUS: Record<ImageStatus, { text: string; color?: string }> = {
-  todo: { text: "未标注" },
-  labeled: { text: "已标注", color: "processing" },
-  reviewed: { text: "已审核", color: "success" },
-  skipped: { text: "已跳过", color: "default" },
+  todo: { text: t("未标注") },
+  labeled: { text: t("已标注"), color: "processing" },
+  reviewed: { text: t("已审核"), color: "success" },
+  skipped: { text: t("已跳过"), color: "default" },
 };
 
 const FILTERS = [
-  { label: "全部", value: "all" },
-  { label: "未标注", value: "todo" },
-  { label: "已标注", value: "labeled" },
-  { label: "已审核", value: "reviewed" },
+  { label: t("全部"), value: "all" },
+  { label: t("未标注"), value: "todo" },
+  { label: t("已标注"), value: "labeled" },
+  { label: t("已审核"), value: "reviewed" },
 ];
 
 export default function Data({ project }: { project: ProjectInfo }) {
@@ -120,7 +121,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
   loadRef.current = load;
 
   const afterDelete = async (n: number) => {
-    message.success(`已删除 ${n} 张图片`);
+    message.success(t("已删除 {n} 张图片", { n }));
     setSelected(new Set());
     setSelecting(false);
     await load();
@@ -130,10 +131,10 @@ export default function Data({ project }: { project: ProjectInfo }) {
   const confirmDelete = (title: string, scope: "ids" | "last" | "all", ids?: number[]) => {
     modal.confirm({
       title,
-      content: "图片的标注会一起删除，无法恢复。复制进项目的图片副本会删掉，你电脑上的原图不受影响。",
-      okText: "删除",
+      content: t("图片的标注会一起删除，无法恢复。复制进项目的图片副本会删掉，你电脑上的原图不受影响。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await afterDelete(await api.deleteImages(scope, ids));
@@ -157,13 +158,15 @@ export default function Data({ project }: { project: ProjectInfo }) {
 
   const showResult = useCallback(
     (r: ImportResult) => {
-      const text = `新增 ${r.added} 张` + (r.duplicated ? `，跳过重复 ${r.duplicated} 张` : "");
+      const text = r.duplicated
+        ? t("新增 {added} 张，跳过重复 {dup} 张", { added: r.added, dup: r.duplicated })
+        : t("新增 {added} 张", { added: r.added });
       if (r.failed.length === 0) {
         message.success(text);
         return;
       }
       modal.warning({
-        title: `${text}，${r.failed.length} 张读取失败`,
+        title: t("{text}，{n} 张读取失败", { text, n: r.failed.length }),
         width: 640,
         content: (
           <div style={{ maxHeight: 300, overflow: "auto", fontSize: 12 }}>
@@ -202,10 +205,10 @@ export default function Data({ project }: { project: ProjectInfo }) {
   // 从资源管理器拖文件或文件夹进来导入
   useEffect(() => {
     const p = getCurrentWebview().onDragDropEvent((e) => {
-      const t = e.payload.type;
-      if (t === "enter" || t === "over") setDragging(true);
-      else if (t === "leave") setDragging(false);
-      else if (t === "drop") {
+      const ty = e.payload.type;
+      if (ty === "enter" || ty === "over") setDragging(true);
+      else if (ty === "leave") setDragging(false);
+      else if (ty === "drop") {
         setDragging(false);
         runImport(e.payload.paths);
       }
@@ -218,7 +221,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
   const pickDataset = async () => {
     const dir = await open({
       directory: true,
-      title: project.task === "classify" ? "选择分类数据集文件夹（每个类别一个子文件夹）" : "选择数据集文件夹（YOLO / COCO / VOC）",
+      title: project.task === "classify" ? t("选择分类数据集文件夹（每个类别一个子文件夹）") : t("选择数据集文件夹（YOLO / COCO / VOC）"),
     });
     if (typeof dir !== "string" || importing.current) return;
     importing.current = true;
@@ -229,16 +232,22 @@ export default function Data({ project }: { project: ProjectInfo }) {
       await load();
       await refreshStats();
       modal.success({
-        title: `已导入 ${r.format} 数据集`,
+        title: t("已导入 {format} 数据集", { format: r.format }),
         width: 520,
         content: (
           <div>
             <div>
-              {r.images} 张图片：新增 {r.added}，重复 {r.duplicated}；导入 {r.boxes} 个标注（{r.format}）
+              {t("{images} 张图片：新增 {added}，重复 {dup}；导入 {boxes} 个标注（{format}）", {
+                images: r.images,
+                added: r.added,
+                dup: r.duplicated,
+                boxes: r.boxes,
+                format: r.format,
+              })}
             </div>
-            {r.labelsAdded.length > 0 && <div className="muted">新增类别：{r.labelsAdded.join("、")}</div>}
-            {r.keptExisting > 0 && <div className="muted">{r.keptExisting} 张重复图片已有标注，保留原标注</div>}
-            {r.failed.length > 0 && <div style={{ color: "var(--warn)" }}>{r.failed.length} 张读取失败</div>}
+            {r.labelsAdded.length > 0 && <div className="muted">{t("新增类别：{list}", { list: r.labelsAdded.join(t("、")) })}</div>}
+            {r.keptExisting > 0 && <div className="muted">{t("{n} 张重复图片已有标注，保留原标注", { n: r.keptExisting })}</div>}
+            {r.failed.length > 0 && <div style={{ color: "var(--warn)" }}>{t("{n} 张读取失败", { n: r.failed.length })}</div>}
           </div>
         ),
       });
@@ -254,22 +263,22 @@ export default function Data({ project }: { project: ProjectInfo }) {
   const pickFiles = async () => {
     const r = await open({
       multiple: true,
-      title: "选择图片",
-      filters: [{ name: "图片", extensions: IMAGE_EXTS }],
+      title: t("选择图片"),
+      filters: [{ name: t("图片"), extensions: IMAGE_EXTS }],
     });
     if (r) runImport(Array.isArray(r) ? r : [r]);
   };
 
   const pickFolder = async () => {
-    const r = await open({ directory: true, multiple: true, title: "选择图片文件夹（含子文件夹）" });
+    const r = await open({ directory: true, multiple: true, title: t("选择图片文件夹（含子文件夹）") });
     if (r) runImport(Array.isArray(r) ? r : [r]);
   };
 
   const pickVideos = async () => {
     const r = await open({
       multiple: true,
-      title: "选择视频（会抽成图片导入）",
-      filters: [{ name: "视频", extensions: VIDEO_EXTS }],
+      title: t("选择视频（会抽成图片导入）"),
+      filters: [{ name: t("视频"), extensions: VIDEO_EXTS }],
     });
     if (!r) return;
     setVideoPaths(Array.isArray(r) ? r : [r]);
@@ -284,18 +293,25 @@ export default function Data({ project }: { project: ProjectInfo }) {
     prefs.set("videoEvery", String(every));
     prefs.set("videoMax", String(max));
     importing.current = true;
-    setVideoProgress({ stage: "extract", done: 0, total: 0, speed: 0, detail: "准备中…" });
+    setVideoProgress({ stage: "extract", done: 0, total: 0, speed: 0, detail: t("准备中…") });
     const unlisten = await listen<VideoProgress>("video-progress", (e) => setVideoProgress(e.payload));
     try {
       const r = await api.extractVideo(paths, every, max);
       await load();
       await refreshStats();
-      const text = `从 ${r.videos} 个视频抽出 ${r.frames} 帧：新增 ${r.added} 张` + (r.duplicated ? `，跳过重复 ${r.duplicated} 张` : "");
+      const text = r.duplicated
+        ? t("从 {videos} 个视频抽出 {frames} 帧：新增 {added} 张，跳过重复 {dup} 张", {
+            videos: r.videos,
+            frames: r.frames,
+            added: r.added,
+            dup: r.duplicated,
+          })
+        : t("从 {videos} 个视频抽出 {frames} 帧：新增 {added} 张", { videos: r.videos, frames: r.frames, added: r.added });
       if (r.failed.length === 0) {
         message.success(text);
       } else {
         modal.warning({
-          title: `${text}，${r.failed.length} 个处理失败`,
+          title: t("{text}，{n} 个处理失败", { text, n: r.failed.length }),
           width: 640,
           content: (
             <div style={{ maxHeight: 300, overflow: "auto", fontSize: 12 }}>
@@ -316,7 +332,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
   };
 
   const fmtSecs = (d: number | null) =>
-    d == null ? "—" : d < 60 ? `${Math.round(d)} 秒` : `${Math.floor(d / 60)} 分 ${Math.round(d % 60)} 秒`;
+    d == null ? "—" : d < 60 ? t("{n} 秒", { n: Math.round(d) }) : t("{m} 分 {s} 秒", { m: Math.floor(d / 60), s: Math.round(d % 60) });
 
   const testStream = async () => {
     const url = streamUrl.trim();
@@ -341,7 +357,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
     const max = streamMax;
     const minutes = streamInfo && !streamInfo.isLive ? 0 : streamMinutes; // 回放不需要时长上限
     if (streamInfo?.isLive && max === 0 && minutes === 0) {
-      message.warning("直播是无限流，请至少设一个上限：最多帧数，或最长采集时长");
+      message.warning(t("直播是无限流，请至少设一个上限：最多帧数，或最长采集时长"));
       return;
     }
     const dedup = streamDedup;
@@ -357,7 +373,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
     setStreamDir(null);
     importing.current = true;
     setStreamRunning(true);
-    setVideoProgress({ stage: "extract", done: 0, total: max, speed: 0, detail: "连接中…" });
+    setVideoProgress({ stage: "extract", done: 0, total: max, speed: 0, detail: t("连接中…") });
     const unlisten = await listen<VideoProgress>("video-progress", (e) => setVideoProgress(e.payload));
     // 边采边入库：弹框里显示最新的帧，后面的图片列表最多每 2 秒刷新一次
     let lastRefresh = 0;
@@ -375,15 +391,16 @@ export default function Data({ project }: { project: ProjectInfo }) {
     });
     try {
       const r = await api.extractStream(url, every, max, minutes, dedup);
-      const text = `采集完成：新增 ${r.added} 张` + (r.duplicated ? `，跳过重复 ${r.duplicated} 张` : "");
+      const text = r.duplicated
+        ? t("采集完成：新增 {added} 张，跳过重复 {dup} 张", { added: r.added, dup: r.duplicated })
+        : t("采集完成：新增 {added} 张", { added: r.added });
       const dir = r.dir;
       if (dir) {
         message.success({
           duration: 8,
           content: (
             <span>
-              {text}，保存在 {shortDir(dir)}{" "}
-              <a onClick={() => openDir(dir)}>打开文件夹</a>
+              {t("{text}，保存在 {dir}", { text, dir: shortDir(dir) })} <a onClick={() => openDir(dir)}>{t("打开文件夹")}</a>
             </span>
           ),
         });
@@ -427,13 +444,13 @@ export default function Data({ project }: { project: ProjectInfo }) {
     <div className="page">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
         <div>
-          <h1>数据</h1>
+          <h1>{t("数据")}</h1>
           <p className="desc" style={{ margin: 0 }}>
-            {s.total} 张图片 · 已标注 {s.labeled + s.reviewed} · 已审核 {s.reviewed}
+            {t("{total} 张图片 · 已标注 {labeled} · 已审核 {reviewed}", { total: s.total, labeled: s.labeled + s.reviewed, reviewed: s.reviewed })}
           </p>
         </div>
         <div className="row">
-          <Tooltip title="复制：图片拷进项目文件夹，项目可整体拷走；引用：只记录原路径，不占额外空间">
+          <Tooltip title={t("复制：图片拷进项目文件夹，项目可整体拷走；引用：只记录原路径，不占额外空间")}>
             <Segmented
               value={copyMode}
               onChange={(v) => {
@@ -441,32 +458,32 @@ export default function Data({ project }: { project: ProjectInfo }) {
                 prefs.set("copyMode", v as string);
               }}
               options={[
-                { label: "复制到项目", value: "copy" },
-                { label: "只引用原路径", value: "ref" },
+                { label: t("复制到项目"), value: "copy" },
+                { label: t("只引用原路径"), value: "ref" },
               ]}
             />
           </Tooltip>
           <Button type="primary" icon={<FolderAddOutlined />} onClick={pickFolder}>
-            导入文件夹
+            {t("导入文件夹")}
           </Button>
           <Dropdown
             trigger={["click"]}
             menu={{
               items: [
-                { key: "files", icon: <FileImageOutlined />, label: "导入图片文件" },
-                { key: "video", icon: <VideoCameraOutlined />, label: "导入视频（抽帧）" },
-                { key: "stream", icon: <LinkOutlined />, label: "从视频流抽帧（RTSP / 直播 / 回放）" },
+                { key: "files", icon: <FileImageOutlined />, label: t("导入图片文件") },
+                { key: "video", icon: <VideoCameraOutlined />, label: t("导入视频（抽帧）") },
+                { key: "stream", icon: <LinkOutlined />, label: t("从视频流抽帧（RTSP / 直播 / 回放）") },
                 {
                   key: "dataset",
                   icon: <DatabaseOutlined />,
                   label:
                     project.task === "classify"
-                      ? "导入分类数据集（每个类别一个文件夹）"
+                      ? t("导入分类数据集（每个类别一个文件夹）")
                       : project.task === "pose"
-                        ? "导入带标注的数据集（YOLO-pose / COCO 关键点）"
-                        : "导入带标注的数据集（YOLO / COCO / VOC）",
+                        ? t("导入带标注的数据集（YOLO-pose / COCO 关键点）")
+                        : t("导入带标注的数据集（YOLO / COCO / VOC）"),
                 },
-                ...(project.task === "classify" ? [] : [{ key: "xuntong", icon: <CloudDownloadOutlined />, label: "从巡瞳 AI 拉取告警图片" }]),
+                ...(project.task === "classify" ? [] : [{ key: "xuntong", icon: <CloudDownloadOutlined />, label: t("从巡瞳 AI 拉取告警图片") }]),
               ],
               onClick: ({ key }) => {
                 if (key === "files") pickFiles();
@@ -478,11 +495,11 @@ export default function Data({ project }: { project: ProjectInfo }) {
             }}
           >
             <Button>
-              更多导入 <DownOutlined />
+              {t("更多导入")} <DownOutlined />
             </Button>
           </Dropdown>
           <Button icon={<ExportOutlined />} disabled={s.labeled + s.reviewed === 0} onClick={() => setShowExport(true)}>
-            导出数据集
+            {t("导出数据集")}
           </Button>
           <Dropdown
             trigger={["click"]}
@@ -492,19 +509,19 @@ export default function Data({ project }: { project: ProjectInfo }) {
                 {
                   key: "last",
                   icon: <RollbackOutlined />,
-                  label: last ? `撤销上次导入（${last.count} 张）` : "撤销上次导入",
+                  label: last ? t("撤销上次导入（{n} 张）", { n: last.count }) : t("撤销上次导入"),
                   disabled: !last,
                 },
-                { key: "versions", icon: <HistoryOutlined />, label: "数据集版本（保存快照、对比、恢复）" },
-                { key: "quality", icon: <EyeInvisibleOutlined />, label: "图片质量筛查（模糊、过暗、过曝）" },
-                { key: "pick", icon: <AimOutlined />, label: "挑选最值得标的图（用模型）" },
-                { key: "collab", icon: <TeamOutlined />, label: "多人协作（分包、合并回来）" },
-                { key: "select", icon: <CheckSquareOutlined />, label: "选择图片删除" },
+                { key: "versions", icon: <HistoryOutlined />, label: t("数据集版本（保存快照、对比、恢复）") },
+                { key: "quality", icon: <EyeInvisibleOutlined />, label: t("图片质量筛查（模糊、过暗、过曝）") },
+                { key: "pick", icon: <AimOutlined />, label: t("挑选最值得标的图（用模型）") },
+                { key: "collab", icon: <TeamOutlined />, label: t("多人协作（分包、合并回来）") },
+                { key: "select", icon: <CheckSquareOutlined />, label: t("选择图片删除") },
                 { type: "divider" },
-                { key: "all", icon: <ClearOutlined />, label: `清空全部图片（${s.total} 张）`, danger: true },
+                { key: "all", icon: <ClearOutlined />, label: t("清空全部图片（{n} 张）", { n: s.total }), danger: true },
               ],
               onClick: ({ key }) => {
-                if (key === "last" && last) confirmDelete(`撤销上次导入，删除这 ${last.count} 张图片？`, "last");
+                if (key === "last" && last) confirmDelete(t("撤销上次导入，删除这 {n} 张图片？", { n: last.count }), "last");
                 if (key === "versions") setShowVersions(true);
                 if (key === "quality") setShowQuality(true);
                 if (key === "pick") setShowPick(true);
@@ -513,12 +530,12 @@ export default function Data({ project }: { project: ProjectInfo }) {
                   setSelecting(true);
                   setSelected(new Set());
                 }
-                if (key === "all") confirmDelete(`清空项目里全部 ${s.total} 张图片？`, "all");
+                if (key === "all") confirmDelete(t("清空项目里全部 {n} 张图片？", { n: s.total }), "all");
               },
             }}
           >
             <Button>
-              管理 <DownOutlined />
+              {t("管理")} <DownOutlined />
             </Button>
           </Dropdown>
         </div>
@@ -526,20 +543,20 @@ export default function Data({ project }: { project: ProjectInfo }) {
 
       <div className="cards" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 14 }}>
         <div className="card">
-          <div className="muted">标注进度</div>
+          <div className="muted">{t("标注进度")}</div>
           <div className="kpi">{pct}%</div>
           <Progress percent={pct} showInfo={false} size="small" />
         </div>
         <div className="card">
-          <div className="muted">未标注</div>
+          <div className="muted">{t("未标注")}</div>
           <div className="kpi">{s.todo}</div>
         </div>
         <div className="card">
-          <div className="muted">已标注</div>
+          <div className="muted">{t("已标注")}</div>
           <div className="kpi">{s.labeled}</div>
         </div>
         <div className="card">
-          <div className="muted">已审核</div>
+          <div className="muted">{t("已审核")}</div>
           <div className="kpi">{s.reviewed}</div>
         </div>
       </div>
@@ -555,37 +572,37 @@ export default function Data({ project }: { project: ProjectInfo }) {
         />
         {selecting ? (
           <div className="row" style={{ gap: 8 }}>
-            <span>已选 {selected.size} 张</span>
+            <span>{t("已选 {n} 张", { n: selected.size })}</span>
             <Button size="small" onClick={() => setSelected(new Set([...selected, ...items.map((i) => i.id)]))}>
-              全选本页
+              {t("全选本页")}
             </Button>
             <Button size="small" onClick={() => setSelected(new Set())}>
-              清除选择
+              {t("清除选择")}
             </Button>
             <Button
               size="small"
               danger
               type="primary"
               disabled={selected.size === 0}
-              onClick={() => confirmDelete(`删除选中的 ${selected.size} 张图片？`, "ids", [...selected])}
+              onClick={() => confirmDelete(t("删除选中的 {n} 张图片？", { n: selected.size }), "ids", [...selected])}
             >
-              删除
+              {t("删除")}
             </Button>
             <Button size="small" onClick={() => setSelecting(false)}>
-              完成
+              {t("完成")}
             </Button>
           </div>
         ) : (
-          <span className="dim">也可以直接把图片或文件夹拖进窗口</span>
+          <span className="dim">{t("也可以直接把图片或文件夹拖进窗口")}</span>
         )}
       </div>
 
       {items.length === 0 ? (
         <div className="card" style={{ padding: 48 }}>
-          <Empty description={s.total === 0 ? "还没有图片，导入一些开始吧" : "没有符合条件的图片"}>
+          <Empty description={s.total === 0 ? t("还没有图片，导入一些开始吧") : t("没有符合条件的图片")}>
             {s.total === 0 && (
               <Button type="primary" onClick={pickFolder}>
-                导入文件夹
+                {t("导入文件夹")}
               </Button>
             )}
           </Empty>
@@ -656,56 +673,56 @@ export default function Data({ project }: { project: ProjectInfo }) {
         }}
       />
 
-      <Modal open={!!progress} closable={false} footer={null} maskClosable={false} title="正在导入">
+      <Modal open={!!progress} closable={false} footer={null} maskClosable={false} title={t("正在导入")}>
         <Progress percent={progress && progress.total ? Math.floor((progress.done / progress.total) * 100) : 0} />
         <div className="muted">
           {progress && progress.total
-            ? `已处理 ${progress.done} / ${progress.total} 张（计算指纹、生成缩略图）`
-            : "正在查找图片…"}
+            ? t("已处理 {done} / {total} 张（计算指纹、生成缩略图）", { done: progress.done, total: progress.total })
+            : t("正在查找图片…")}
         </div>
       </Modal>
 
       <Modal
         open={videoPaths.length > 0}
-        title="视频抽帧"
-        okText="开始抽帧"
-        cancelText="取消"
+        title={t("视频抽帧")}
+        okText={t("开始抽帧")}
+        cancelText={t("取消")}
         onOk={startExtract}
         onCancel={() => setVideoPaths([])}
       >
         <p className="muted" style={{ marginTop: 0 }}>
-          选了 {videoPaths.length} 个视频，按下面的设置抽成图片导入项目。
+          {t("选了 {n} 个视频，按下面的设置抽成图片导入项目。", { n: videoPaths.length })}
         </p>
         <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-          <span>每隔</span>
+          <span>{t("每隔")}</span>
           <InputNumber min={0.1} max={600} step={0.5} value={videoEvery} onChange={(v) => setVideoEvery(v ?? 1)} />
-          <span>秒抽 1 帧</span>
+          <span>{t("秒抽 1 帧")}</span>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <span>每个视频最多</span>
+          <span>{t("每个视频最多")}</span>
           <InputNumber min={0} max={100000} step={50} value={videoMax} onChange={(v) => setVideoMax(v ?? 0)} />
-          <span>帧（0 = 不限）</span>
+          <span>{t("帧（0 = 不限）")}</span>
         </div>
         <p className="dim" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-          首次使用会自动下载 ffmpeg（约 90MB），之后不再下载。抽出的帧会复制进项目，按内容自动去重。
+          {t("首次使用会自动下载 ffmpeg（约 90MB），之后不再下载。抽出的帧会复制进项目，按内容自动去重。")}
         </p>
       </Modal>
 
       <Modal
         open={streamOpen}
-        title="从视频流抽帧"
-        okText="开始采集"
-        cancelText="取消"
+        title={t("从视频流抽帧")}
+        okText={t("开始采集")}
+        cancelText={t("取消")}
         okButtonProps={{ disabled: !streamUrl.trim() }}
         onOk={startStream}
         onCancel={() => setStreamOpen(false)}
       >
         <p className="muted" style={{ marginTop: 0 }}>
-          支持 RTSP 摄像头 / 直播流,以及 http(s) 的回放、点播地址(mp4、m3u8、flv)。
+          {t("支持 RTSP 摄像头 / 直播流,以及 http(s) 的回放、点播地址(mp4、m3u8、flv)。")}
         </p>
         <div className="row" style={{ gap: 8, marginBottom: 8 }}>
           <Input
-            placeholder="rtsp://…  或  https://…"
+            placeholder={t("rtsp://…  或  https://…")}
             value={streamUrl}
             onChange={(e) => {
               setStreamUrl(e.target.value);
@@ -714,38 +731,38 @@ export default function Data({ project }: { project: ProjectInfo }) {
             onPressEnter={testStream}
           />
           <Button loading={probing} onClick={testStream}>
-            测试连接
+            {t("测试连接")}
           </Button>
         </div>
         {streamInfo && (
           <div style={{ fontSize: 12, marginBottom: 10, color: "var(--good, #2fb67c)" }}>
-            ✓ {streamInfo.width}×{streamInfo.height} · {streamInfo.codec || "视频"}
+            ✓ {streamInfo.width}×{streamInfo.height} · {streamInfo.codec || t("视频")}
             {streamInfo.fps ? ` · ${streamInfo.fps.toFixed(0)} fps` : ""} ·{" "}
-            {streamInfo.isLive ? "直播流（无限，需设上限）" : `回放流 · 时长 ${fmtSecs(streamInfo.durationSecs)}`}
+            {streamInfo.isLive ? t("直播流（无限，需设上限）") : t("回放流 · 时长 {d}", { d: fmtSecs(streamInfo.durationSecs) })}
           </div>
         )}
         <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-          <span>每隔</span>
+          <span>{t("每隔")}</span>
           <InputNumber min={0.1} max={600} step={0.5} value={streamEvery} onChange={(v) => setStreamEvery(v ?? 1)} />
-          <span>秒抽 1 帧</span>
+          <span>{t("秒抽 1 帧")}</span>
         </div>
         <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-          <span>最多抽</span>
+          <span>{t("最多抽")}</span>
           <InputNumber min={0} max={100000} step={50} value={streamMax} onChange={(v) => setStreamMax(v ?? 0)} />
-          <span>帧（0 = 不限）</span>
+          <span>{t("帧（0 = 不限）")}</span>
         </div>
         {(!streamInfo || streamInfo.isLive) && (
           <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-            <span>最长采集</span>
+            <span>{t("最长采集")}</span>
             <InputNumber min={0} max={1440} step={1} value={streamMinutes} onChange={(v) => setStreamMinutes(v ?? 0)} />
-            <span>分钟（0 = 不限，仅直播）</span>
+            <span>{t("分钟（0 = 不限，仅直播）")}</span>
           </div>
         )}
         <Checkbox checked={streamDedup} onChange={(e) => setStreamDedup(e.target.checked)}>
-          跳过几乎相同的帧（画面静止时少存重复图）
+          {t("跳过几乎相同的帧（画面静止时少存重复图）")}
         </Checkbox>
         <p className="dim" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-          图片边采边入库，保存在项目的 images/stream_地址_时间/ 文件夹里，采集时就能看到。直播是无限流，务必设「最多帧」或「最长时长」；中途停止也会保留已采的图。首次使用会自动下载 ffmpeg。
+          {t("图片边采边入库，保存在项目的 images/stream_地址_时间/ 文件夹里，采集时就能看到。直播是无限流，务必设「最多帧」或「最长时长」；中途停止也会保留已采的图。首次使用会自动下载 ffmpeg。")}
         </p>
       </Modal>
 
@@ -753,13 +770,13 @@ export default function Data({ project }: { project: ProjectInfo }) {
         open={!!videoProgress && !streamMin}
         closable={false}
         maskClosable={false}
-        title={streamRunning ? "正在采集视频流" : "正在处理视频"}
+        title={streamRunning ? t("正在采集视频流") : t("正在处理视频")}
         footer={
           streamRunning ? (
             <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-              <Button onClick={() => setStreamMin(true)}>最小化</Button>
+              <Button onClick={() => setStreamMin(true)}>{t("最小化")}</Button>
               <Button danger onClick={stopStream}>
-                停止采集
+                {t("停止采集")}
               </Button>
             </div>
           ) : null
@@ -774,9 +791,13 @@ export default function Data({ project }: { project: ProjectInfo }) {
                 ? `${vp.detail} · ${(vp.done / 2 ** 20).toFixed(0)} / ${(vp.total / 2 ** 20).toFixed(0)} MB · ${(vp.speed / 2 ** 20).toFixed(1)} MB/s`
                 : vp.stage === "extract"
                   ? streamRunning
-                    ? `已采集 ${vp.done} 帧${vp.total ? ` / 上限 ${vp.total}` : ""} · 已入库 ${streamSaved} 张`
-                    : `正在抽帧：${vp.detail} · 已抽 ${vp.done} 帧${vp.total ? ` / 约 ${vp.total}` : ""}`
-                  : `正在导入 ${vp.done} / ${vp.total} 帧（生成缩略图）`;
+                    ? vp.total
+                      ? t("已采集 {done} 帧 / 上限 {total} · 已入库 {saved} 张", { done: vp.done, total: vp.total, saved: streamSaved })
+                      : t("已采集 {done} 帧 · 已入库 {saved} 张", { done: vp.done, saved: streamSaved })
+                    : vp.total
+                      ? t("正在抽帧：{detail} · 已抽 {done} 帧 / 约 {total}", { detail: vp.detail, done: vp.done, total: vp.total })
+                      : t("正在抽帧：{detail} · 已抽 {done} 帧", { detail: vp.detail, done: vp.done })
+                  : t("正在导入 {done} / {total} 帧（生成缩略图）", { done: vp.done, total: vp.total });
             return (
               <>
                 <Progress percent={pct} status="active" showInfo={vp.total > 0} />
@@ -791,7 +812,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
                     <div className="stream-strip">
                       {streamIds.length === 0 ? (
                         <div className="dim" style={{ fontSize: 12 }}>
-                          等待第一帧…
+                          {t("等待第一帧…")}
                         </div>
                       ) : (
                         [...streamIds].reverse().map((id, i) => (
@@ -807,7 +828,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
                     </div>
                     {streamDir && (
                       <div className="dim" style={{ fontSize: 12 }}>
-                        保存到项目 {shortDir(streamDir)} <a onClick={() => openDir(streamDir)}>打开文件夹</a>
+                        {t("保存到项目 {dir}", { dir: shortDir(streamDir) })} <a onClick={() => openDir(streamDir)}>{t("打开文件夹")}</a>
                       </div>
                     )}
                   </>
@@ -844,19 +865,19 @@ export default function Data({ project }: { project: ProjectInfo }) {
             )}
             <div style={{ fontSize: 13 }}>
               {videoProgress.stage === "download"
-                ? "正在下载 ffmpeg…"
-                : `采集中 · 已抽 ${videoProgress.done} 帧`}
+                ? t("正在下载 ffmpeg…")
+                : t("采集中 · 已抽 {n} 帧", { n: videoProgress.done })}
               <div className="dim" style={{ fontSize: 12 }}>
-                已入库 {streamSaved} 张
+                {t("已入库 {n} 张", { n: streamSaved })}
               </div>
             </div>
           </div>
           <div className="row" style={{ gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
             <Button size="small" onClick={() => setStreamMin(false)}>
-              展开
+              {t("展开")}
             </Button>
             <Button size="small" danger onClick={stopStream}>
-              停止
+              {t("停止")}
             </Button>
           </div>
         </div>
@@ -865,9 +886,9 @@ export default function Data({ project }: { project: ProjectInfo }) {
       {dragging && (
         <div className="drop-mask">
           <div>
-            松开鼠标导入图片
+            {t("松开鼠标导入图片")}
             <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-              支持文件夹，会自动查找子文件夹里的图片
+              {t("支持文件夹，会自动查找子文件夹里的图片")}
             </div>
           </div>
         </div>

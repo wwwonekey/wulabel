@@ -1,0 +1,93 @@
+# 추론 서비스 패키지
+
+Wulabel에서 생성한 패키지입니다. 카메라 영상 스트림을 받아 학습된 모델로 검출하고, 대상이 발견되면 경보를 푸시합니다. HTTP 검출 API도 제공합니다.
+
+## 실행
+
+Python 3.9 이상이 필요합니다(PyTorch와 그래픽카드는 필요 없습니다).
+
+- Windows: `run.bat` 더블클릭
+- Linux: `sh run.sh`
+
+처음 실행하면 Python 환경을 자동으로 만들고 onnxruntime, opencv, numpy(약 100MB)를 설치합니다. 그다음부터는 바로 시작됩니다.
+
+NVIDIA 그래픽카드로 GPU 추론을 하려면: `requirements.txt`의 `onnxruntime`을 `onnxruntime-gpu`로 바꾸고, `venv` 폴더를 삭제한 뒤 다시 실행하세요.
+
+## 설정: config.json
+
+```jsonc
+{
+  "model": "model.onnx",
+  "gpu": true,                 // onnxruntime-gpu가 있으면 GPU 사용
+  "max_side": 1280,            // 검출 전에 프레임의 긴 변을 이 크기로 축소, 작을수록 빠름
+  "port": 8090,                // HTTP API 포트
+  "interval": 1.0,             // 스트림마다 몇 초에 한 프레임씩 검출할지
+  "streams": [
+    {
+      "name": "북문",
+      "url": "rtsp://admin:비밀번호@192.168.1.64:554/Streaming/Channels/101",
+      "region": [[0.1, 0.4], [0.9, 0.4], [0.9, 1.0], [0.1, 1.0]]  // 선택: 검출 영역, 0~1 비율 좌표
+    }
+  ],
+  "alert": {
+    "labels": ["안전모_미착용"],  // 이 클래스만 경보, 비우면 모든 클래스
+    "min_score": 0.5,          // 신뢰도 임계값
+    "cooldown": 60,            // 같은 스트림·같은 클래스는 N초에 한 번만 경보
+    "hours": "07:00-19:00",    // 적용 시간대, 비우면 하루 종일, 자정을 넘기면 "22:00-06:00"
+    "save_image": true         // 경보 스냅샷을 alerts/에 저장
+  },
+  "webhook": { "url": "http://플랫폼/api/alarm", "with_image": false, "headers": {} },
+  "mqtt": { "host": "", "port": 1883, "topic": "xlabel/alarm", "username": "", "password": "" },
+  "reflux": { "enabled": true, "low": 0.3, "high": 0.5, "interval": 60 }
+}
+```
+
+- 영상 소스에 로컬 동영상 파일 경로를 넣어 테스트할 수도 있습니다(기본적으로 반복 재생).
+- 검출 영역은 박스의 **아래쪽 변 중점**(사람이나 차량이 서 있는 위치)을 기준으로 판단합니다.
+
+## 경보 내용
+
+Webhook(POST JSON)과 MQTT로 전송되는 메시지:
+
+```json
+{
+  "stream": "북문",
+  "time": "2026-11-01T08:30:15",
+  "labels": ["안전모_미착용"],
+  "detections": [{ "label": "안전모_미착용", "score": 0.91, "box": [x, y, w, h] }],
+  "width": 1920,
+  "height": 1080,
+  "image": "alerts/20261101/북문_083015.jpg"
+}
+```
+
+Webhook에서 `with_image`를 켜면 `image_base64` 필드(박스를 그린 JPEG)가 추가됩니다.
+
+## HTTP API
+
+| 엔드포인트 | 설명 |
+|---|---|
+| `GET /health` | 서비스 상태, 각 스트림의 온라인 여부 |
+| `GET /alerts?limit=50` | 최근 경보 |
+| `GET /alerts/20261101/xxx.jpg` | 경보 스냅샷 |
+| `POST /predict?conf=0.4` | 이미지 한 장 업로드(요청 본문에 이미지 파일을 그대로 넣거나 JSON `{"image": "base64"}`), 검출 결과 반환 |
+
+```bash
+curl -X POST --data-binary @test.jpg "http://127.0.0.1:8090/predict?conf=0.4"
+```
+
+## 현장 데이터 회수
+
+신뢰도가 `low`~`high` 사이로 모델이 확신하지 못한 프레임은 `reflux/`에 저장됩니다(스트림마다 `interval`초에 최대 한 장).
+주기적으로 `reflux` 폴더를 복사해 와서 Wulabel의 '배포' 페이지에서 '현장 회수 이미지 가져오기'를 클릭하고, 라벨링한 뒤 다시 학습하면 쓸수록 모델이 정확해집니다.
+
+## 파일
+
+```
+model.onnx / model.json   모델과 클래스
+service.py                서비스 프로그램
+config.json               설정
+alerts/                   경보 스냅샷
+reflux/                   회수 이미지
+logs/service.log          실행 로그
+```

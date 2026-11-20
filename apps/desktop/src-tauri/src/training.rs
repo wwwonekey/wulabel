@@ -17,6 +17,7 @@ use crate::db;
 use crate::error::{msg, AppResult};
 use crate::project::Project;
 use crate::runtime::Runtime;
+use crate::t;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -137,7 +138,7 @@ pub fn get_run(p: &Project, id: i64) -> AppResult<RunInfo> {
     let conn = p.conn.lock();
     conn.query_row(&format!("SELECT {RUN_COLS} FROM runs WHERE id = ?1"), [id], |r| row_to_info(p, r))
         .optional()?
-        .ok_or_else(|| msg("训练记录不存在"))
+        .ok_or_else(|| msg(t!("训练记录不存在")))
 }
 
 fn set_status(p: &Project, id: i64, status: &str) {
@@ -171,7 +172,7 @@ pub fn detail(p: &Project, id: i64) -> AppResult<RunDetail> {
 
 pub fn delete_run(p: &Project, jobs: &Jobs, id: i64) -> AppResult<()> {
     if jobs.running() == Some(id) {
-        return Err(msg("训练还在进行，先停止再删除"));
+        return Err(msg(t!("训练还在进行，先停止再删除")));
     }
     let run = get_run(p, id)?;
     let _ = fs::remove_dir_all(&run.dir);
@@ -189,10 +190,10 @@ pub type EventSink = Arc<dyn Fn(i64, serde_json::Value) + Send + Sync>;
 /// 准备数据集并启动训练进程，立即返回训练记录 id
 pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, sink: EventSink) -> AppResult<i64> {
     if jobs.running().is_some() {
-        return Err(msg("已经有训练在进行中"));
+        return Err(msg(t!("已经有训练在进行中")));
     }
     if cfg.epochs == 0 || cfg.batch == 0 || cfg.img_size < 128 {
-        return Err(msg("训练参数不对"));
+        return Err(msg(t!("训练参数不对")));
     }
     let mut cmd = rt.worker(&["train"])?; // 先确认环境存在
     let name = {
@@ -205,21 +206,21 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
         n
     };
     if model_task(&cfg.model) != p.meta.task {
-        return Err(msg("这个模型和项目的任务类型不匹配，请重新选择模型"));
+        return Err(msg(t!("这个模型和项目的任务类型不匹配，请重新选择模型")));
     }
     // 接着上次训练：上次要有模型文件，模型结构要一样
     let base = match cfg.base_run {
         Some(b) => {
             let r = get_run(&p, b)?;
             if r.engine == EXTERNAL {
-                return Err(msg("导入的外部模型不能接着训练"));
+                return Err(msg(t!("导入的外部模型不能接着训练")));
             }
             let w = PathBuf::from(&r.dir).join("best.pt");
             if !w.exists() {
-                return Err(msg("那次训练没有产出模型，不能接着训"));
+                return Err(msg(t!("那次训练没有产出模型，不能接着训")));
             }
             if r.config["model"].as_str() != Some(cfg.model.as_str()) {
-                return Err(msg("接着训练要用和那次相同的模型"));
+                return Err(msg(t!("接着训练要用和那次相同的模型")));
             }
             Some((r.name, w))
         }
@@ -245,9 +246,9 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
     if usable == 0 {
         let _ = fs::remove_dir_all(&dir);
         return Err(msg(match p.meta.task.as_str() {
-            "classify" => "还没有给图片打类别标签，先标注一些图片再训练",
-            "pose" => "还没有关键点标注，先标注一些目标再训练",
-            _ => "没有任何标注，先标注一些图片再训练",
+            "classify" => t!("还没有给图片打类别标签，先标注一些图片再训练"),
+            "pose" => t!("还没有关键点标注，先标注一些目标再训练"),
+            _ => t!("没有任何标注，先标注一些图片再训练"),
         }));
     }
     let mut worker_cfg = serde_json::json!({
@@ -293,8 +294,8 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
         Ok(c) => c,
         Err(e) => {
             set_status(&p, id, "failed");
-            let _ = fs::write(dir.join("error.txt"), format!("无法启动训练进程：{e}"));
-            return Err(msg(format!("无法启动训练进程：{e}")));
+            let _ = fs::write(dir.join("error.txt"), t!("无法启动训练进程：{e}", e = e));
+            return Err(msg(t!("无法启动训练进程：{e}", e = e)));
         }
     };
     let stdout = child.stdout.take().unwrap();
@@ -357,19 +358,21 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                     }
                     let _ = writeln!(
                         log_file.lock(),
-                        "第 {} 轮：loss {:.4}，mAP50 {:.3}",
-                        ev["epoch"],
-                        ev["loss"].as_f64().unwrap_or(f64::NAN),
-                        ev["map50"].as_f64().unwrap_or(0.0)
+                        "{}",
+                        t!("第 {epoch} 轮：loss {loss}，mAP50 {map}",
+                            epoch = ev["epoch"],
+                            loss = format!("{:.4}", ev["loss"].as_f64().unwrap_or(f64::NAN)),
+                            map = format!("{:.3}", ev["map50"].as_f64().unwrap_or(0.0))
+                        )
                     );
                 }
                 Some("done") => {
                     final_status = Some(if ev["stopped"] == true { "stopped" } else { "done" });
                 }
                 Some("error") => {
-                    let m = ev["msg"].as_str().unwrap_or("未知错误").to_string();
+                    let m = ev["msg"].as_str().map(String::from).unwrap_or_else(|| t!("未知错误"));
                     let _ = fs::write(dir.join("error.txt"), format!("{m}\n\n{}", ev["trace"].as_str().unwrap_or("")));
-                    let _ = writeln!(log_file.lock(), "错误：{m}");
+                    let _ = writeln!(log_file.lock(), "{}", t!("错误：{m}", m = m));
                     final_status = Some("failed");
                 }
                 _ => {}
@@ -380,7 +383,7 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
         let status = final_status.unwrap_or_else(|| {
             // 进程直接退出（崩溃、显存不足等）
             let tail = stderr_tail.lock().join("\n");
-            let _ = fs::write(dir.join("error.txt"), format!("训练进程异常退出（{code:?}）\n\n{tail}"));
+            let _ = fs::write(dir.join("error.txt"), format!("{}\n\n{tail}", t!("训练进程异常退出（{code}）", code = format!("{code:?}"))));
             if dir.join("STOP").exists() { "stopped" } else { "failed" }
         });
         let _ = fs::remove_file(dir.join("STOP"));
@@ -394,9 +397,9 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
 /// 请求停止：写 STOP 文件让训练在当前迭代后停下，60 秒还没退出就强制结束
 pub fn stop(jobs: &Jobs, id: i64) -> AppResult<()> {
     let cur = jobs.current.lock();
-    let Some((rid, dir, child)) = cur.as_ref() else { return Err(msg("没有正在进行的训练")) };
+    let Some((rid, dir, child)) = cur.as_ref() else { return Err(msg(t!("没有正在进行的训练"))) };
     if *rid != id {
-        return Err(msg("这个训练没有在进行"));
+        return Err(msg(t!("这个训练没有在进行")));
     }
     fs::write(dir.join("STOP"), "")?;
     let child = child.clone();
@@ -438,18 +441,18 @@ pub fn ensure_deployable(p: &Project, id: i64, what: Deploy) -> AppResult<()> {
     let run = get_run(p, id)?;
     if run.engine == EXTERNAL {
         return Err(msg(if what == Deploy::Onnx {
-            "导入的外部模型本身就是 ONNX，直接用原来的模型文件部署即可"
+            t!("导入的外部模型本身就是 ONNX，直接用原来的模型文件部署即可")
         } else {
-            "导入的外部模型暂不支持实时验证和推理服务包，可以用来预标注、评估和误报测试"
+            t!("导入的外部模型暂不支持实时验证和推理服务包，可以用来预标注、评估和误报测试")
         }));
     }
     let task = model_task(run.config["model"].as_str().unwrap_or(""));
     let err = match (task, what) {
         ("detect", _) => None,
         (_, Deploy::Onnx) => None,
-        ("classify", _) => Some("分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型"),
-        ("segment", _) => Some("分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型"),
-        _ => Some("关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型"),
+        ("classify", _) => Some(t!("分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型")),
+        ("segment", _) => Some(t!("分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型")),
+        _ => Some(t!("关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型")),
     };
     match err {
         Some(e) => Err(msg(e)),
@@ -463,7 +466,7 @@ pub fn export_onnx(p: &Project, rt: &Runtime, id: i64, log: &(dyn Fn(String) + S
     let dir = PathBuf::from(&run.dir);
     let w = dir.join("best.pt");
     if !w.exists() {
-        return Err(msg("这次训练没有产出模型"));
+        return Err(msg(t!("这次训练没有产出模型")));
     }
     let out = dir.join("model.onnx");
     let mut c = rt.worker(&["export"])?;
@@ -476,7 +479,7 @@ pub fn export_onnx(p: &Project, rt: &Runtime, id: i64, log: &(dyn Fn(String) + S
         }
     })?;
     if !out.exists() {
-        return Err(msg("导出失败"));
+        return Err(msg(t!("导出失败")));
     }
     Ok(out.to_string_lossy().into_owned())
 }
@@ -609,7 +612,7 @@ impl Predictor {
         if !alive {
             let mut c = rt.worker(&["serve"])?;
             c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
-            let mut child = c.spawn().map_err(|e| msg(format!("无法启动推理进程：{e}")))?;
+            let mut child = c.spawn().map_err(|e| msg(t!("无法启动推理进程：{e}", e = e)))?;
             let stdin = child.stdin.take().unwrap();
             let stdout = BufReader::new(child.stdout.take().unwrap());
             *guard = Some(ServeProc { child, stdin, stdout });
@@ -617,19 +620,19 @@ impl Predictor {
         let s = guard.as_mut().unwrap();
         if writeln!(s.stdin, "{req}").and_then(|_| s.stdin.flush()).is_err() {
             *guard = None;
-            return Err(msg("推理进程已退出，请重试"));
+            return Err(msg(t!("推理进程已退出，请重试")));
         }
         let mut line = String::new();
         loop {
             line.clear();
             if s.stdout.read_line(&mut line)? == 0 {
                 *guard = None;
-                return Err(msg("推理进程意外退出"));
+                return Err(msg(t!("推理进程意外退出")));
             }
             let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) else { continue };
             match v["type"].as_str() {
                 Some("done") => return Ok(v),
-                Some("error") => return Err(msg(v["msg"].as_str().unwrap_or("推理失败").to_string())),
+                Some("error") => return Err(msg(v["msg"].as_str().map(String::from).unwrap_or_else(|| t!("推理失败")))),
                 _ => on_event(&v),
             }
         }
@@ -682,7 +685,7 @@ pub fn weights_of(p: &Project, run_id: i64) -> AppResult<PathBuf> {
     let dir = PathBuf::from(&run.dir);
     let w = if run.engine == EXTERNAL { dir.join("model.onnx") } else { dir.join("best.pt") };
     if !w.exists() {
-        return Err(msg("这次训练没有产出模型"));
+        return Err(msg(t!("这次训练没有产出模型")));
     }
     Ok(w)
 }

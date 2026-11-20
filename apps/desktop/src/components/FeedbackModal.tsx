@@ -3,6 +3,7 @@ import { App, Button, Checkbox, Image, Input, Modal, Space } from "antd";
 import { api, errText } from "../api";
 import { prefs } from "../store";
 import { isRemote } from "../transport";
+import { t } from "../i18n";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -39,12 +40,12 @@ export default function FeedbackModal({
 
   const submit = async () => {
     if (!text.trim()) {
-      message.warning("请先填写问题描述");
+      message.warning(t("请先填写问题描述"));
       return;
     }
     const email = contact.trim();
     if (email && !EMAIL_RE.test(email)) {
-      message.warning("邮箱格式不对，检查一下；不想留可以空着");
+      message.warning(t("邮箱格式不对，检查一下；不想留可以空着"));
       return;
     }
     setSending(true);
@@ -56,7 +57,7 @@ export default function FeedbackModal({
         logs: withLogs ? logs : null,
       });
       prefs.set("feedbackEmail", email);
-      message.success(email ? "反馈已提交，处理好了会发邮件告诉你，谢谢！" : "反馈已提交，谢谢！");
+      message.success(email ? t("反馈已提交，处理好了会发邮件告诉你，谢谢！") : t("反馈已提交，谢谢！"));
       setText("");
       onClose();
     } catch (e) {
@@ -69,21 +70,21 @@ export default function FeedbackModal({
   return (
     <Modal
       open={open}
-      title="反馈问题"
+      title={t("反馈问题")}
       onCancel={close}
       maskClosable={!sending}
       footer={[
         <Button key="cancel" onClick={close} disabled={sending}>
-          取消
+          {t("取消")}
         </Button>,
         <Button key="send" type="primary" loading={sending} onClick={submit}>
-          发送
+          {t("发送")}
         </Button>,
       ]}
     >
       <Space direction="vertical" style={{ width: "100%" }} size={12}>
         <div className="dim" style={{ fontSize: 13 }}>
-          遇到问题或有建议都可以告诉我。描述、截图和运行日志（都可以不带）以及软件版本、操作系统会一起发给开发者用于排查，不会上传你的项目图片本身。
+          {t("遇到问题或有建议都可以告诉我。描述、截图和运行日志（都可以不带）以及软件版本、操作系统会一起发给开发者用于排查，不会上传你的项目图片本身。")}
         </div>
         <Input.TextArea
           value={text}
@@ -91,7 +92,7 @@ export default function FeedbackModal({
           rows={5}
           maxLength={2000}
           showCount
-          placeholder="说说遇到了什么问题，或者你希望增加什么…"
+          placeholder={t("说说遇到了什么问题，或者你希望增加什么…")}
           autoFocus
         />
         <Input
@@ -99,30 +100,30 @@ export default function FeedbackModal({
           onChange={(e) => setContact(e.target.value)}
           maxLength={120}
           type="email"
-          placeholder="你的邮箱（选填）：问题处理好了会发邮件通知你"
+          placeholder={t("你的邮箱（选填）：问题处理好了会发邮件通知你")}
         />
         {shot ? (
           <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>
             <Checkbox checked={withShot} onChange={(e) => setWithShot(e.target.checked)} style={{ marginBottom: withShot ? 8 : 0 }}>
-              附带当前界面截图
+              {t("附带当前界面截图")}
             </Checkbox>
             {withShot && (
               <div style={{ textAlign: "center" }}>
-                <Image src={shot} alt="界面截图预览" style={{ maxHeight: 180, objectFit: "contain" }} />
+                <Image src={shot} alt={t("界面截图预览")} style={{ maxHeight: 180, objectFit: "contain" }} />
               </div>
             )}
           </div>
         ) : (
-          <div className="dim" style={{ fontSize: 12 }}>（这次没能自动截到界面，直接文字描述即可）</div>
+          <div className="dim" style={{ fontSize: 12 }}>{t("（这次没能自动截到界面，直接文字描述即可）")}</div>
         )}
         {logs && (
           <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 8 }}>
             <Checkbox checked={withLogs} onChange={(e) => setWithLogs(e.target.checked)}>
-              附带运行日志（训练环境、最近两次训练的日志和出错信息，不含图片和标注）
+              {t("附带运行日志（训练环境、最近两次训练的日志和出错信息，不含图片和标注）")}
             </Checkbox>
             {withLogs && (
               <Button type="link" size="small" onClick={() => setShowLogs(!showLogs)}>
-                {showLogs ? "收起" : "看看内容"}
+                {showLogs ? t("收起") : t("看看内容")}
               </Button>
             )}
             {withLogs && showLogs && (

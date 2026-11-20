@@ -1,15 +1,17 @@
 import { getToken, invoke, isRemote, postJson } from "./transport";
+import { t } from "./i18n";
 
 export type Task = "detect" | "segment" | "classify" | "pose";
 
-export const TASKS: { value: Task; name: string; desc: string }[] = [
-  { value: "detect", name: "目标检测", desc: "用矩形框标出目标的位置和类别" },
-  { value: "segment", name: "实例分割", desc: "用多边形或画笔描出目标轮廓" },
-  { value: "classify", name: "图像分类", desc: "给整张图片打类别标签" },
-  { value: "pose", name: "关键点", desc: "标出人体或物体的关键点和骨架" },
+// 名字用 getter：这个模块会在语言包加载前被 store 引入，取值时再翻译
+export const TASKS: { value: Task; readonly name: string; readonly desc: string }[] = [
+  { value: "detect", get name() { return t("目标检测"); }, get desc() { return t("用矩形框标出目标的位置和类别"); } },
+  { value: "segment", get name() { return t("实例分割"); }, get desc() { return t("用多边形或画笔描出目标轮廓"); } },
+  { value: "classify", get name() { return t("图像分类"); }, get desc() { return t("给整张图片打类别标签"); } },
+  { value: "pose", get name() { return t("关键点"); }, get desc() { return t("标出人体或物体的关键点和骨架"); } },
 ];
 
-export const taskName = (t: string) => TASKS.find((x) => x.value === t)?.name ?? t;
+export const taskName = (task: string) => TASKS.find((x) => x.value === task)?.name ?? task;
 
 export interface Stats {
   total: number;
@@ -776,7 +778,11 @@ export interface XtPullResult {
 
 export type Role = "annotator" | "reviewer" | "admin";
 
-export const ROLE_NAMES: Record<Role, string> = { annotator: "标注员", reviewer: "审核员", admin: "管理员" };
+export const ROLE_NAMES: Record<Role, string> = {
+  get annotator() { return t("标注员"); },
+  get reviewer() { return t("审核员"); },
+  get admin() { return t("管理员"); },
+};
 
 export interface Member {
   id: number;

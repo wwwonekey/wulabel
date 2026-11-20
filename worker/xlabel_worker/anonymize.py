@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 import torch
 
+from .i18n import tr
 from .protocol import emit, log
 
 QUERIES = {"face": ["human face"], "license plate": ["license plate", "car number plate"]}
@@ -53,7 +54,7 @@ def run(cfg: dict) -> None:
         owl = Owl(device)
         for a in auto:
             queries += QUERIES[a]
-        log(f"自动查找：{'、'.join(auto)}")
+        log(tr("自动查找：{items}", items=tr("、").join(auto)))
     total = len(files)
     n_regions = 0
     for i, f in enumerate(files):

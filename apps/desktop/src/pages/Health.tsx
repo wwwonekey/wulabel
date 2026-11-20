@@ -5,18 +5,19 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errText, HealthReport, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
 import { useApp } from "../store";
 import { fmtTime } from "./Train";
+import { t } from "../i18n";
 
 type Filter = IssueKind | "dup_image";
 
 const KINDS: { key: Filter; name: string; color: string; tip: string; model?: boolean }[] = [
-  { key: "missing", name: "疑似漏标", color: "#e5534b", tip: "模型很确定这里有目标，但没有标注", model: true },
-  { key: "wrong_class", name: "疑似类别错", color: "#e5534b", tip: "框的位置对上了，但标注的类别和模型判断的不一样", model: true },
-  { key: "loose_box", name: "框不准", color: "#e7a33e", tip: "类别一致，但框和模型预测的重合度低，可能画偏或大小不对", model: true },
-  { key: "extra_box", name: "疑似多余框", color: "#e7a33e", tip: "标了框，但模型在这个位置什么都没看到", model: true },
-  { key: "tiny_box", name: "极小框", color: "#9b7bf2", tip: "短边小于 8 像素，模型几乎学不到" },
-  { key: "dup_box", name: "重复框", color: "#9b7bf2", tip: "同一张图里同类别的两个框几乎完全重叠" },
-  { key: "dup_image", name: "重复图片", color: "#3d8bfd", tip: "画面几乎一样的图片，会让评估结果虚高" },
-  { key: "no_label", name: "无类别", color: "#9aa1ab", tip: "框没有类别，不会参与训练" },
+  { key: "missing", name: t("疑似漏标"), color: "#e5534b", tip: t("模型很确定这里有目标，但没有标注"), model: true },
+  { key: "wrong_class", name: t("疑似类别错"), color: "#e5534b", tip: t("框的位置对上了，但标注的类别和模型判断的不一样"), model: true },
+  { key: "loose_box", name: t("框不准"), color: "#e7a33e", tip: t("类别一致，但框和模型预测的重合度低，可能画偏或大小不对"), model: true },
+  { key: "extra_box", name: t("疑似多余框"), color: "#e7a33e", tip: t("标了框，但模型在这个位置什么都没看到"), model: true },
+  { key: "tiny_box", name: t("极小框"), color: "#9b7bf2", tip: t("短边小于 8 像素，模型几乎学不到") },
+  { key: "dup_box", name: t("重复框"), color: "#9b7bf2", tip: t("同一张图里同类别的两个框几乎完全重叠") },
+  { key: "dup_image", name: t("重复图片"), color: "#3d8bfd", tip: t("画面几乎一样的图片，会让评估结果虚高") },
+  { key: "no_label", name: t("无类别"), color: "#9aa1ab", tip: t("框没有类别，不会参与训练") },
 ];
 
 const PAGE = 48;
@@ -71,7 +72,7 @@ export default function Health({ project }: { project: ProjectInfo }) {
 
   const labelName = useMemo(() => {
     const m = new Map((report?.classes ?? []).map((c) => [c.labelId, c.name]));
-    return (id: number | null) => (id != null && m.get(id)) || "未分类";
+    return (id: number | null) => (id != null && m.get(id)) || t("未分类");
   }, [report]);
 
   const counts = useMemo(() => {
@@ -96,9 +97,9 @@ export default function Health({ project }: { project: ProjectInfo }) {
       setReport(r);
       setFilter(null);
       setLimit(PAGE);
-      message.success(`体检完成，发现 ${r.issues.length + r.dupGroups.length} 处问题`);
+      message.success(t("体检完成，发现 {n} 处问题", { n: r.issues.length + r.dupGroups.length }));
     } catch (e) {
-      modal.error({ title: "体检没有完成", content: errText(e) });
+      modal.error({ title: t("体检没有完成"), content: errText(e) });
     } finally {
       un();
       setRunning(null);
@@ -124,7 +125,7 @@ export default function Health({ project }: { project: ProjectInfo }) {
       await api.healthIgnore([i.key]);
       drop([i.key]);
       refreshStats();
-      message.success(`已加为「${labelName(i.predLabelId)}」`);
+      message.success(t("已加为「{name}」", { name: labelName(i.predLabelId) }));
     } catch (e) {
       message.error(errText(e));
     }
@@ -138,11 +139,11 @@ export default function Health({ project }: { project: ProjectInfo }) {
   const dedupe = (group: number[]) => {
     const extra = group.slice(1);
     modal.confirm({
-      title: `删除这组里的 ${extra.length} 张重复图片？`,
-      content: "保留第一张。图片的标注会一起删除，你电脑上的原图不受影响。",
-      okText: "删除",
+      title: t("删除这组里的 {n} 张重复图片？", { n: extra.length }),
+      content: t("保留第一张。图片的标注会一起删除，你电脑上的原图不受影响。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await api.deleteImages("ids", extra);
@@ -159,11 +160,11 @@ export default function Health({ project }: { project: ProjectInfo }) {
     if (!report) return;
     const extra = report.dupGroups.flatMap((g) => g.slice(1));
     modal.confirm({
-      title: `每组只保留一张，共删除 ${extra.length} 张重复图片？`,
-      content: "图片的标注会一起删除，你电脑上的原图不受影响。",
-      okText: "删除",
+      title: t("每组只保留一张，共删除 {n} 张重复图片？", { n: extra.length }),
+      content: t("图片的标注会一起删除，你电脑上的原图不受影响。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await api.deleteImages("ids", extra);
@@ -185,11 +186,22 @@ export default function Health({ project }: { project: ProjectInfo }) {
     <div className="page">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
         <div>
-          <h1>数据体检</h1>
+          <h1>{t("数据体检")}</h1>
           <p className="desc" style={{ margin: 0 }}>
             {report
-              ? `上次体检：${fmtTime(report.createdAt)} · ${report.imagesChecked} 张图、${report.boxesChecked} 个框${report.runName ? ` · 用模型 ${report.runName} 检查` : " · 只做了规则检查"}`
-              : "检查标注里的常见问题，找出漏标、错标、重复图片等，点一下就能去改。"}
+              ? report.runName
+                ? t("上次体检：{time} · {images} 张图、{boxes} 个框 · 用模型 {run} 检查", {
+                    time: fmtTime(report.createdAt),
+                    images: report.imagesChecked,
+                    boxes: report.boxesChecked,
+                    run: report.runName,
+                  })
+                : t("上次体检：{time} · {images} 张图、{boxes} 个框 · 只做了规则检查", {
+                    time: fmtTime(report.createdAt),
+                    images: report.imagesChecked,
+                    boxes: report.boxesChecked,
+                  })
+              : t("检查标注里的常见问题，找出漏标、错标、重复图片等，点一下就能去改。")}
           </p>
         </div>
         <Space>
@@ -198,12 +210,12 @@ export default function Health({ project }: { project: ProjectInfo }) {
             value={runId ?? 0}
             onChange={(v) => setRunId(v === 0 ? null : v)}
             options={[
-              ...runs.map((r) => ({ value: r.id, label: `用模型检查：${r.name} · mAP50 ${r.bestMap50?.toFixed(3) ?? "—"}` })),
-              { value: 0, label: "只做规则检查（不用模型）" },
+              ...runs.map((r) => ({ value: r.id, label: t("用模型检查：{name} · mAP50 {map}", { name: r.name, map: r.bestMap50?.toFixed(3) ?? "—" }) })),
+              { value: 0, label: t("只做规则检查（不用模型）") },
             ]}
           />
           <Button type="primary" icon={<HeartOutlined />} loading={!!running} onClick={start}>
-            {report ? "重新体检" : "开始体检"}
+            {report ? t("重新体检") : t("开始体检")}
           </Button>
         </Space>
       </div>
@@ -212,7 +224,7 @@ export default function Health({ project }: { project: ProjectInfo }) {
         <div className="card" style={{ marginBottom: 12 }}>
           <Progress percent={running.total ? Math.floor((running.done / running.total) * 100) : 0} status="active" />
           <div className="dim" style={{ fontSize: 12 }}>
-            {runId ? "比对图片、用模型检查每张已标注的图…" : "比对图片…"}
+            {runId ? t("比对图片、用模型检查每张已标注的图…") : t("比对图片…")}
           </div>
         </div>
       )}
@@ -222,16 +234,16 @@ export default function Health({ project }: { project: ProjectInfo }) {
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="还没有训练好的模型，现在只能做规则检查。训练一个模型后再体检，可以找出漏标、错标和框画偏的地方。"
+          message={t("还没有训练好的模型，现在只能做规则检查。训练一个模型后再体检，可以找出漏标、错标和框画偏的地方。")}
         />
       )}
 
       {!report ? (
         loaded && (
           <div className="card" style={{ padding: 48 }}>
-            <Empty description="还没有体检过">
+            <Empty description={t("还没有体检过")}>
               <Button type="primary" onClick={start} loading={!!running}>
-                开始体检
+                {t("开始体检")}
               </Button>
             </Empty>
           </div>
@@ -243,7 +255,7 @@ export default function Health({ project }: { project: ProjectInfo }) {
               const n = counts[k.key] ?? 0;
               const off = k.model && !report.runId;
               return (
-                <Tooltip key={k.key} title={off ? "需要用模型检查" : k.tip}>
+                <Tooltip key={k.key} title={off ? t("需要用模型检查") : k.tip}>
                   <div
                     className="card click"
                     style={{ padding: 12, borderColor: filter === k.key ? k.color : undefined, opacity: off ? 0.45 : 1 }}
@@ -264,18 +276,18 @@ export default function Health({ project }: { project: ProjectInfo }) {
             <div className="card">
               <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
                 <h2 style={{ fontSize: 14, margin: 0 }}>
-                  {kind?.name} <span className="dim">· {filter === "dup_image" ? `${report.dupGroups.length} 组` : `${list.length} 处`}</span>
+                  {kind?.name} <span className="dim">· {filter === "dup_image" ? t("{n} 组", { n: report.dupGroups.length }) : t("{n} 处", { n: list.length })}</span>
                 </h2>
                 <span className="dim" style={{ fontSize: 12 }}>{kind?.tip}</span>
               </div>
 
               {filter === "dup_image" ? (
                 report.dupGroups.length === 0 ? (
-                  <Empty description="没有重复图片" image={<CheckOutlined style={{ fontSize: 40, color: "var(--ok)" }} />} />
+                  <Empty description={t("没有重复图片")} image={<CheckOutlined style={{ fontSize: 40, color: "var(--ok)" }} />} />
                 ) : (
                   <>
                     <Button size="small" danger style={{ marginBottom: 10 }} onClick={dedupeAll}>
-                      每组只保留一张（删除 {report.dupGroups.reduce((s, g) => s + g.length - 1, 0)} 张）
+                      {t("每组只保留一张（删除 {n} 张）", { n: report.dupGroups.reduce((s, g) => s + g.length - 1, 0) })}
                     </Button>
                     {report.dupGroups.slice(0, limit).map((g) => (
                       <div key={g.join(",")} className="row" style={{ marginBottom: 10, flexWrap: "nowrap", alignItems: "stretch" }}>
@@ -283,12 +295,12 @@ export default function Health({ project }: { project: ProjectInfo }) {
                           {g.map((id, i) => (
                             <div key={id} className="thumb" onClick={() => annotateImage(id)} style={{ outline: i === 0 ? "2px solid var(--ok)" : undefined }}>
                               <img src={thumbUrl(project.path, id)} loading="lazy" alt="" draggable={false} />
-                              <span className="nm">{i === 0 ? "保留" : `#${id}`}</span>
+                              <span className="nm">{i === 0 ? t("保留") : `#${id}`}</span>
                             </div>
                           ))}
                         </div>
                         <Button size="small" style={{ alignSelf: "center" }} onClick={() => dedupe(g)}>
-                          删除其余 {g.length - 1} 张
+                          {t("删除其余 {n} 张", { n: g.length - 1 })}
                         </Button>
                       </div>
                     ))}
@@ -296,7 +308,7 @@ export default function Health({ project }: { project: ProjectInfo }) {
                 )
               ) : list.length === 0 ? (
                 <Empty
-                  description={kind?.model && !report.runId ? "选一个训练好的模型再体检，才能检查这一项" : "没有发现这类问题"}
+                  description={kind?.model && !report.runId ? t("选一个训练好的模型再体检，才能检查这一项") : t("没有发现这类问题")}
                   image={<CheckOutlined style={{ fontSize: 40, color: "var(--ok)" }} />}
                 />
               ) : (
@@ -307,16 +319,16 @@ export default function Health({ project }: { project: ProjectInfo }) {
                       <div className="issue-text">{i.detail}</div>
                       <div className="row" style={{ gap: 4 }}>
                         <Button size="small" icon={<FormOutlined />} onClick={() => go(i)}>
-                          去修改
+                          {t("去修改")}
                         </Button>
                         {i.kind === "missing" && (
-                          <Tooltip title={`直接加一个「${labelName(i.predLabelId)}」框`}>
+                          <Tooltip title={t("直接加一个「{name}」框", { name: labelName(i.predLabelId) })}>
                             <Button size="small" icon={<PlusOutlined />} onClick={() => accept(i)}>
-                              加为标注
+                              {t("加为标注")}
                             </Button>
                           </Tooltip>
                         )}
-                        <Tooltip title="不是问题，以后体检不再提示">
+                        <Tooltip title={t("不是问题，以后体检不再提示")}>
                           <Button size="small" type="text" icon={<EyeInvisibleOutlined />} onClick={() => ignore(i)} />
                         </Tooltip>
                       </div>
@@ -326,16 +338,16 @@ export default function Health({ project }: { project: ProjectInfo }) {
               )}
               {((filter === "dup_image" ? report.dupGroups.length : list.length) > limit) && (
                 <div style={{ textAlign: "center", marginTop: 10 }}>
-                  <Button onClick={() => setLimit(limit + PAGE)}>显示更多</Button>
+                  <Button onClick={() => setLimit(limit + PAGE)}>{t("显示更多")}</Button>
                 </div>
               )}
             </div>
 
             <div>
               <div className="card" style={{ marginBottom: 12 }}>
-                <h2 style={{ fontSize: 14, marginTop: 0 }}>建议</h2>
+                <h2 style={{ fontSize: 14, marginTop: 0 }}>{t("建议")}</h2>
                 {report.suggestions.length === 0 ? (
-                  <div className="dim">数据看起来不错。</div>
+                  <div className="dim">{t("数据看起来不错。")}</div>
                 ) : (
                   report.suggestions.map((s, i) => (
                     <div key={i} className="suggest">{s}</div>
@@ -343,8 +355,8 @@ export default function Health({ project }: { project: ProjectInfo }) {
                 )}
               </div>
               <div className="card" style={{ marginBottom: 12 }}>
-                <h2 style={{ fontSize: 14, marginTop: 0 }}>类别分布 <span className="dim" style={{ fontWeight: 400 }}>（框数 · 图片数）</span></h2>
-                {report.classes.length === 0 && <div className="dim">还没有类别</div>}
+                <h2 style={{ fontSize: 14, marginTop: 0 }}>{t("类别分布")} <span className="dim" style={{ fontWeight: 400 }}>{t("（框数 · 图片数）")}</span></h2>
+                {report.classes.length === 0 && <div className="dim">{t("还没有类别")}</div>}
                 {report.classes.map((c) => (
                   <div key={c.labelId} style={{ marginBottom: 8 }}>
                     <div className="row" style={{ justifyContent: "space-between" }}>
@@ -360,10 +372,10 @@ export default function Health({ project }: { project: ProjectInfo }) {
                 ))}
               </div>
               <div className="card">
-                <h2 style={{ fontSize: 14, marginTop: 0 }}>框大小分布 <span className="dim" style={{ fontWeight: 400 }}>（短边像素）</span></h2>
+                <h2 style={{ fontSize: 14, marginTop: 0 }}>{t("框大小分布")} <span className="dim" style={{ fontWeight: 400 }}>{t("（短边像素）")}</span></h2>
                 <div className="sizes">
                   {report.sizes.map(([name, n], i) => (
-                    <Tooltip key={name} title={`${name} 像素：${n} 个框`}>
+                    <Tooltip key={name} title={t("{range} 像素：{n} 个框", { range: name, n })}>
                       <div className="size-col">
                         <div className="size-bar" style={{ height: `${(n / maxSize) * 100}%`, background: i === 0 ? "var(--warn)" : "var(--accent)" }} />
                         <span>{name}</span>

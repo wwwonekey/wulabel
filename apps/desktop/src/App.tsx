@@ -29,28 +29,29 @@ import FeedbackModal from "./components/FeedbackModal";
 import UpdateModal from "./components/UpdateModal";
 import WhatsNew from "./components/WhatsNew";
 import html2canvas from "html2canvas";
+import { t } from "./i18n";
 
 const NAV: { key: PageKey; label: string; icon: ReactNode; needProject: boolean }[] = [
-  { key: "home", label: "项目", icon: <HomeOutlined />, needProject: false },
-  { key: "data", label: "数据", icon: <PictureOutlined />, needProject: true },
-  { key: "annotate", label: "标注", icon: <FormOutlined />, needProject: true },
-  { key: "health", label: "体检", icon: <HeartOutlined />, needProject: true },
-  { key: "train", label: "训练", icon: <BarChartOutlined />, needProject: true },
-  { key: "eval", label: "评估", icon: <AimOutlined />, needProject: true },
-  { key: "deploy", label: "部署", icon: <CodeSandboxOutlined />, needProject: true },
-  { key: "team", label: "协作", icon: <TeamOutlined />, needProject: true },
+  { key: "home", label: t("项目"), icon: <HomeOutlined />, needProject: false },
+  { key: "data", label: t("数据"), icon: <PictureOutlined />, needProject: true },
+  { key: "annotate", label: t("标注"), icon: <FormOutlined />, needProject: true },
+  { key: "health", label: t("体检"), icon: <HeartOutlined />, needProject: true },
+  { key: "train", label: t("训练"), icon: <BarChartOutlined />, needProject: true },
+  { key: "eval", label: t("评估"), icon: <AimOutlined />, needProject: true },
+  { key: "deploy", label: t("部署"), icon: <CodeSandboxOutlined />, needProject: true },
+  { key: "team", label: t("协作"), icon: <TeamOutlined />, needProject: true },
 ];
 
 const TITLES: Record<PageKey, string> = {
-  home: "项目",
-  data: "数据",
-  annotate: "标注",
-  health: "数据体检",
-  train: "训练",
-  eval: "评估",
-  deploy: "部署",
-  team: "实时协作",
-  settings: "设置",
+  home: t("项目"),
+  data: t("数据"),
+  annotate: t("标注"),
+  health: t("数据体检"),
+  train: t("训练"),
+  eval: t("评估"),
+  deploy: t("部署"),
+  team: t("实时协作"),
+  settings: t("设置"),
 };
 
 export default function App() {
@@ -72,10 +73,13 @@ export default function App() {
           const key = "wulabel-update";
           notification.info({
             key,
-            message: `Wulabel 有新版本 v${u.latest}`,
+            message: t("Wulabel 有新版本 v{version}", { version: u.latest }),
             description: (
               <div>
-                <div>当前是 v{u.current}。{u.notes}</div>
+                <div>
+                  {t("当前是 v{version}。", { version: u.current })}
+                  {u.notes}
+                </div>
                 <Space style={{ marginTop: 10 }} wrap>
                   <Button
                     size="small"
@@ -85,10 +89,10 @@ export default function App() {
                       setUpd(u);
                     }}
                   >
-                    立即更新
+                    {t("立即更新")}
                   </Button>
                   <Button size="small" onClick={() => u.url && api.openUrl(u.url).catch(() => {})}>
-                    去下载
+                    {t("去下载")}
                   </Button>
                   <Button
                     size="small"
@@ -97,7 +101,7 @@ export default function App() {
                       notification.destroy(key);
                     }}
                   >
-                    这个版本不再提醒
+                    {t("这个版本不再提醒")}
                   </Button>
                 </Space>
               </div>
@@ -151,17 +155,17 @@ export default function App() {
       };
       notification.success({
         key,
-        message: "训练完成",
+        message: t("训练完成"),
         description: (
           <Space style={{ marginTop: 6 }} wrap>
             <Button size="small" type="primary" onClick={() => go("eval")}>
-              去评估
+              {t("去评估")}
             </Button>
             <Button size="small" onClick={() => go("annotate")}>
-              去预标注
+              {t("去预标注")}
             </Button>
             <Button size="small" onClick={() => go("train")}>
-              看训练记录
+              {t("看训练记录")}
             </Button>
           </Space>
         ),
@@ -208,12 +212,12 @@ export default function App() {
         </div>
         <div className="spacer" />
         <Button size="small" icon={<MessageOutlined />} loading={shooting} onClick={openFeedback} style={{ marginRight: 8 }}>
-          反馈
+          {t("反馈")}
         </Button>
         {project && (
           <Tooltip title={project.path}>
             <Button size="small" icon={<CloseOutlined />} onClick={close}>
-              关闭项目
+              {t("关闭项目")}
             </Button>
           </Tooltip>
         )}
@@ -235,7 +239,7 @@ export default function App() {
         <div className="gap" />
         <button className={page === "settings" ? "on" : ""} onClick={() => setPage("settings")}>
           <SettingOutlined />
-          设置
+          {t("设置")}
         </button>
       </nav>
 

@@ -11,6 +11,7 @@ use crate::db;
 use crate::error::AppResult;
 use crate::images;
 use crate::project::Project;
+use crate::t;
 
 /// 小于这个边长（像素）的框算极小框
 pub const TINY: f64 = 8.0;
@@ -192,7 +193,7 @@ pub fn rule_issues(gts: &[Gt]) -> (Vec<Issue>, Vec<(String, i64)>) {
                 bbox: Some(g.bbox),
                 score: None,
                 iou: None,
-                detail: format!("{:.0}×{:.0} 像素，模型很难学到", g.bbox[2], g.bbox[3]),
+                detail: t!("{w}×{h} 像素，模型很难学到", w = format!("{:.0}", g.bbox[2]), h = format!("{:.0}", g.bbox[3])),
                 key: String::new(),
             });
         }
@@ -205,7 +206,7 @@ pub fn rule_issues(gts: &[Gt]) -> (Vec<Issue>, Vec<(String, i64)>) {
                 bbox: Some(g.bbox),
                 score: None,
                 iou: None,
-                detail: "这个框没有类别，不会用于训练".into(),
+                detail: t!("这个框没有类别，不会用于训练"),
                 key: String::new(),
             });
         }
@@ -227,7 +228,7 @@ pub fn rule_issues(gts: &[Gt]) -> (Vec<Issue>, Vec<(String, i64)>) {
                             bbox: Some(list[j].bbox),
                             score: None,
                             iou: Some(v),
-                            detail: format!("和另一个同类框重叠 {:.0}%，可能重复标了", v * 100.0),
+                            detail: t!("和另一个同类框重叠 {pct}%，可能重复标了", pct = format!("{:.0}", v * 100.0)),
                             key: String::new(),
                         });
                     }
@@ -348,7 +349,7 @@ pub fn model_issues(gts: &[Gt], preds: &HashMap<i64, Vec<Pred>>, name_of: &dyn F
                                 bbox: Some(g.bbox),
                                 score: Some(pr.score),
                                 iou: Some(v),
-                                detail: format!("标的是「{}」，模型认为是「{}」（{:.2}）", name_of(g.label_id), name_of(Some(pr.label_id)), pr.score),
+                                detail: t!("标的是「{label}」，模型认为是「{pred}」（{score}）", label = name_of(g.label_id), pred = name_of(Some(pr.label_id)), score = format!("{:.2}", pr.score)),
                                 key: String::new(),
                             });
                         }
@@ -361,7 +362,7 @@ pub fn model_issues(gts: &[Gt], preds: &HashMap<i64, Vec<Pred>>, name_of: &dyn F
                             bbox: Some(g.bbox),
                             score: Some(pr.score),
                             iou: Some(v),
-                            detail: format!("和模型预测的框只重合 {:.0}%，框可能画偏或画得太大太小", v * 100.0),
+                            detail: t!("和模型预测的框只重合 {pct}%，框可能画偏或画得太大太小", pct = format!("{:.0}", v * 100.0)),
                             key: String::new(),
                         });
                     }
@@ -380,7 +381,7 @@ pub fn model_issues(gts: &[Gt], preds: &HashMap<i64, Vec<Pred>>, name_of: &dyn F
                     bbox: Some(g.bbox),
                     score: None,
                     iou: None,
-                    detail: format!("标了「{}」，但模型在这里什么都没看到，可能标错了", name_of(g.label_id)),
+                    detail: t!("标了「{label}」，但模型在这里什么都没看到，可能标错了", label = name_of(g.label_id)),
                     key: String::new(),
                 });
             }
@@ -398,7 +399,7 @@ fn missing(image_id: i64, p: &Pred, name_of: &dyn Fn(Option<i64>) -> String) -> 
         bbox: Some(p.bbox),
         score: Some(p.score),
         iou: None,
-        detail: format!("模型认为这里有「{}」（{:.2}），但没有标注", name_of(Some(p.label_id)), p.score),
+        detail: t!("模型认为这里有「{label}」（{score}），但没有标注", label = name_of(Some(p.label_id)), score = format!("{:.2}", p.score)),
         key: String::new(),
     }
 }
@@ -409,31 +410,30 @@ fn suggestions(r: &HealthReport) -> Vec<String> {
     let max = r.classes.iter().map(|c| c.boxes).max().unwrap_or(0);
     for c in &r.classes {
         if max >= 20 && c.boxes * 5 < max {
-            out.push(format!(
-                "「{}」只有 {} 个框，最多的类别有 {} 个。样本太少模型容易漏检，建议再标 {} 个以上。",
-                c.name,
-                c.boxes,
-                max,
-                (max / 3 - c.boxes).max(20)
+            out.push(t!("「{name}」只有 {n} 个框，最多的类别有 {max} 个。样本太少模型容易漏检，建议再标 {more} 个以上。",
+                name = c.name,
+                n = c.boxes,
+                max = max,
+                more = (max / 3 - c.boxes).max(20)
             ));
         } else if c.boxes > 0 && c.boxes < 30 {
-            out.push(format!("「{}」只有 {} 个框，建议每个类别至少 100 个框再训练。", c.name, c.boxes));
+            out.push(t!("「{name}」只有 {n} 个框，建议每个类别至少 100 个框再训练。", name = c.name, n = c.boxes));
         }
     }
     let tiny = count("tiny_box");
     if tiny > 0 {
-        out.push(format!("{tiny} 个框短边小于 {TINY:.0} 像素。远处的小目标建议在训练时用更大的输入尺寸（960 或 1280），实在看不清的可以删掉。"));
+        out.push(t!("{n} 个框短边小于 {px} 像素。远处的小目标建议在训练时用更大的输入尺寸（960 或 1280），实在看不清的可以删掉。", n = tiny, px = format!("{TINY:.0}")));
     }
     let dup: usize = r.dup_groups.iter().map(|g| g.len() - 1).sum();
     if dup > 0 {
-        out.push(format!("有 {} 组近似重复的图片（多出 {dup} 张）。重复图片分到验证集会让评估结果虚高，建议每组只留一张。", r.dup_groups.len()));
+        out.push(t!("有 {groups} 组近似重复的图片（多出 {dup} 张）。重复图片分到验证集会让评估结果虚高，建议每组只留一张。", groups = r.dup_groups.len(), dup = dup));
     }
     let (m, w) = (count("missing"), count("wrong_class"));
     if m + w > 0 {
-        out.push(format!("模型发现 {m} 处疑似漏标、{w} 处疑似标错类别。修正后重新训练，效果通常会明显提升。"));
+        out.push(t!("模型发现 {m} 处疑似漏标、{w} 处疑似标错类别。修正后重新训练，效果通常会明显提升。", m = m, w = w));
     }
     if r.run_id.is_none() && r.images_checked > 0 {
-        out.push("训练一个模型后再体检，可以自动找出漏标、错标和框画偏的地方。".into());
+        out.push(t!("训练一个模型后再体检，可以自动找出漏标、错标和框画偏的地方。"));
     }
     out
 }
@@ -494,7 +494,7 @@ pub fn run(
     let (mut issues, sizes) = rule_issues(&gts);
     let classes = class_stats(p)?;
     let names: HashMap<i64, String> = classes.iter().map(|c| (c.label_id, c.name.clone())).collect();
-    let name_of = |id: Option<i64>| id.and_then(|i| names.get(&i).cloned()).unwrap_or_else(|| "未分类".into());
+    let name_of = |id: Option<i64>| id.and_then(|i| names.get(&i).cloned()).unwrap_or_else(|| t!("未分类"));
     let dup_groups = duplicate_groups(p, progress)?;
     if let Some(f) = predict {
         let preds = f(&ids)?;

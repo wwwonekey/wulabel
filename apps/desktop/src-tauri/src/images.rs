@@ -13,6 +13,7 @@ use serde::Serialize;
 use crate::db;
 use crate::error::{msg, AppResult};
 use crate::project::{Project, IMAGES_DIR};
+use crate::t;
 
 pub const IMAGE_EXTS: [&str; 7] = ["jpg", "jpeg", "png", "bmp", "webp", "tif", "tiff"];
 const THUMB_SIZE: u32 = 256;
@@ -364,7 +365,7 @@ pub fn locate(project: &Project, id: i64) -> AppResult<(String, String)> {
     let conn = project.conn.lock();
     conn.query_row("SELECT path, hash FROM images WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
         .optional()?
-        .ok_or_else(|| msg(format!("图片不存在：{id}")))
+        .ok_or_else(|| msg(t!("图片不存在：{id}", id = id)))
 }
 
 #[cfg(test)]

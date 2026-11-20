@@ -15,6 +15,7 @@ use crate::error::{msg, AppResult};
 use crate::images;
 use crate::project::{Project, IMAGES_DIR};
 use crate::runtime::{command, Runtime};
+use crate::t;
 
 pub const VIDEO_EXTS: [&str; 9] = ["mp4", "mov", "mkv", "avi", "webm", "flv", "wmv", "m4v", "ts"];
 
@@ -76,14 +77,14 @@ pub fn extract(
 ) -> AppResult<ExtractResult> {
     let videos = collect(paths);
     if videos.is_empty() {
-        return Err(msg("没有找到视频（支持 mp4、mov、mkv、avi、webm 等）"));
+        return Err(msg(t!("没有找到视频（支持 mp4、mov、mkv、avi、webm 等）")));
     }
     let fps = if every > 0.0 { 1.0 / every } else { 1.0 };
 
     // 1. 准备 ffmpeg（没有就下载，带进度）
     let ffmpeg = rt.ffmpeg(
         log,
-        &|_f, d, t, s| progress("download", d, t, s, "正在下载 ffmpeg（首次使用，约 90MB）"),
+        &|_f, d, t, s| progress("download", d, t, s, &t!("正在下载 ffmpeg（首次使用，约 90MB）")),
     )?;
 
     // 2. 估算总帧数（用于进度条），再逐个视频抽帧到临时目录
@@ -122,10 +123,10 @@ pub fn extract(
     let frame_count = frames.len();
     if frames.is_empty() {
         let _ = fs::remove_dir_all(&frame_dir);
-        return Err(msg("没有抽到任何帧，请确认视频能正常播放"));
+        return Err(msg(t!("没有抽到任何帧，请确认视频能正常播放")));
     }
     let imp = images::import(project, &frames, true, &|done, total| {
-        progress("import", done as u64, total as u64, 0, "正在导入抽出的帧");
+        progress("import", done as u64, total as u64, 0, &t!("正在导入抽出的帧"));
     });
     let _ = fs::remove_dir_all(&frame_dir);
     let imp = imp?;
@@ -168,7 +169,7 @@ fn extract_one(
     c.args(["-progress", "pipe:1", "-nostats"]).arg(&pattern);
     c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = c.spawn().map_err(|e| msg(format!("无法启动 ffmpeg：{e}")))?;
+    let mut child = c.spawn().map_err(|e| msg(t!("无法启动 ffmpeg：{e}", e = e)))?;
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
     let err_buf = std::sync::Mutex::new(String::new());
@@ -193,7 +194,7 @@ fn extract_one(
         let err = err_buf.lock().unwrap();
         let tail: Vec<&str> = err.lines().filter(|l| !l.trim().is_empty()).collect();
         let tail = tail[tail.len().saturating_sub(4)..].join("\n");
-        return Err(msg(format!("抽帧失败（{}）：{tail}", video_name(video))));
+        return Err(msg(t!("抽帧失败（{name}）：{tail}", name = video_name(video), tail = tail)));
     }
     // 以实际落盘的文件数为准
     let produced = fs::read_dir(out_dir)?
@@ -290,16 +291,16 @@ fn stream_input_args(c: &mut std::process::Command, ffmpeg: &Path, url: &str, ti
 }
 
 /// 把 ffmpeg 的常见报错换成好懂的话
-fn explain_stream_error(text: &str) -> Option<&'static str> {
+fn explain_stream_error(text: &str) -> Option<String> {
     let t = text.to_ascii_lowercase();
     if t.contains("401") || t.contains("unauthorized") {
-        Some("账号或密码不对（地址格式：rtsp://账号:密码@IP:端口/路径，密码里有 @ # 等符号要换成 %40 %23）")
+        Some(t!("账号或密码不对（地址格式：rtsp://账号:密码@IP:端口/路径，密码里有 @ # 等符号要换成 %40 %23）"))
     } else if t.contains("404") {
-        Some("地址里的路径不对，查一下摄像头或录像机说明书里的 RTSP 地址格式")
+        Some(t!("地址里的路径不对，查一下摄像头或录像机说明书里的 RTSP 地址格式"))
     } else if t.contains("connection refused") || t.contains("10061") {
-        Some("对方拒绝连接：IP 或端口不对，或者摄像头没开 RTSP")
+        Some(t!("对方拒绝连接：IP 或端口不对，或者摄像头没开 RTSP"))
     } else if t.contains("461") || t.contains("unsupported transport") {
-        Some("摄像头不支持这种传输方式")
+        Some(t!("摄像头不支持这种传输方式"))
     } else {
         None
     }
@@ -312,7 +313,7 @@ fn probe_once(ffmpeg: &Path, url: &str, udp: bool) -> Result<String, (bool, Stri
     stream_input_args(&mut c, ffmpeg, url, 8_000_000, udp);
     c.arg("-i").arg(url);
     c.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
-    let mut child = c.spawn().map_err(|e| (false, format!("无法启动 ffmpeg：{e}")))?;
+    let mut child = c.spawn().map_err(|e| (false, t!("无法启动 ffmpeg：{e}", e = e)))?;
     let err = child.stderr.take().unwrap();
     let buf = Arc::new(Mutex::new(String::new()));
     let b2 = buf.clone();
@@ -394,9 +395,9 @@ fn parse_stream_info(text: &str) -> StreamInfo {
 pub fn probe_stream(rt: &Runtime, url: &str, log: &(dyn Fn(String) + Sync), progress: Progress) -> AppResult<StreamInfo> {
     let url = url.trim();
     if !is_stream_url(url) {
-        return Err(msg("请填写视频流地址（rtsp:// 或 http(s):// 开头）"));
+        return Err(msg(t!("请填写视频流地址（rtsp:// 或 http(s):// 开头）")));
     }
-    let ffmpeg = rt.ffmpeg(log, &|_f, d, t, s| progress("download", d, t, s, "正在下载 ffmpeg（首次使用，约 90MB）"))?;
+    let ffmpeg = rt.ffmpeg(log, &|_f, d, t, s| progress("download", d, t, s, &t!("正在下载 ffmpeg（首次使用，约 90MB）")))?;
     let rtsp = url.starts_with("rtsp");
     let (timed_out, text) = match probe_once(&ffmpeg, url, false) {
         Ok(text) => {
@@ -406,8 +407,10 @@ pub fn probe_stream(rt: &Runtime, url: &str, log: &(dyn Fn(String) + Sync), prog
         Err(e) => e,
     };
     // TCP 不通再试 UDP（有的摄像头、录像机不支持 RTSP over TCP）；账号密码、路径错了就不用试了
-    if rtsp && !matches!(explain_stream_error(&text), Some(s) if !s.contains("传输方式")) {
-        log("TCP 方式连不上，改用 UDP 再试一次".into());
+    let lower = text.to_ascii_lowercase();
+    let transport_issue = lower.contains("461") || lower.contains("unsupported transport");
+    if rtsp && (transport_issue || explain_stream_error(&text).is_none()) {
+        log(t!("TCP 方式连不上，改用 UDP 再试一次"));
         if let Ok(t2) = probe_once(&ffmpeg, url, true) {
             let mut list = RTSP_UDP.lock().unwrap();
             if !list.iter().any(|u| u == url) {
@@ -417,16 +420,14 @@ pub fn probe_stream(rt: &Runtime, url: &str, log: &(dyn Fn(String) + Sync), prog
         }
     }
     if let Some(why) = explain_stream_error(&text) {
-        return Err(msg(format!("读不到视频流：{why}")));
+        return Err(msg(t!("读不到视频流：{why}", why = why)));
     }
     if timed_out {
-        return Err(msg(
-            "连接超时：等了十几秒没收到画面。确认 IP、端口（RTSP 一般是 554）、账号密码都对，这台电脑和摄像头在同一个网络里；可以先用 VLC 打开同一个地址试试",
-        ));
+        return Err(msg(t!("连接超时：等了十几秒没收到画面。确认 IP、端口（RTSP 一般是 554）、账号密码都对，这台电脑和摄像头在同一个网络里；可以先用 VLC 打开同一个地址试试")));
     }
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     let tail = lines[lines.len().saturating_sub(3)..].join("；");
-    Err(msg(format!("读不到视频流：{}", if tail.is_empty() { "地址可能不对".to_string() } else { tail })))
+    Err(msg(t!("读不到视频流：{why}", why = if tail.is_empty() { t!("地址可能不对") } else { tail })))
 }
 
 /// 采集文件夹 / 文件名前缀：地址里的主机名 + 开始时间，例如 119.3.176.149_20261110_153012
@@ -465,10 +466,10 @@ pub fn extract_stream(
 ) -> AppResult<ExtractResult> {
     let url = url.trim();
     if !is_stream_url(url) {
-        return Err(msg("请填写视频流地址（rtsp:// 或 http(s):// 开头）"));
+        return Err(msg(t!("请填写视频流地址（rtsp:// 或 http(s):// 开头）")));
     }
     let fps = if every > 0.0 { 1.0 / every } else { 1.0 };
-    let ffmpeg = rt.ffmpeg(log, &|_f, d, t, s| progress("download", d, t, s, "正在下载 ffmpeg（首次使用，约 90MB）"))?;
+    let ffmpeg = rt.ffmpeg(log, &|_f, d, t, s| progress("download", d, t, s, &t!("正在下载 ffmpeg（首次使用，约 90MB）")))?;
 
     // 一次采集一个文件夹，放在项目 images/ 下，名字带来源和时间，方便找
     let tag = stream_tag(url);
@@ -506,7 +507,7 @@ pub fn extract_stream(
 
     let mut child = c.spawn().map_err(|e| {
         let _ = fs::remove_dir_all(&cap_dir);
-        msg(format!("无法启动 ffmpeg：{e}"))
+        msg(t!("无法启动 ffmpeg：{e}", e = e))
     })?;
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
@@ -611,9 +612,9 @@ pub fn extract_stream(
         let lines: Vec<&str> = e.lines().filter(|l| !l.trim().is_empty()).collect();
         let tail = lines[lines.len().saturating_sub(4)..].join("\n");
         return Err(msg(if tail.is_empty() {
-            "没抽到任何帧，确认视频流地址能正常播放".to_string()
+            t!("没抽到任何帧，确认视频流地址能正常播放")
         } else {
-            format!("采集失败：{tail}")
+            t!("采集失败：{tail}", tail = tail)
         }));
     }
     res.frames = frame_count;

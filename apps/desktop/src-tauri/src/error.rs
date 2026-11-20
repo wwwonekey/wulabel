@@ -16,10 +16,17 @@ pub enum AppError {
     Tauri(#[from] tauri::Error),
 }
 
-// 前端拿到的错误就是一段可直接展示的中文
+// 前端拿到的错误就是一段可直接展示的话（按界面语言；Msg 在创建时已经翻译过）
 impl Serialize for AppError {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&self.to_string())
+        let text = match self {
+            AppError::Db(e) => crate::t!("数据库错误：{e}", e = e),
+            AppError::Io(e) => crate::t!("文件读写错误：{e}", e = e),
+            AppError::Json(e) => crate::t!("JSON 解析错误：{e}", e = e),
+            AppError::Image(e) => crate::t!("图片解码失败：{e}", e = e),
+            _ => self.to_string(),
+        };
+        s.serialize_str(&text)
     }
 }
 

@@ -5,36 +5,39 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { AnonymizeConfig, api, DatasetFormat, errText, ExportResult, ImportProgress, ProjectInfo, SplitSummary, Task, VersionInfo } from "../api";
 import { prefs } from "../store";
+import { t } from "../i18n";
 import AnonymizeOptions from "./AnonymizeOptions";
 
 /** 各任务能导出的格式 */
 const FORMATS: Record<Task, { value: DatasetFormat; name: string; desc: string }[]> = {
   detect: [
-    { value: "yolo", name: "YOLO", desc: "images + labels + data.yaml，Ultralytics 等直接可用" },
-    { value: "coco", name: "COCO", desc: "annotations/instances_*.json，通用格式" },
+    { value: "yolo", name: "YOLO", desc: t("images + labels + data.yaml，Ultralytics 等直接可用") },
+    { value: "coco", name: "COCO", desc: t("annotations/instances_*.json，通用格式") },
     { value: "voc", name: "VOC", desc: "Annotations/*.xml + JPEGImages" },
   ],
   segment: [
-    { value: "yolo", name: "YOLO-seg", desc: "每行一个多边形（归一化），Ultralytics 分割直接可用" },
-    { value: "coco", name: "COCO", desc: "带 segmentation 多边形，通用格式" },
-    { value: "voc", name: "VOC", desc: "只有外接框（VOC 不支持多边形）" },
+    { value: "yolo", name: "YOLO-seg", desc: t("每行一个多边形（归一化），Ultralytics 分割直接可用") },
+    { value: "coco", name: "COCO", desc: t("带 segmentation 多边形，通用格式") },
+    { value: "voc", name: "VOC", desc: t("只有外接框（VOC 不支持多边形）") },
   ],
   pose: [
-    { value: "yolo", name: "YOLO-pose", desc: "框 + 关键点，data.yaml 带 kpt_shape 和 flip_idx" },
-    { value: "coco", name: "COCO 关键点", desc: "keypoints + skeleton，通用格式" },
-    { value: "voc", name: "VOC", desc: "只有目标框（VOC 不支持关键点）" },
+    { value: "yolo", name: "YOLO-pose", desc: t("框 + 关键点，data.yaml 带 kpt_shape 和 flip_idx") },
+    { value: "coco", name: t("COCO 关键点"), desc: t("keypoints + skeleton，通用格式") },
+    { value: "voc", name: "VOC", desc: t("只有目标框（VOC 不支持关键点）") },
   ],
-  classify: [{ value: "cls", name: "分类文件夹", desc: "train/类别/图片.jpg，ImageNet、YOLO-cls 通用" }],
+  classify: [{ value: "cls", name: t("分类文件夹"), desc: t("train/类别/图片.jpg，ImageNet、YOLO-cls 通用") }],
 };
 
 const summaryText = (task: Task, r: ExportResult) =>
   task === "classify"
-    ? `${r.images} 张图片、${r.classes.length} 个类别`
+    ? t("{images} 张图片、{classes} 个类别", { images: r.images, classes: r.classes.length })
     : task === "segment"
-      ? `${r.images} 张图片、${r.polys} 个轮廓${r.boxes ? `、${r.boxes} 个框` : ""}、${r.classes.length} 个类别`
+      ? r.boxes
+        ? t("{images} 张图片、{polys} 个轮廓、{boxes} 个框、{classes} 个类别", { images: r.images, polys: r.polys, boxes: r.boxes, classes: r.classes.length })
+        : t("{images} 张图片、{polys} 个轮廓、{classes} 个类别", { images: r.images, polys: r.polys, classes: r.classes.length })
       : task === "pose"
-        ? `${r.images} 张图片、${r.kpts} 个关键点目标、${r.classes.length} 个类别`
-        : `${r.images} 张图片、${r.boxes} 个框、${r.classes.length} 个类别`;
+        ? t("{images} 张图片、{kpts} 个关键点目标、{classes} 个类别", { images: r.images, kpts: r.kpts, classes: r.classes.length })
+        : t("{images} 张图片、{boxes} 个框、{classes} 个类别", { images: r.images, boxes: r.boxes, classes: r.classes.length });
 
 const stamp = () => {
   const d = new Date();
@@ -83,14 +86,14 @@ export default function ExportModal({
 
   const resplit = () => {
     modal.confirm({
-      title: "按当前比例重新划分全部图片？",
-      content: "已有的训练/验证/测试划分会被打乱重排。之前训练的结果将和新划分不可直接比较。",
-      okText: "重新划分",
-      cancelText: "取消",
+      title: t("按当前比例重新划分全部图片？"),
+      content: t("已有的训练/验证/测试划分会被打乱重排。之前训练的结果将和新划分不可直接比较。"),
+      okText: t("重新划分"),
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           setSummary(await api.assignSplits(r(), true));
-          message.success("已重新划分");
+          message.success(t("已重新划分"));
         } catch (e) {
           message.error(errText(e));
         }
@@ -100,15 +103,15 @@ export default function ExportModal({
 
   const run = async () => {
     if (!parent) {
-      message.warning("请选择导出位置");
+      message.warning(t("请选择导出位置"));
       return;
     }
     if (!name.trim()) {
-      message.warning("请填写文件夹名");
+      message.warning(t("请填写文件夹名"));
       return;
     }
     if (anonymize && !anonymize.labels.length && !anonymize.faces && !anonymize.plates) {
-      message.warning("打码：请选择要打码的类别，或勾选自动找人脸 / 车牌");
+      message.warning(t("打码：请选择要打码的类别，或勾选自动找人脸 / 车牌"));
       return;
     }
     setProgress({ done: 0, total: 0 });
@@ -122,12 +125,12 @@ export default function ExportModal({
       prefs.set("exportParent", parent);
       onClose();
       modal.success({
-        title: "导出完成",
+        title: t("导出完成"),
         content: (
           <div>
             <div>{summaryText(project.task, res)}</div>
             <div className="muted">
-              训练 {res.train} · 验证 {res.val} · 测试 {res.test}
+              {t("训练 {train} · 验证 {val} · 测试 {test}", { train: res.train, val: res.val, test: res.test })}
             </div>
             <div className="dim" style={{ wordBreak: "break-all", marginTop: 6 }}>
               {res.outDir}
@@ -147,18 +150,18 @@ export default function ExportModal({
 
   return (
     <Modal
-      title={version ? `导出数据集版本「${version.name}」` : "导出数据集"}
+      title={version ? t("导出数据集版本「{name}」", { name: version.name }) : t("导出数据集")}
       open={visible}
       onCancel={onClose}
       onOk={run}
-      okText="导出"
-      cancelText="取消"
+      okText={t("导出")}
+      cancelText={t("取消")}
       confirmLoading={!!progress}
       width={600}
       destroyOnHidden
     >
       <Form layout="vertical" style={{ marginTop: 12 }}>
-        <Form.Item label="格式">
+        <Form.Item label={t("格式")}>
           <Radio.Group value={format} onChange={(e) => setFormat(e.target.value)}>
             <Space direction="vertical">
               {formats.map((f) => (
@@ -170,34 +173,39 @@ export default function ExportModal({
           </Radio.Group>
         </Form.Item>
         <Form.Item
-          label="范围"
+          label={t("范围")}
           extra={
             project.task === "classify"
-              ? "未标注和已跳过的图片不导出；没打类别的图片不导出。"
-              : "未标注和已跳过的图片不导出；已审核但没有标注的图片会作为负样本导出。"
+              ? t("未标注和已跳过的图片不导出；没打类别的图片不导出。")
+              : t("未标注和已跳过的图片不导出；已审核但没有标注的图片会作为负样本导出。")
           }
         >
           <Checkbox checked={onlyReviewed} onChange={(e) => setOnlyReviewed(e.target.checked)}>
-            只导出已审核的图片
+            {t("只导出已审核的图片")}
           </Checkbox>
         </Form.Item>
         {version ? (
-          <Form.Item label="划分">
+          <Form.Item label={t("划分")}>
             <span className="muted">
-              版本里固定的划分：训练 {version.train} · 验证 {version.val} · 测试 {version.test}（共 {version.images} 张）
+              {t("版本里固定的划分：训练 {train} · 验证 {val} · 测试 {test}（共 {n} 张）", {
+                train: version.train,
+                val: version.val,
+                test: version.test,
+                n: version.images,
+              })}
             </span>
           </Form.Item>
         ) : (
         <Form.Item
-          label="训练 / 验证 / 测试 比例（%）"
+          label={t("训练 / 验证 / 测试 比例（%）")}
           extra={
             summary && (
               <span>
-                当前可导出 {total} 张：训练 {summary.train} · 验证 {summary.val} · 测试 {summary.test}
-                {summary.unset > 0 && ` · 未划分 ${summary.unset}（导出时按上面的比例分配）`}
+                {t("当前可导出 {total} 张：训练 {train} · 验证 {val} · 测试 {test}", { total, train: summary.train, val: summary.val, test: summary.test })}
+                {summary.unset > 0 && t(" · 未划分 {n}（导出时按上面的比例分配）", { n: summary.unset })}
                 {total > 0 && (
                   <Button type="link" size="small" onClick={resplit}>
-                    全部重新划分
+                    {t("全部重新划分")}
                   </Button>
                 )}
               </span>
@@ -211,7 +219,7 @@ export default function ExportModal({
                 min={i === 0 ? 1 : 0}
                 max={100}
                 value={ratios[i]}
-                addonBefore={["训练", "验证", "测试"][i]}
+                addonBefore={[t("训练"), t("验证"), t("测试")][i]}
                 style={{ width: 150 }}
                 onChange={(v) => {
                   const next = [...ratios] as [number, number, number];
@@ -223,22 +231,22 @@ export default function ExportModal({
           </Space>
         </Form.Item>
         )}
-        <Form.Item label="导出到" extra={outDir && <span style={{ wordBreak: "break-all" }}>{outDir}</span>}>
+        <Form.Item label={t("导出到")} extra={outDir && <span style={{ wordBreak: "break-all" }}>{outDir}</span>}>
           <Space.Compact style={{ width: "100%" }}>
-            <Input value={parent} placeholder="选择存放位置" onChange={(e) => setParent(e.target.value)} />
+            <Input value={parent} placeholder={t("选择存放位置")} onChange={(e) => setParent(e.target.value)} />
             <Button
               icon={<FolderOpenOutlined />}
               onClick={async () => {
-                const d = await open({ directory: true, title: "选择导出位置" });
+                const d = await open({ directory: true, title: t("选择导出位置") });
                 if (typeof d === "string") setParent(d);
               }}
             >
-              浏览
+              {t("浏览")}
             </Button>
           </Space.Compact>
-          <Input style={{ marginTop: 8 }} value={name} onChange={(e) => setName(e.target.value)} addonBefore="文件夹名" />
+          <Input style={{ marginTop: 8 }} value={name} onChange={(e) => setName(e.target.value)} addonBefore={t("文件夹名")} />
         </Form.Item>
-        <Form.Item label="打码">
+        <Form.Item label={t("打码")}>
           <AnonymizeOptions task={project.task} value={anonymize} onChange={setAnonymize} />
         </Form.Item>
       </Form>

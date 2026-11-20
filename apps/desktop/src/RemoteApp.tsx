@@ -6,6 +6,7 @@ import { api, errText, MemberStats, ROLE_NAMES, ShareEvent, taskName, Whoami } f
 import { useApp } from "./store";
 import { clearToken, connectLive, disconnectLive, getToken, listen, onAuthLost, setToken } from "./transport";
 import Annotate from "./pages/Annotate";
+import { t } from "./i18n";
 
 type Phase = "loading" | "login" | "app" | "closed";
 
@@ -53,10 +54,10 @@ export default function RemoteApp() {
       .shareInfo()
       .then((i) => {
         setInfo(i);
-        document.title = `${i.project} · Wulabel 协作`;
+        document.title = t("{project} · Wulabel 协作", { project: i.project });
       })
       .catch(() => {});
-    onAuthLost(() => logout("登录已失效，请重新登录"));
+    onAuthLost(() => logout(t("登录已失效，请重新登录")));
     if (!getToken()) {
       setPhase("login");
       return;
@@ -77,7 +78,7 @@ export default function RemoteApp() {
     const subs = [
       listen<ShareEvent>("share-event", (e) => {
         const ev = e.payload;
-        if (ev.kind === "kick" && ev.memberId === team.me?.id) logout("发起人把你的账号停用或改了密码，请重新登录");
+        if (ev.kind === "kick" && ev.memberId === team.me?.id) logout(t("发起人把你的账号停用或改了密码，请重新登录"));
         else if (ev.kind === "closed") {
           disconnectLive();
           setPhase("closed");
@@ -106,8 +107,8 @@ export default function RemoteApp() {
         .then((s) => setToday(s.today))
         .catch(() => {});
     load();
-    const t = window.setInterval(load, 60000);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(load, 60000);
+    return () => window.clearInterval(timer);
   }, [phase]);
 
   const submit = async (v: { name: string; password: string; remember: boolean }) => {
@@ -136,9 +137,9 @@ export default function RemoteApp() {
       <div className="remote-center">
         <Result
           status="info"
-          title="发起人已经停止了协作"
-          subTitle="你的标注都已经保存在发起人那里。发起人重新开启后，刷新这个页面就能继续。"
-          extra={<Button onClick={() => window.location.reload()}>刷新</Button>}
+          title={t("发起人已经停止了协作")}
+          subTitle={t("你的标注都已经保存在发起人那里。发起人重新开启后，刷新这个页面就能继续。")}
+          extra={<Button onClick={() => window.location.reload()}>{t("刷新")}</Button>}
         />
       </div>
     );
@@ -149,33 +150,31 @@ export default function RemoteApp() {
       <div className="remote-center">
         <div className="remote-login">
           <div className="logo" style={{ fontSize: 20, marginBottom: 4 }}>
-            <b>◆</b> Wulabel 协作
+            <b>◆</b> {t("Wulabel 协作")}
           </div>
           <div className="muted" style={{ marginBottom: 20 }}>
             {info ? (
-              <>
-                项目「{info.project}」· 发起人 {info.hostName}
-              </>
+              t("项目「{project}」· 发起人 {host}", { project: info.project, host: info.hostName })
             ) : (
-              "连接发起人的 Wulabel…"
+              t("连接发起人的 Wulabel…")
             )}
           </div>
           <Form layout="vertical" onFinish={submit} initialValues={{ remember: true }}>
-            <Form.Item name="name" label="名字" rules={[{ required: true, message: "请填名字" }]}>
-              <Input prefix={<UserOutlined />} placeholder="发起人给你设的名字" autoFocus />
+            <Form.Item name="name" label={t("名字")} rules={[{ required: true, message: t("请填名字") }]}>
+              <Input prefix={<UserOutlined />} placeholder={t("发起人给你设的名字")} autoFocus />
             </Form.Item>
-            <Form.Item name="password" label="密码" rules={[{ required: true, message: "请填密码" }]}>
+            <Form.Item name="password" label={t("密码")} rules={[{ required: true, message: t("请填密码") }]}>
               <Input.Password prefix={<LockOutlined />} />
             </Form.Item>
             <Form.Item name="remember" valuePropName="checked">
-              <Checkbox>记住登录（自己的电脑才勾）</Checkbox>
+              <Checkbox>{t("记住登录（自己的电脑才勾）")}</Checkbox>
             </Form.Item>
             <Button type="primary" htmlType="submit" block loading={busy}>
-              登录
+              {t("登录")}
             </Button>
           </Form>
           <div className="dim" style={{ fontSize: 12, marginTop: 16 }}>
-            没有账号或忘了密码，请联系发起人在 Wulabel 的「协作」页添加或重设。
+            {t("没有账号或忘了密码，请联系发起人在 Wulabel 的「协作」页添加或重设。")}
           </div>
         </div>
       </div>
@@ -183,11 +182,13 @@ export default function RemoteApp() {
   }
 
   const me = team.me;
+  // 数字要加粗，先整句翻译再从 {n} 处分开
+  const submittedText = t("今天提交 {n} 张").split("{n}");
   return (
     <div className="app remote">
       <header className="top">
         <div className="logo">
-          <b>◆</b> Wulabel <span className="dim" style={{ fontSize: 11, fontWeight: 400, marginLeft: 6 }}>协作</span>
+          <b>◆</b> Wulabel <span className="dim" style={{ fontSize: 11, fontWeight: 400, marginLeft: 6 }}>{t("协作")}</span>
         </div>
         <div className="crumb">
           {project?.name} <span className="dim">· {project ? taskName(project.task) : ""}</span>
@@ -195,13 +196,19 @@ export default function RemoteApp() {
         <div className="spacer" />
         {live !== "connected" && (
           <Tag color="warning" style={{ marginRight: 8 }}>
-            实时连接断开，正在重连…
+            {t("实时连接断开，正在重连…")}
           </Tag>
         )}
         {today && (
-          <Tooltip title={`分给我 ${me?.assigned ?? today.assigned} 张 · 今天被通过 ${today.passed}、被打回 ${today.rejected}`}>
+          <Tooltip title={t("分给我 {assigned} 张 · 今天被通过 {passed}、被打回 {rejected}", {
+            assigned: me?.assigned ?? today.assigned,
+            passed: today.passed,
+            rejected: today.rejected,
+          })}>
             <span className="muted" style={{ fontSize: 12, marginRight: 12 }}>
-              今天提交 <b>{today.submitted}</b> 张
+              {submittedText[0]}
+              <b>{today.submitted}</b>
+              {submittedText[1]}
             </span>
           </Tooltip>
         )}
@@ -209,14 +216,14 @@ export default function RemoteApp() {
           {me?.name} <span className="dim">· {me ? ROLE_NAMES[me.role] : ""}</span>
         </span>
         <Button size="small" icon={<LogoutOutlined />} onClick={() => logout()}>
-          退出
+          {t("退出")}
         </Button>
       </header>
       <main className="remote-main">
         {project ? (
           <Annotate project={project} />
         ) : (
-          <Alert type="warning" showIcon message="读取项目失败，请刷新页面" style={{ margin: 24 }} />
+          <Alert type="warning" showIcon message={t("读取项目失败，请刷新页面")} style={{ margin: 24 }} />
         )}
       </main>
     </div>

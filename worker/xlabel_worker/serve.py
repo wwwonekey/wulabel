@@ -32,6 +32,7 @@ from torchvision.transforms import functional as F
 from . import models
 from .assist import mask_to_poly
 from .data import cls_preprocess, load_image
+from .i18n import tr
 from .protocol import emit
 
 
@@ -213,6 +214,6 @@ def run() -> None:
             elif cmd == "quit":
                 break
             else:
-                emit("error", msg=f"未知命令：{cmd}")
+                emit("error", msg=tr("未知命令：{cmd}", cmd=cmd))
         except Exception as e:
             emit("error", msg=str(e))

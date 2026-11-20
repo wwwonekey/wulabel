@@ -16,3 +16,4 @@ samples/
 
 # 打好的安装包（发布用，不进仓库）
 release/
+i18n-missing/
