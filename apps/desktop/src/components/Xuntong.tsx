@@ -5,11 +5,12 @@ import { CloudUploadOutlined } from "@ant-design/icons";
 import { AiModel, api, errText, ImportProgress, ProjectInfo, RunInfo, XtModel, XtPullResult, XtUploadResult } from "../api";
 import { listen } from "../transport";
 import { useApp } from "../store";
+import { t } from "../i18n";
 
 const STATUS: Record<string, { text: string; color: string }> = {
-  pending: { text: "校验中", color: "processing" },
-  ready: { text: "校验通过", color: "success" },
-  failed: { text: "校验失败", color: "error" },
+  pending: { text: t("校验中"), color: "processing" },
+  ready: { text: t("校验通过"), color: "success" },
+  failed: { text: t("校验失败"), color: "error" },
 };
 
 /** 部署页「导出模型」里：上传到巡瞳 AI 平台 */
@@ -42,8 +43,8 @@ export function XuntongUpload({ run, project }: { run: RunInfo; project: Project
   const waiting = result?.status === "pending" || !!list?.some((m) => m.status === "pending");
   useEffect(() => {
     if (!waiting) return;
-    const t = window.setInterval(loadList, 5000);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(loadList, 5000);
+    return () => window.clearInterval(timer);
   }, [waiting, loadList]);
 
   const upload = async () => {
@@ -64,11 +65,11 @@ export function XuntongUpload({ run, project }: { run: RunInfo; project: Project
 
   const remove = (m: XtModel) =>
     modal.confirm({
-      title: `删除平台上的模型「${m.name}」？`,
-      content: "平台上用这个模型的摄像头会停止识别。托管名额满了时，可以先删旧版本再上传新的。",
-      okText: "删除",
+      title: t("删除平台上的模型「{name}」？", { name: m.name }),
+      content: t("平台上用这个模型的摄像头会停止识别。托管名额满了时，可以先删旧版本再上传新的。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await api.xtDeleteModel(String(m.id));
@@ -85,17 +86,17 @@ export function XuntongUpload({ run, project }: { run: RunInfo; project: Project
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div style={{ marginBottom: 8 }}>
-        <b>上传到巡瞳 AI 平台</b>{" "}
-        <span className="muted">· 用你在「设置 → 巡瞳 AI」填的账号，上传后在平台上接摄像头、配告警，不用自己部署服务</span>
+        <b>{t("上传到巡瞳 AI 平台")}</b>{" "}
+        <span className="muted">· {t("用你在「设置 → 巡瞳 AI」填的账号，上传后在平台上接摄像头、配告警，不用自己部署服务")}</span>
       </div>
       {!supported ? (
-        <div className="dim">巡瞳平台目前只支持目标检测模型。</div>
+        <div className="dim">{t("巡瞳平台目前只支持目标检测模型。")}</div>
       ) : (
         <>
           <Space.Compact style={{ width: "100%", maxWidth: 560 }}>
-            <Input addonBefore="模型名" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input addonBefore={t("模型名")} value={name} onChange={(e) => setName(e.target.value)} />
             <Button type="primary" icon={<CloudUploadOutlined />} loading={busy} onClick={upload}>
-              上传
+              {t("上传")}
             </Button>
           </Space.Compact>
           {busy && log && (
@@ -110,17 +111,17 @@ export function XuntongUpload({ run, project }: { run: RunInfo; project: Project
               showIcon
               message={
                 <span>
-                  {st === "failed" ? "平台校验没通过" : st === "ready" ? "已上传，校验通过" : "已上传，平台正在校验（几秒到一分钟）…"}
-                  {result.code && <span className="muted"> · 编码 {result.code}</span>}
+                  {st === "failed" ? t("平台校验没通过") : st === "ready" ? t("已上传，校验通过") : t("已上传，平台正在校验（几秒到一分钟）…")}
+                  {result.code && <span className="muted"> · {t("编码 {code}", { code: result.code })}</span>}
                 </span>
               }
               description={
                 <span>
                   {st === "failed"
-                    ? latest?.message || result.message || "请检查模型后重新上传"
-                    : "校验通过后，到巡瞳 AI 控制台的「自定义模型」里点启用，就能在平台上接摄像头、配告警了。推荐阈值已经一起传上去。"}{" "}
+                    ? latest?.message || result.message || t("请检查模型后重新上传")
+                    : t("校验通过后，到巡瞳 AI 控制台的「自定义模型」里点启用，就能在平台上接摄像头、配告警了。推荐阈值已经一起传上去。")}{" "}
                   <a href={result.consoleUrl} target="_blank" rel="noreferrer">
-                    打开控制台
+                    {t("打开控制台")}
                   </a>
                 </span>
               }
@@ -128,30 +129,30 @@ export function XuntongUpload({ run, project }: { run: RunInfo; project: Project
           )}
           <div style={{ marginTop: 12 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <span className="muted">平台上的自定义模型</span>
+              <span className="muted">{t("平台上的自定义模型")}</span>
               <Button size="small" type="link" onClick={loadList}>
-                刷新
+                {t("刷新")}
               </Button>
             </div>
             {listErr ? (
               <div className="dim" style={{ fontSize: 12 }}>
-                {listErr} · <a onClick={() => setPage("settings")}>去设置</a>
+                {listErr} · <a onClick={() => setPage("settings")}>{t("去设置")}</a>
               </div>
             ) : !list ? (
-              <div className="dim" style={{ fontSize: 12 }}>读取中…</div>
+              <div className="dim" style={{ fontSize: 12 }}>{t("读取中…")}</div>
             ) : list.length === 0 ? (
-              <div className="dim" style={{ fontSize: 12 }}>还没有上传过模型</div>
+              <div className="dim" style={{ fontSize: 12 }}>{t("还没有上传过模型")}</div>
             ) : (
               list.map((m) => (
                 <div key={String(m.id)} className="row" style={{ justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--line)" }}>
                   <span>
                     {m.name} <span className="dim" style={{ fontSize: 12 }}>{m.code}</span>{" "}
                     <Tag color={STATUS[m.status]?.color}>{STATUS[m.status]?.text ?? m.status}</Tag>
-                    {m.enabled ? <Tag color="green">已启用</Tag> : m.status === "ready" && <Tag>未启用</Tag>}
+                    {m.enabled ? <Tag color="green">{t("已启用")}</Tag> : m.status === "ready" && <Tag>{t("未启用")}</Tag>}
                     {m.status === "failed" && m.message && <span className="dim" style={{ fontSize: 12 }}>{m.message}</span>}
                   </span>
                   <Button size="small" type="link" danger onClick={() => remove(m)}>
-                    删除
+                    {t("删除")}
                   </Button>
                 </div>
               ))
@@ -199,17 +200,22 @@ export function XuntongPullModal({ open, onClose, onDone }: { open: boolean; onC
       onClose();
       onDone();
       modal.success({
-        title: "告警图片已拉回",
+        title: t("告警图片已拉回"),
         content: (
           <div>
             <div>
-              {r.fetched} 条告警，新增 {r.added} 张图{r.duplicated ? `，${r.duplicated} 张已经有了` : ""}
-              {r.failed ? `，${r.failed} 张下载失败` : ""}
-              {r.noImage ? `，${r.noImage} 条没有原图（平台加原图功能之前的告警）` : ""}
+              {[
+                t("{fetched} 条告警，新增 {added} 张图", { fetched: r.fetched, added: r.added }),
+                r.duplicated ? t("{n} 张已经有了", { n: r.duplicated }) : "",
+                r.failed ? t("{n} 张下载失败", { n: r.failed }) : "",
+                r.noImage ? t("{n} 条没有原图（平台加原图功能之前的告警）", { n: r.noImage }) : "",
+              ]
+                .filter(Boolean)
+                .join(t("，"))}
             </div>
-            {withBoxes && <div>平台的识别框加成了 {r.boxes} 个预标注（虚线，来源「巡瞳」），到标注页检查：误报的删掉、漏的补上。</div>}
+            {withBoxes && <div>{t("平台的识别框加成了 {n} 个预标注（虚线，来源「巡瞳」），到标注页检查：误报的删掉、漏的补上。", { n: r.boxes })}</div>}
             <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
-              图片在项目的 {r.folder} 文件夹
+              {t("图片在项目的 {folder} 文件夹", { folder: r.folder })}
             </div>
           </div>
         ),
@@ -225,19 +231,19 @@ export function XuntongPullModal({ open, onClose, onDone }: { open: boolean; onC
 
   return (
     <Modal
-      title="从巡瞳 AI 拉取告警图片"
+      title={t("从巡瞳 AI 拉取告警图片")}
       open={open}
       onCancel={busy ? undefined : onClose}
       onOk={run}
-      okText="开始拉取"
-      cancelText="取消"
+      okText={t("开始拉取")}
+      cancelText={t("取消")}
       confirmLoading={busy}
       okButtonProps={{ disabled: !!err }}
       width={520}
       destroyOnHidden
     >
       <p className="muted" style={{ marginTop: 8 }}>
-        把巡瞳平台上的告警截图拉回来标注、再训练。现场的误报、漏报正是最值得补的数据。平台的告警图片保留 7 天，记得定期拉；只有配置了推送通道的账号才会产生告警记录。
+        {t("把巡瞳平台上的告警截图拉回来标注、再训练。现场的误报、漏报正是最值得补的数据。平台的告警图片保留 7 天，记得定期拉；只有配置了推送通道的账号才会产生告警记录。")}
       </p>
       {err ? (
         <Alert type="warning" showIcon message={err} />
@@ -249,9 +255,9 @@ export function XuntongPullModal({ open, onClose, onDone }: { open: boolean; onC
               onChange={setDays}
               style={{ width: 140 }}
               options={[
-                { value: 1, label: "最近 1 天" },
-                { value: 3, label: "最近 3 天" },
-                { value: 7, label: "最近 7 天" },
+                { value: 1, label: t("最近 {n} 天", { n: 1 }) },
+                { value: 3, label: t("最近 {n} 天", { n: 3 }) },
+                { value: 7, label: t("最近 {n} 天", { n: 7 }) },
 
               ]}
             />
@@ -260,12 +266,12 @@ export function XuntongPullModal({ open, onClose, onDone }: { open: boolean; onC
               onChange={setModel}
               style={{ width: 220 }}
               loading={!models}
-              options={[{ value: "", label: "全部模型" }, ...(models ?? []).map((m) => ({ value: m.code, label: m.name }))]}
+              options={[{ value: "", label: t("全部模型") }, ...(models ?? []).map((m) => ({ value: m.code, label: m.name }))]}
             />
-            <InputNumber min={1} max={5000} value={max} onChange={(v) => setMax(Number(v ?? 200))} addonBefore="最多" addonAfter="张" style={{ width: 170 }} />
+            <InputNumber min={1} max={5000} value={max} onChange={(v) => setMax(Number(v ?? 200))} addonBefore={t("最多")} addonAfter={t("张")} style={{ width: 170 }} />
           </Space>
           <Checkbox checked={withBoxes} onChange={(e) => setWithBoxes(e.target.checked)}>
-            平台识别出的框作为预标注（按类别名对应项目里的类别，没有的会新建）
+            {t("平台识别出的框作为预标注（按类别名对应项目里的类别，没有的会新建）")}
           </Checkbox>
         </Space>
       )}

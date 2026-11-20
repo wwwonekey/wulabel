@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 from .data import load_image
+from .i18n import tr
 from .protocol import log
 
 
@@ -23,7 +24,7 @@ def _transformers():
     try:
         import transformers  # noqa: F401
     except ImportError as e:
-        raise RuntimeError("缺少 transformers 组件，请重试（软件会自动安装）") from e
+        raise RuntimeError(tr("缺少 transformers 组件，请重试（软件会自动安装）")) from e
     import transformers
 
     return transformers
@@ -70,12 +71,12 @@ class Sam:
     def __init__(self, device: torch.device):
         tf = _transformers()
         name = "facebook/sam-vit-base" if device.type == "cuda" else "Zigeng/SlimSAM-uniform-77"
-        log(f"加载 SAM 模型 {name}（第一次会下载）…")
+        log(tr("加载 SAM 模型 {name}（第一次会下载）…", name=name))
         self.processor = tf.SamProcessor.from_pretrained(name)
         self.model = tf.SamModel.from_pretrained(name).to(device).eval()
         self.device = device
         self.key = None
-        log("SAM 已就绪")
+        log(tr("SAM 已就绪"))
 
     @torch.no_grad()
     def _embed(self, path: str):
@@ -149,7 +150,7 @@ class Owl:
             name = "google/owlvit-base-patch32"
             self.processor = tf.OwlViTProcessor.from_pretrained(name)
             model = tf.OwlViTForObjectDetection.from_pretrained(name)
-        log(f"已加载文本检测模型 {name}")
+        log(tr("已加载文本检测模型 {name}", name=name))
         self.model = model.to(device).eval()
         self.device = device
 

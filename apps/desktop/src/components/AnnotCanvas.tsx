@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Circle, Group, Image as KImage, Label as KLabel, Layer, Line, Rect, Stage, Tag, Text, Transformer } from "react-konva";
+import { t } from "../i18n";
 
 export interface Box {
   key: string;
@@ -632,7 +633,7 @@ export default function AnnotCanvas(p: Props) {
                 />
                 <KLabel x={p.highlight.bbox[0] - 3 / s} y={p.highlight.bbox[1] + p.highlight.bbox[3] + 5 / s}>
                   <Tag fill="#ffd43b" />
-                  <Text text={`体检：${p.highlight.text}`} fontSize={fontSize} padding={fontSize * 0.25} fill="#1b1e23" />
+                  <Text text={t("体检：{text}", { text: p.highlight.text })} fontSize={fontSize} padding={fontSize * 0.25} fill="#1b1e23" />
                 </KLabel>
               </>
             )}

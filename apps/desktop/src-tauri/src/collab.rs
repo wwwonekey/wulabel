@@ -16,6 +16,7 @@ use crate::images;
 use crate::keypoints;
 use crate::project::Project;
 use crate::runtime::Runtime;
+use crate::t;
 
 const PACKAGE_FILE: &str = "package.json";
 
@@ -108,7 +109,7 @@ pub fn split(
 ) -> AppResult<Vec<PackageInfo>> {
     let people: Vec<String> = opts.assignees.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
     if people.is_empty() {
-        return Err(msg("至少填一个标注人"));
+        return Err(msg(t!("至少填一个标注人")));
     }
     let cond = match opts.scope.as_str() {
         "todo" => "status = 'todo'",
@@ -122,10 +123,10 @@ pub fn split(
         v
     };
     if ids.is_empty() {
-        return Err(msg("没有符合条件的图片"));
+        return Err(msg(t!("没有符合条件的图片")));
     }
     if ids.len() < people.len() {
-        return Err(msg(format!("只有 {} 张图，分不成 {} 个包", ids.len(), people.len())));
+        return Err(msg(t!("只有 {n} 张图，分不成 {k} 个包", n = ids.len(), k = people.len())));
     }
     fs::create_dir_all(&opts.out_dir)?;
     let src_names = label_names(p)?;
@@ -182,7 +183,7 @@ pub fn split(
                     hashes.push(hash);
                 }
             }
-            log(format!("给「{who}」的包打码…"));
+            log(t!("给「{who}」的包打码…", who = who));
             evaltools::anonymize(p, rt, &files, a, log, &|_, _| {})?;
             // 缩略图是打码前生成的，删掉让它重新生成
             for h in hashes {
@@ -277,11 +278,11 @@ fn fingerprint(anns: &[Annotation], names: &HashMap<i64, String>) -> Vec<String>
 /// 把一个标注包合并回来。没有 package.json 的普通 Wulabel 项目也能合并（按图片内容对应）
 pub fn merge(p: &Project, opts: &MergeOptions) -> AppResult<MergeResult> {
     if opts.dir.canonicalize().ok() == p.root.canonicalize().ok() {
-        return Err(msg("不能把项目合并到它自己"));
+        return Err(msg(t!("不能把项目合并到它自己")));
     }
     let np = Project::open(&opts.dir)?;
     if np.meta.task != p.meta.task {
-        return Err(msg("这个包的任务类型和当前项目不一样，不能合并"));
+        return Err(msg(t!("这个包的任务类型和当前项目不一样，不能合并")));
     }
     let meta: Option<PackageMeta> = fs::read_to_string(np.root.join(PACKAGE_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok());
     let map: HashMap<i64, i64> = meta.as_ref().map(|m| m.map.iter().map(|[a, b]| (*a, *b)).collect()).unwrap_or_default();
@@ -299,7 +300,7 @@ pub fn merge(p: &Project, opts: &MergeOptions) -> AppResult<MergeResult> {
     if p.meta.task == "pose" {
         let (a, b) = (keypoints::get(p)?, keypoints::get(&np)?);
         if a.points.len() != b.points.len() {
-            return Err(msg("包里的关键点模板点数和当前项目不一样，不能合并"));
+            return Err(msg(t!("包里的关键点模板点数和当前项目不一样，不能合并")));
         }
     }
     let pkg_names = label_names(&np)?;

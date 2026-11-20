@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db;
 use crate::error::{msg, AppResult};
+use crate::t;
 
 pub const PROJECT_FILE: &str = "project.json";
 pub const DB_FILE: &str = "annotations.db";
@@ -54,17 +55,17 @@ impl Project {
     pub fn create(parent: &Path, name: &str, task: &str) -> AppResult<Project> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(msg("项目名不能为空"));
+            return Err(msg(t!("项目名不能为空")));
         }
         if name.chars().any(|c| r#"\/:*?"<>|"#.contains(c)) {
-            return Err(msg(r#"项目名不能包含 \ / : * ? " < > | 这些字符"#));
+            return Err(msg(t!("项目名不能包含 \\ / : * ? \" < > | 这些字符")));
         }
         if !TASKS.contains(&task) {
-            return Err(msg(format!("不支持的任务类型：{task}")));
+            return Err(msg(t!("不支持的任务类型：{task}", task = task)));
         }
         let root = parent.join(name);
         if root.exists() && fs::read_dir(&root)?.next().is_some() {
-            return Err(msg(format!("文件夹已存在且不为空：{}", root.display())));
+            return Err(msg(t!("文件夹已存在且不为空：{path}", path = root.display())));
         }
         fs::create_dir_all(root.join(IMAGES_DIR))?;
         fs::create_dir_all(root.join(THUMBS_DIR))?;
@@ -82,11 +83,11 @@ impl Project {
     pub fn open(root: &Path) -> AppResult<Project> {
         let file = root.join(PROJECT_FILE);
         if !file.exists() {
-            return Err(msg(format!("这个文件夹不是项目（缺少 {PROJECT_FILE}）：{}", root.display())));
+            return Err(msg(t!("这个文件夹不是项目（缺少 {file}）：{path}", file = PROJECT_FILE, path = root.display())));
         }
         let meta: ProjectMeta = serde_json::from_str(&fs::read_to_string(&file)?)?;
         if meta.format_version > FORMAT_VERSION {
-            return Err(msg("项目由更新版本的软件创建，请先升级软件"));
+            return Err(msg(t!("项目由更新版本的软件创建，请先升级软件")));
         }
         fs::create_dir_all(root.join(THUMBS_DIR))?;
         let conn = db::open(&root.join(DB_FILE))?;

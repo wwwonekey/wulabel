@@ -20,6 +20,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from .i18n import tr
+
 KINDS = ["yolov8", "yolov5", "yolo_e2e", "yolox", "rtdetr", "detr", "wulabel"]
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
@@ -76,7 +78,7 @@ def inspect(path: str) -> dict:
     out_names = {o.name for o in outs}
     kind, nc, note = "yolov8", len(names), ""
     if {"boxes", "labels", "scores"} <= out_names:
-        kind, note = "wulabel", "Wulabel 导出的模型"
+        kind, note = "wulabel", tr("Wulabel 导出的模型")
     elif len(outs) >= 2:
         kind = "detr"
         shapes = [list(o.shape) for o in outs]
@@ -88,7 +90,7 @@ def inspect(path: str) -> dict:
         if "RT-DETR" in desc or "RTDETR" in desc.replace("-", "").upper():
             kind, nc = "rtdetr", nc or max(b - 4, 0)
         elif b == 6 and a and a <= 1000:
-            kind, note = "yolo_e2e", "端到端输出（模型里已做过 NMS）"
+            kind, note = "yolo_e2e", tr("端到端输出（模型里已做过 NMS）")
         elif a and b and a < b:
             kind, nc = "yolov8", nc or a - 4
         elif "YOLOv5" in desc or ultra:
@@ -96,7 +98,7 @@ def inspect(path: str) -> dict:
         elif a and b:
             # 没有元数据的 [N, 5+C] 多半是 YOLOX 官方导出
             kind, nc = "yolox", nc or max(b - 5, 0)
-            note = "没有类别名，请手动填写"
+            note = tr("没有类别名，请手动填写")
     if not names and nc:
         names = [f"class_{i}" for i in range(nc)]
     return {

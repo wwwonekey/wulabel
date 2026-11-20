@@ -20,6 +20,7 @@ import torch
 from . import models
 from .data import ClsFolder, CocoDetection, has_cls_split, has_split, load_image
 from .metrics import ImageGt, ImagePred, classify_eval, classify_threshold_curve, evaluate, threshold_curve
+from .i18n import tr
 from .protocol import emit, log
 from .train import ClsTask, pick_device, split_report
 
@@ -49,7 +50,8 @@ def _det_splits(root: Path, classes: list[str], predict) -> dict:
         r = evaluate(preds, gts, len(classes))
         r.thresholds = threshold_curve(preds, gts, len(classes))
         out[split] = split_report(r, classes, len(ds.images))
-        log(f"{'验证集' if split == 'val' else '测试集'}：{len(ds.images)} 张，mAP50 {r.map50:.3f}")
+        n, v = len(ds.images), f"{r.map50:.3f}"
+        log(tr("验证集：{n} 张，mAP50 {map50}", n=n, map50=v) if split == "val" else tr("测试集：{n} 张，mAP50 {map50}", n=n, map50=v))
     return out
 
 
@@ -68,8 +70,8 @@ def run(cfg: dict) -> None:
         cmap = _remap(info.get("classes", []), classes)
         use = info.get("use")
         if not cmap:
-            raise RuntimeError("模型的类别名和项目类别一个都对不上，请在导入模型时把类别名改成项目里的名字")
-        log(f"外部模型：{len(cmap)} 个类别和项目类别对应上")
+            raise RuntimeError(tr("模型的类别名和项目类别一个都对不上，请在导入模型时把类别名改成项目里的名字"))
+        log(tr("外部模型：{n} 个类别和项目类别对应上", n=len(cmap)))
 
         def predict(img):
             dets = [d for d in det.predict(img, 0.05) if d[4] in cmap and (use is None or d[4] in use)]
@@ -109,7 +111,8 @@ def run(cfg: dict) -> None:
                 r = classify_eval(y_true, yp, ids, len(classes), scores=np.array(scores))
                 r.thresholds = classify_threshold_curve(y_true, yp, scores)
                 report["splits"][split] = split_report(r, classes, len(ds))
-                log(f"{'验证集' if split == 'val' else '测试集'}：{len(ds)} 张，准确率 {r.map50:.3f}")
+                n, v = len(ds), f"{r.map50:.3f}"
+                log(tr("验证集：{n} 张，准确率 {acc}", n=n, acc=v) if split == "val" else tr("测试集：{n} 张，准确率 {acc}", n=n, acc=v))
         else:
             from torchvision.transforms import functional as F
 
@@ -127,7 +130,7 @@ def run(cfg: dict) -> None:
             report["splits"] = _det_splits(root, classes, predict)
 
     if not report["splits"]:
-        raise RuntimeError("没有验证集或测试集。请先在「数据」页划分出验证集，再评估")
+        raise RuntimeError(tr("没有验证集或测试集。请先在「数据」页划分出验证集，再评估"))
     (out / "eval.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
     first = report["splits"].get("val") or next(iter(report["splits"].values()))
     emit("done", map50=first["map50"])

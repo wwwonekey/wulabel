@@ -30,6 +30,7 @@ import torch
 
 from . import models
 from .data import ClsFolder, CocoDetection, collate, has_cls_split, has_split
+from .i18n import tr
 from .metrics import ImageGt, ImagePred, classify_eval, classify_threshold_curve, evaluate, threshold_curve
 from .protocol import emit, log
 
@@ -42,14 +43,14 @@ def pick_device(pref: str) -> torch.device:
     if pref != "cpu" and mps is not None and mps.is_available():
         return torch.device("mps")
     if pref == "cuda":
-        log("没有检测到可用的 NVIDIA 显卡，改用 CPU 训练")
+        log(tr("没有检测到可用的 NVIDIA 显卡，改用 CPU 训练"))
     return torch.device("cpu")
 
 
 def device_name(device: torch.device) -> str:
     if device.type == "cuda":
         return torch.cuda.get_device_name(0)
-    return "Apple 芯片（MPS）" if device.type == "mps" else "CPU"
+    return tr("Apple 芯片（MPS）") if device.type == "mps" else "CPU"
 
 
 # ---------- 检测 / 分割 / 关键点 ----------
@@ -209,7 +210,7 @@ def run(cfg: dict) -> None:
         # 出了 except 再清显存：异常的调用栈还引用着上一次的张量
         free_memory()
         new = max(1, batch // 2)
-        log(f"显存不够，批大小从 {batch} 自动调到 {new}，从头重新训练")
+        log(tr("显存不够，批大小从 {batch} 自动调到 {new}，从头重新训练", batch=batch, new=new))
         emit("batch", batch=new, was=batch)
         for f in ("metrics.jsonl", "best.pt", "last.pt", "eval.json"):
             try:
@@ -245,15 +246,15 @@ def run_once(cfg: dict) -> None:
     else:
         task = ClsTask(cfg, root, key) if cls else DetTask(cfg, root, key)
 
-    log(f"设备：{device_name(device)}，模型：{models.MODELS[key]['name']}")
+    log(tr("设备：{device}，模型：{model}", device=device_name(device), model=models.MODELS[key]["name"]))
     train_ds = task.dataset("train", True)
     val_split = "val" if task.has_split("val") else "train"
     if val_split == "train":
-        log("没有验证集，用训练集评估（指标会偏高）。建议划分出 10%~20% 作为验证集。")
+        log(tr("没有验证集，用训练集评估（指标会偏高）。建议划分出 10%~20% 作为验证集。"))
     val_ds = task.dataset(val_split, False)
-    log(f"训练集 {len(train_ds)} 张，验证集 {len(val_ds)} 张，类别 {len(classes)} 个")
+    log(tr("训练集 {train} 张，验证集 {val} 张，类别 {classes} 个", train=len(train_ds), val=len(val_ds), classes=len(classes)))
     if len(train_ds) == 0:
-        raise RuntimeError("训练集是空的")
+        raise RuntimeError(tr("训练集是空的"))
 
     workers = int(cfg.get("workers", 0 if os.name == "nt" else 2))
     loader = torch.utils.data.DataLoader(
@@ -274,7 +275,7 @@ def run_once(cfg: dict) -> None:
 
         sizes = augment.multiscale_sizes(img_size, scale)
         model.transform.min_size = sizes
-        log(f"多尺度训练：{'、'.join(str(s) for s in sizes)}")
+        log(tr("多尺度训练：{sizes}", sizes=tr("、").join(str(s) for s in sizes)))
     # 任务可以自带优化器、学习率曲线和 EMA（YOLOX 按官方做法），没有的用通用的
     if hasattr(task, "optimizer"):
         opt, params = task.optimizer(model, lr, batch)
@@ -320,7 +321,7 @@ def run_once(cfg: dict) -> None:
             with torch.autocast(device.type, enabled=use_amp):
                 loss = task.loss(model, b, device)
             if not torch.isfinite(loss):
-                log(f"第 {epoch} 轮出现异常损失，跳过这一批")
+                log(tr("第 {epoch} 轮出现异常损失，跳过这一批", epoch=epoch))
                 opt.zero_grad(set_to_none=True)
                 continue
             opt.zero_grad(set_to_none=True)
@@ -347,7 +348,7 @@ def run_once(cfg: dict) -> None:
                     eta=elapsed / it * (total - it) if it else None,
                 )
         if stopped:
-            log("收到停止指令，已停止训练")
+            log(tr("收到停止指令，已停止训练"))
             break
         # 有 EMA 的任务用平滑后的权重评估和保存
         eval_model = task.eval_model(model) if hasattr(task, "eval_model") else model
@@ -374,9 +375,9 @@ def run_once(cfg: dict) -> None:
             best, best_epoch, best_map50 = fitness, epoch, r.map50
             models.save(out / "best.pt", eval_model, key, classes, img_size, {"epoch": epoch, "map50": r.map50, **extra})
             if cls:
-                log(f"第 {epoch} 轮准确率 {r.map50:.3f}、宏平均 F1 {r.map:.3f}，保存为最好的模型")
+                log(tr("第 {epoch} 轮准确率 {acc}、宏平均 F1 {f1}，保存为最好的模型", epoch=epoch, acc=f"{r.map50:.3f}", f1=f"{r.map:.3f}"))
             else:
-                log(f"第 {epoch} 轮 mAP50 {r.map50:.3f}、mAP50-95 {r.map:.3f}，保存为最好的模型")
+                log(tr("第 {epoch} 轮 mAP50 {map50}、mAP50-95 {map}，保存为最好的模型", epoch=epoch, map50=f"{r.map50:.3f}", map=f"{r.map:.3f}"))
     metrics_file.close()
 
     if not (out / "best.pt").exists():
@@ -384,7 +385,7 @@ def run_once(cfg: dict) -> None:
         return
 
     # 用最好的模型做最终评估，给评估页用
-    log("用最好的模型做最终评估…")
+    log(tr("用最好的模型做最终评估…"))
     model, _ = models.load(out / "best.pt", device)
     report = {"classes": classes, "bestEpoch": best_epoch, "task": models.task_of(key), "splits": {}}
     for split in ("val", "test"):

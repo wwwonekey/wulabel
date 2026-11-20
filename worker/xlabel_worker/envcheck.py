@@ -1,6 +1,7 @@
 import platform
 import sys
 
+from .i18n import tr
 from .protocol import emit
 
 
@@ -23,7 +24,7 @@ def run() -> None:
         else:
             mps = getattr(torch.backends, "mps", None)
             info["mps"] = bool(mps is not None and mps.is_available())
-            info["device"] = "Apple 芯片（MPS）" if info["mps"] else "CPU"
+            info["device"] = tr("Apple 芯片（MPS）") if info["mps"] else "CPU"
     except Exception as e:
         info["error"] = str(e)
     for m in ("numpy", "PIL", "onnx", "onnxruntime"):

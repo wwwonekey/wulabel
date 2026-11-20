@@ -22,6 +22,7 @@ import threading
 import cv2
 import numpy as np
 
+from .i18n import tr
 from .protocol import emit, log
 
 SCALES = (0.94, 1.0, 1.06)
@@ -135,9 +136,9 @@ def run(cfg: dict) -> None:
 
     first = _read(frames[0])
     if first is None:
-        raise RuntimeError(f"读不了起始帧：{frames[0]}")
+        raise RuntimeError(tr("读不了起始帧：{path}", path=frames[0]))
     create = _csrt()
-    log("跟踪方法：" + ("CSRT" if create else "模板匹配"))
+    log(tr("跟踪方法：{method}", method="CSRT" if create else tr("模板匹配")))
     gray0 = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
     trackers = [CsrtTracker(create, first, b) if create else TemplateTracker(gray0, b, min_score) for b in boxes]
     alive = [True] * len(boxes)

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{msg, AppResult};
 use crate::project::Project;
+use crate::t;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -65,23 +66,23 @@ pub fn get(p: &Project) -> AppResult<Template> {
 pub fn save(p: &Project, t: &Template) -> AppResult<()> {
     let points: Vec<String> = t.points.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
     if points.is_empty() {
-        return Err(msg("至少要有 1 个关键点"));
+        return Err(msg(t!("至少要有 1 个关键点")));
     }
     if points.len() > 100 {
-        return Err(msg("关键点最多 100 个"));
+        return Err(msg(t!("关键点最多 100 个")));
     }
     if t.skeleton.iter().any(|[a, b]| *a >= points.len() || *b >= points.len() || a == b) {
-        return Err(msg("骨架连线里有不存在的点"));
+        return Err(msg(t!("骨架连线里有不存在的点")));
     }
     let old = get(p)?;
     let conn = p.conn.lock();
     if old.points.len() != points.len() {
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM annotations WHERE type = 'keypoints'", [], |r| r.get(0))?;
         if n > 0 {
-            return Err(msg(format!(
-                "已经有 {n} 个关键点标注，不能把点数从 {} 改成 {}。只能改点的名字和连线",
-                old.points.len(),
-                points.len()
+            return Err(msg(t!("已经有 {n} 个关键点标注，不能把点数从 {from} 改成 {to}。只能改点的名字和连线",
+                n = n,
+                from = old.points.len(),
+                to = points.len()
             )));
         }
     }

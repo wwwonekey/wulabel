@@ -12,6 +12,7 @@ use crate::dataset::{self, ExportImage};
 use crate::db;
 use crate::error::{msg, AppResult};
 use crate::project::Project;
+use crate::t;
 
 const PALETTE: [&str; 10] = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6", "#f472b6", "#a3e635", "#f97316", "#60a5fa"];
 
@@ -99,7 +100,7 @@ pub fn create(p: &Project, name: &str, note: &str, ratios: [f64; 3]) -> AppResul
             [vid],
         )?;
         if n_img == 0 {
-            return Err(msg("还没有已标注或已审核的图片，没法建版本"));
+            return Err(msg(t!("还没有已标注或已审核的图片，没法建版本")));
         }
         tx.execute(
             "INSERT INTO version_annotations (version_id, image_id, label_name, type, data_json)
@@ -121,7 +122,7 @@ pub fn info(p: &Project, vid: i64) -> AppResult<VersionInfo> {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })
         .optional()?
-        .ok_or_else(|| msg("数据集版本不存在"))?;
+        .ok_or_else(|| msg(t!("数据集版本不存在")))?;
     let mut v = VersionInfo {
         id: vid,
         name,
@@ -149,9 +150,9 @@ pub fn info(p: &Project, vid: i64) -> AppResult<VersionInfo> {
     let mut counts: HashMap<String, i64> = HashMap::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT COALESCE(label_name, '未分类'), COUNT(*) FROM version_annotations WHERE version_id = ?1 GROUP BY label_name",
+            "SELECT COALESCE(label_name, ?2), COUNT(*) FROM version_annotations WHERE version_id = ?1 GROUP BY label_name",
         )?;
-        for row in stmt.query_map([vid], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
+        for row in stmt.query_map(params![vid, t!("未分类")], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))? {
             let (n, c) = row?;
             v.annotations += c;
             counts.insert(n, c);
@@ -180,7 +181,7 @@ pub fn list(p: &Project) -> AppResult<Vec<VersionInfo>> {
 pub fn delete(p: &Project, vid: i64) -> AppResult<()> {
     let n = p.conn.lock().execute("DELETE FROM dataset_versions WHERE id = ?1", [vid])?;
     if n == 0 {
-        return Err(msg("数据集版本不存在"));
+        return Err(msg(t!("数据集版本不存在")));
     }
     Ok(())
 }
@@ -188,7 +189,7 @@ pub fn delete(p: &Project, vid: i64) -> AppResult<()> {
 pub fn rename(p: &Project, vid: i64, name: &str, note: &str) -> AppResult<()> {
     let name = name.trim();
     if name.is_empty() {
-        return Err(msg("版本名不能为空"));
+        return Err(msg(t!("版本名不能为空")));
     }
     p.conn.lock().execute(
         "UPDATE dataset_versions SET name = ?2, note = ?3 WHERE id = ?1",
@@ -203,7 +204,7 @@ pub fn name_of(p: &Project, vid: i64) -> AppResult<String> {
         .lock()
         .query_row("SELECT name FROM dataset_versions WHERE id = ?1", [vid], |r| r.get(0))
         .optional()?
-        .ok_or_else(|| msg("数据集版本不存在"))
+        .ok_or_else(|| msg(t!("数据集版本不存在")))
 }
 
 /// 读出版本里的图片和标注，给导出 / 训练用。图片文件已经不在了的跳过
@@ -212,7 +213,7 @@ pub fn collect(p: &Project, vid: i64, only_reviewed: bool) -> AppResult<(Vec<Str
     let classes_json: String = conn
         .query_row("SELECT classes_json FROM dataset_versions WHERE id = ?1", [vid], |r| r.get(0))
         .optional()?
-        .ok_or_else(|| msg("数据集版本不存在"))?;
+        .ok_or_else(|| msg(t!("数据集版本不存在")))?;
     let mut classes: Vec<String> = serde_json::from_str(&classes_json).unwrap_or_default();
     // 快照里出现、但不在类别表里的类别名（理论上没有）补到后面
     {
@@ -257,7 +258,7 @@ pub fn collect(p: &Project, vid: i64, only_reviewed: bool) -> AppResult<(Vec<Str
         }
     }
     if images.is_empty() {
-        return Err(msg("这个版本里的图片都找不到了（可能已经从项目里删除）"));
+        return Err(msg(t!("这个版本里的图片都找不到了（可能已经从项目里删除）")));
     }
     let pos: HashMap<i64, usize> = images.iter().enumerate().map(|(i, im)| (im.id, i)).collect();
     let mut stmt = conn.prepare("SELECT image_id, label_name, type, data_json FROM version_annotations WHERE version_id = ?1")?;
@@ -347,7 +348,7 @@ pub fn diff(p: &Project, vid: i64) -> AppResult<VersionDiff> {
         .map(|n| ClassDelta {
             before: cv.get(&n).copied().unwrap_or(0),
             after: cc.get(&n).copied().unwrap_or(0),
-            name: if n.is_empty() { "未分类".into() } else { n },
+            name: if n.is_empty() { t!("未分类") } else { n },
         })
         .filter(|d| d.before != d.after)
         .collect();
@@ -361,7 +362,7 @@ pub fn diff(p: &Project, vid: i64) -> AppResult<VersionDiff> {
 /// 版本里没有的图不动；图片已经删掉的没法恢复。
 pub fn restore(p: &Project, vid: i64) -> AppResult<RestoreResult> {
     let target = info(p, vid)?;
-    let backup = create(p, "恢复前自动备份", &format!("恢复到「{}」之前自动保存的当前数据", target.name), [0.8, 0.2, 0.0])
+    let backup = create(p, &t!("恢复前自动备份"), &t!("恢复到「{name}」之前自动保存的当前数据", name = target.name), [0.8, 0.2, 0.0])
         .ok()
         .map(|v| v.id);
 

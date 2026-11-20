@@ -11,6 +11,7 @@ use crate::annotations::{self, Annotation};
 use crate::error::{msg, AppResult};
 use crate::images;
 use crate::project::Project;
+use crate::t;
 
 const PALETTE: [&str; 10] = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6", "#f472b6", "#a3e635", "#f97316", "#60a5fa"];
 
@@ -436,14 +437,14 @@ fn read_voc(dir: &Path, xmls: &[PathBuf]) -> AppResult<Vec<Item>> {
 /// 识别格式并读出图片和标注。分类项目优先按「分类文件夹」识别
 fn read(dir: &Path, task: &str) -> AppResult<(String, Vec<Item>, Option<KptInfo>)> {
     if !dir.is_dir() {
-        return Err(msg("请选择数据集所在的文件夹"));
+        return Err(msg(t!("请选择数据集所在的文件夹")));
     }
     if task == "classify" {
         let items = read_cls(dir);
         if !items.is_empty() {
-            return Ok(("分类文件夹".into(), items, None));
+            return Ok((t!("分类文件夹"), items, None));
         }
-        return Err(msg("没有识别出分类数据集。请选择这样的文件夹：每个类别一个子文件夹（猫/、狗/…），或者 train/猫/、val/猫/ 这样再分一层"));
+        return Err(msg(t!("没有识别出分类数据集。请选择这样的文件夹：每个类别一个子文件夹（猫/、狗/…），或者 train/猫/、val/猫/ 这样再分一层")));
     }
     let jsons = find_coco_jsons(dir);
     if !jsons.is_empty() {
@@ -461,13 +462,13 @@ fn read(dir: &Path, task: &str) -> AppResult<(String, Vec<Item>, Option<KptInfo>
     if items.iter().any(Item::has_any) {
         return Ok((if k.is_some() { "YOLO-pose" } else { "YOLO" }.into(), items, k));
     }
-    Err(msg("没有识别出数据集格式。支持 YOLO（images + labels + data.yaml）、COCO（json）、VOC（Annotations/*.xml）"))
+    Err(msg(t!("没有识别出数据集格式。支持 YOLO（images + labels + data.yaml）、COCO（json）、VOC（Annotations/*.xml）")))
 }
 
 pub fn import(p: &Project, dir: &Path, progress: &(dyn Fn(usize, usize) + Sync)) -> AppResult<DatasetImportResult> {
     let (format, items, kinfo) = read(dir, &p.meta.task)?;
     if items.is_empty() {
-        return Err(msg("数据集里没有找到图片"));
+        return Err(msg(t!("数据集里没有找到图片")));
     }
     // 关键点：项目里还没有关键点标注时，模板换成数据集的点名（点数不同的标注没法用）
     let mut nk = None;
@@ -481,9 +482,9 @@ pub fn import(p: &Project, dir: &Path, progress: &(dyn Fn(usize, usize) + Sync))
             let has: i64 =
                 p.conn.lock().query_row("SELECT COUNT(*) FROM annotations WHERE type = 'keypoints'", [], |r| r.get(0))?;
             if has > 0 {
-                return Err(msg(format!(
-                    "数据集每个目标 {k} 个关键点，项目模板是 {} 个点，而且项目里已经有关键点标注，没法合并",
-                    cur.points.len()
+                return Err(msg(t!("数据集每个目标 {k} 个关键点，项目模板是 {n} 个点，而且项目里已经有关键点标注，没法合并",
+                    k = k,
+                    n = cur.points.len()
                 )));
             }
             let info = kinfo.clone().filter(|i| i.names.len() == k).unwrap_or(KptInfo {

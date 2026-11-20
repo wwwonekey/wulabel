@@ -19,12 +19,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 LANGS = ["en", "zh-TW", "ja", "ko", "es", "pt", "ru", "de", "fr", "vi", "id"]
 HAN = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+# \u53cc\u5f15\u53f7\u3001\u53cd\u5f15\u53f7\u5b57\u7b26\u4e32\uff08Rust \u7684 '/' \u5b57\u7b26\u548c JS \u5355\u5f15\u53f7\u5b57\u7b26\u4e32\u91cc\u5f88\u5c11\u6709 /*\uff0c\u4e0d\u7ba1\uff09
+STR = re.compile(r"\"(?:\\.|[^\"\\])*\"|`(?:\\.|[^`\\])*`")
 
 LAYERS = {
     "fe": {
         "dir": "apps/desktop/src",
         "exts": {".ts", ".tsx"},
-        "skip": {"locales", "changelog.ts"},
+        "skip": {"locales"},
         "locales": "apps/desktop/src/locales",
         "key": re.compile(r"(?<![\w.$])t\(\s*([\"'`])((?:\\.|(?!\1)[^\\])*)\1"),
     },
@@ -90,11 +92,21 @@ def code_lines(path: Path, text: str):
                     l = l[l.index("*/") + 2:]
                 else:
                     continue
-            l = re.sub(r"/\*.*?\*/", "", l)
-            if "/*" in l:
-                in_block = True
-                l = l[: l.index("/*")]
-            l = re.sub(r"(^|[^:\"'`])//.*$", r"\1", l)
+            # 找注释位置时先把字符串内容换成空格（字符串里的 /* 和 // 不算注释）
+            while True:
+                m = STR.sub(lambda x: " " * len(x.group(0)), l)
+                a, b = m.find("/*"), m.find("//")
+                if b >= 0 and (a < 0 or b < a):
+                    l = l[:b]
+                    break
+                if a < 0:
+                    break
+                c = m.find("*/", a + 2)
+                if c < 0:
+                    in_block = True
+                    l = l[:a]
+                    break
+                l = l[:a] + l[c + 2:]
         yield i, l
 
 

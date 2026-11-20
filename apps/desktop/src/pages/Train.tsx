@@ -10,6 +10,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { api, EnvStatus, errText, ProjectInfo, RunDetail, RunInfo, RunStatus, SplitSummary, Task, TrainConfig, VersionInfo } from "../api";
 import { prefs, useApp } from "../store";
+import { t } from "../i18n";
 import LineChart from "../components/LineChart";
 import RunCompare from "../components/RunCompare";
 import ImportModelModal from "../components/ImportModelModal";
@@ -27,22 +28,22 @@ export const MODELS: {
   yolox?: boolean;
   defaultSize?: number;
 }[] = [
-  { value: "yolox_nano", name: "YOLOX-Nano", desc: "YOLO 系列最轻的一档，适合 CPU、手机和很弱的边缘设备；默认 416 输入", task: "detect", oneStage: true, yolox: true, defaultSize: 416 },
-  { value: "yolox_tiny", name: "YOLOX-Tiny", desc: "很轻，适合 CPU 和 NPU 边缘盒子实时推理；默认 416 输入", task: "detect", oneStage: true, yolox: true, defaultSize: 416 },
-  { value: "yolox_s", name: "YOLOX-S", desc: "速度和精度最均衡，大多数项目先用它", task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
-  { value: "yolox_m", name: "YOLOX-M", desc: "精度更高，建议有独立显卡（6GB 以上显存）", task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
-  { value: "yolox_l", name: "YOLOX-L", desc: "精度最高、最慢，建议 8GB 以上显存", task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
-  { value: "frcnn_mobilenet", name: "Faster R-CNN MobileNetV3", desc: "速度快、显存占用小，适合入门和没有独立显卡的电脑", task: "detect" },
-  { value: "frcnn_resnet50", name: "Faster R-CNN ResNet50 v2", desc: "精度更高，训练和推理更慢，建议 6GB 以上显存", task: "detect" },
-  { value: "retinanet_r50", name: "RetinaNet ResNet50 v2", desc: "单阶段，精度接近 Faster R-CNN；没有 RoIAlign，转 TensorRT 更顺", task: "detect", oneStage: true },
-  { value: "fcos_r50", name: "FCOS ResNet50", desc: "单阶段、无锚框，结构简单，适合部署", task: "detect", oneStage: true },
-  { value: "ssdlite", name: "SSDLite MobileNetV3", desc: "单阶段、很轻，适合 CPU 和 NPU 边缘设备实时推理；固定 320 输入，小目标一般", task: "detect", oneStage: true, fixedSize: 320 },
-  { value: "maskrcnn_r50", name: "Mask R-CNN ResNet50", desc: "实例分割，速度一般，建议有 6GB 以上显存", task: "segment" },
-  { value: "maskrcnn_r50_v2", name: "Mask R-CNN ResNet50 v2", desc: "实例分割，精度更高、更慢，建议 8GB 以上显存", task: "segment" },
-  { value: "keypointrcnn_r50", name: "Keypoint R-CNN ResNet50", desc: "关键点检测；人体 17 点能用上 COCO 预训练，其他点数从头学关键点头", task: "pose" },
-  { value: "cls_mobilenet", name: "MobileNetV3 Large", desc: "速度快、很轻，适合入门和边缘设备", task: "classify" },
-  { value: "cls_efficientnet", name: "EfficientNet-B0", desc: "精度和速度比较均衡", task: "classify" },
-  { value: "cls_resnet50", name: "ResNet50", desc: "精度更高，训练更慢，建议有独立显卡", task: "classify" },
+  { value: "yolox_nano", name: "YOLOX-Nano", desc: t("YOLO 系列最轻的一档，适合 CPU、手机和很弱的边缘设备；默认 416 输入"), task: "detect", oneStage: true, yolox: true, defaultSize: 416 },
+  { value: "yolox_tiny", name: "YOLOX-Tiny", desc: t("很轻，适合 CPU 和 NPU 边缘盒子实时推理；默认 416 输入"), task: "detect", oneStage: true, yolox: true, defaultSize: 416 },
+  { value: "yolox_s", name: "YOLOX-S", desc: t("速度和精度最均衡，大多数项目先用它"), task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
+  { value: "yolox_m", name: "YOLOX-M", desc: t("精度更高，建议有独立显卡（6GB 以上显存）"), task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
+  { value: "yolox_l", name: "YOLOX-L", desc: t("精度最高、最慢，建议 8GB 以上显存"), task: "detect", oneStage: true, yolox: true, defaultSize: 640 },
+  { value: "frcnn_mobilenet", name: "Faster R-CNN MobileNetV3", desc: t("速度快、显存占用小，适合入门和没有独立显卡的电脑"), task: "detect" },
+  { value: "frcnn_resnet50", name: "Faster R-CNN ResNet50 v2", desc: t("精度更高，训练和推理更慢，建议 6GB 以上显存"), task: "detect" },
+  { value: "retinanet_r50", name: "RetinaNet ResNet50 v2", desc: t("单阶段，精度接近 Faster R-CNN；没有 RoIAlign，转 TensorRT 更顺"), task: "detect", oneStage: true },
+  { value: "fcos_r50", name: "FCOS ResNet50", desc: t("单阶段、无锚框，结构简单，适合部署"), task: "detect", oneStage: true },
+  { value: "ssdlite", name: "SSDLite MobileNetV3", desc: t("单阶段、很轻，适合 CPU 和 NPU 边缘设备实时推理；固定 320 输入，小目标一般"), task: "detect", oneStage: true, fixedSize: 320 },
+  { value: "maskrcnn_r50", name: "Mask R-CNN ResNet50", desc: t("实例分割，速度一般，建议有 6GB 以上显存"), task: "segment" },
+  { value: "maskrcnn_r50_v2", name: "Mask R-CNN ResNet50 v2", desc: t("实例分割，精度更高、更慢，建议 8GB 以上显存"), task: "segment" },
+  { value: "keypointrcnn_r50", name: "Keypoint R-CNN ResNet50", desc: t("关键点检测；人体 17 点能用上 COCO 预训练，其他点数从头学关键点头"), task: "pose" },
+  { value: "cls_mobilenet", name: "MobileNetV3 Large", desc: t("速度快、很轻，适合入门和边缘设备"), task: "classify" },
+  { value: "cls_efficientnet", name: "EfficientNet-B0", desc: t("精度和速度比较均衡"), task: "classify" },
+  { value: "cls_resnet50", name: "ResNet50", desc: t("精度更高，训练更慢，建议有独立显卡"), task: "classify" },
 ];
 
 /** 各任务的默认训练参数 */
@@ -67,27 +68,27 @@ const recommendModel = (task: Task, gpuMem: number) =>
 /** 训练记录显示的模型名（导入的外部模型显示导入时起的名字） */
 export const modelName = (r: RunInfo) =>
   r.engine === "external"
-    ? `${(r.config as { displayName?: string })?.displayName || "外部模型"}（外部）`
+    ? t("{name}（外部）", { name: (r.config as { displayName?: string })?.displayName || t("外部模型") })
     : MODELS.find((m) => m.value === r.config?.model)?.name ?? String(r.config?.model ?? "");
 
 /** 各任务主指标的叫法（分类没有 mAP，worker 把准确率放在 map50、宏 F1 放在 map） */
 export const metricNames = (task: Task) =>
-  task === "classify" ? { m50: "准确率", m: "宏平均 F1" } : { m50: "mAP50", m: "mAP50-95" };
+  task === "classify" ? { m50: t("准确率"), m: t("宏平均 F1") } : { m50: "mAP50", m: "mAP50-95" };
 
 export const RUN_STATUS: Record<RunStatus, { text: string; color: string }> = {
-  running: { text: "训练中", color: "processing" },
-  done: { text: "完成", color: "success" },
-  stopped: { text: "已停止", color: "warning" },
-  failed: { text: "失败", color: "error" },
-  interrupted: { text: "已中断", color: "default" },
+  running: { text: t("训练中"), color: "processing" },
+  done: { text: t("完成"), color: "success" },
+  stopped: { text: t("已停止"), color: "warning" },
+  failed: { text: t("失败"), color: "error" },
+  interrupted: { text: t("已中断"), color: "default" },
 };
 
 export const fmtTime = (ts: number) => new Date(ts * 1000).toLocaleString();
 const fmtDur = (s: number | null | undefined) => {
   if (s == null || !Number.isFinite(s)) return "—";
-  if (s < 60) return `${Math.round(s)} 秒`;
-  if (s < 3600) return `${Math.floor(s / 60)} 分 ${Math.round(s % 60)} 秒`;
-  return `${Math.floor(s / 3600)} 小时 ${Math.round((s % 3600) / 60)} 分`;
+  if (s < 60) return t("{s} 秒", { s: Math.round(s) });
+  if (s < 3600) return t("{m} 分 {s} 秒", { m: Math.floor(s / 60), s: Math.round(s % 60) });
+  return t("{h} 小时 {m} 分", { h: Math.floor(s / 3600), m: Math.round((s % 3600) / 60) });
 };
 
 interface ProgressEv {
@@ -187,21 +188,21 @@ export default function Train({ project }: { project: ProjectInfo }) {
     const un = listen<{ runId: number; event: Record<string, unknown> }>("train-event", (e) => {
       const { runId, event } = e.payload;
       if (runId !== selRef.current) return;
-      const t = event.type;
-      if (t === "progress") setProg(event as unknown as ProgressEv);
-      else if (t === "metric" || t === "log" || t === "error") loadDetail(runId);
-      else if (t === "batch") {
-        message.warning(`显存不够，批大小已从 ${event.was} 自动调到 ${event.batch}，重新开始训练`);
+      const ty = event.type;
+      if (ty === "progress") setProg(event as unknown as ProgressEv);
+      else if (ty === "metric" || ty === "log" || ty === "error") loadDetail(runId);
+      else if (ty === "batch") {
+        message.warning(t("显存不够，批大小已从 {was} 自动调到 {batch}，重新开始训练", { was: event.was as number, batch: event.batch as number }));
         loadRuns();
         loadDetail(runId);
       }
-      else if (t === "finished") {
+      else if (ty === "finished") {
         setProg(null);
         loadRuns();
         loadDetail(runId);
         const st = event.status as string;
         // 训练完成的提示在 App 里统一弹（不在训练页也能看到）
-        if (st === "failed") message.error("训练失败，看下方日志");
+        if (st === "failed") message.error(t("训练失败，看下方日志"));
       }
     });
     return () => {
@@ -241,9 +242,9 @@ export default function Train({ project }: { project: ProjectInfo }) {
       await loadRuns();
       setSel(id);
       setSplit(await api.splitSummary());
-      message.success("已开始训练");
+      message.success(t("已开始训练"));
     } catch (e) {
-      modal.error({ title: "没能开始训练", content: errText(e) });
+      modal.error({ title: t("没能开始训练"), content: errText(e) });
     } finally {
       setStarting(false);
     }
@@ -262,8 +263,18 @@ export default function Train({ project }: { project: ProjectInfo }) {
   );
   const baseRun = baseRuns.find((r) => r.id === cfg.baseRun) ?? null;
   const recommended = recommendModel(task, gpuMem);
-  const taskWord = { detect: "检测", segment: "实例分割", pose: "关键点", classify: "图像分类" }[task];
-  const unitWord = task === "classify" ? "张图" : task === "pose" ? "个目标" : "个框";
+  const descText = {
+    detect: t("用已标注和已审核的图片训练检测模型。"),
+    segment: t("用已标注和已审核的图片训练实例分割模型。"),
+    pose: t("用已标注和已审核的图片训练关键点模型。"),
+    classify: t("用已标注和已审核的图片训练图像分类模型。"),
+  }[task];
+  const fewText =
+    task === "classify"
+      ? t("图片较少，建议每个类别至少标 100 张图再训练。")
+      : task === "pose"
+        ? t("图片较少，建议每个类别至少标 100 个目标再训练。")
+        : t("图片较少，建议每个类别至少标 100 个框再训练。");
 
   const doExport = async () => {
     if (!run) return;
@@ -273,9 +284,9 @@ export default function Train({ project }: { project: ProjectInfo }) {
       await loadRuns();
       await loadDetail(run.id);
       modal.success({
-        title: "已导出 ONNX",
-        content: <div style={{ wordBreak: "break-all" }}>{p}<div className="muted">同目录的 model.json 里有类别和输入输出说明。</div></div>,
-        okText: "好的",
+        title: t("已导出 ONNX"),
+        content: <div style={{ wordBreak: "break-all" }}>{p}<div className="muted">{t("同目录的 model.json 里有类别和输入输出说明。")}</div></div>,
+        okText: t("好的"),
       });
     } catch (e) {
       message.error(errText(e));
@@ -287,11 +298,11 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const remove = () => {
     if (!run) return;
     modal.confirm({
-      title: `删除训练记录 ${run.name}？`,
-      content: "模型文件、日志和这次训练用的数据集副本都会删除，无法恢复。",
-      okText: "删除",
+      title: t("删除训练记录 {name}？", { name: run.name }),
+      content: t("模型文件、日志和这次训练用的数据集副本都会删除，无法恢复。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await api.deleteRun(run.id);
@@ -308,36 +319,36 @@ export default function Train({ project }: { project: ProjectInfo }) {
     <div className="page train-page">
       <div className="train-grid">
         <div>
-          <h1>训练</h1>
-          <p className="desc">用已标注和已审核的图片训练{taskWord}模型。</p>
+          <h1>{t("训练")}</h1>
+          <p className="desc">{descText}</p>
           {env && !env.ready && (
             <Alert
               type="warning"
               showIcon
               style={{ marginBottom: 12 }}
-              message="还没有训练环境"
-              description="第一次训练前需要安装 PyTorch，约 3GB，只需要一次。"
-              action={<Button size="small" type="primary" onClick={() => setPage("settings")}>去安装</Button>}
+              message={t("还没有训练环境")}
+              description={t("第一次训练前需要安装 PyTorch，约 3GB，只需要一次。")}
+              action={<Button size="small" type="primary" onClick={() => setPage("settings")}>{t("去安装")}</Button>}
             />
           )}
           <div className="card" style={{ marginBottom: 12 }}>
-            <div className="muted">可训练图片</div>
+            <div className="muted">{t("可训练图片")}</div>
             <div className="kpi">{trainable}</div>
             {split && (
               <div className="dim" style={{ fontSize: 12 }}>
-                训练 {split.train} · 验证 {split.val} · 测试 {split.test}
-                {split.unset > 0 && ` · 未划分 ${split.unset}（开始训练时按比例分配）`}
+                {t("训练 {train} · 验证 {val} · 测试 {test}", { train: split.train, val: split.val, test: split.test })}
+                {split.unset > 0 && ` · ${t("未划分 {n}（开始训练时按比例分配）", { n: split.unset })}`}
               </div>
             )}
             {trainable > 0 && trainable < 50 && (
-              <div style={{ color: "var(--warn)", fontSize: 12, marginTop: 6 }}>图片较少，建议每个类别至少标 100 {unitWord}再训练。</div>
+              <div style={{ color: "var(--warn)", fontSize: 12, marginTop: 6 }}>{fewText}</div>
             )}
           </div>
           <div className="card">
             <Form layout="vertical" size="small">
               <Form.Item
-                label="起点"
-                tooltip="补了新数据后，接着上次训好的模型继续训，比从头训快、也更稳。类别有变化时，分类部分会重新学"
+                label={t("起点")}
+                tooltip={t("补了新数据后，接着上次训好的模型继续训，比从头训快、也更稳。类别有变化时，分类部分会重新学")}
               >
                 <Select
                   style={{ width: "100%" }}
@@ -347,22 +358,22 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     update(r ? { baseRun: r.id, model: String(r.config.model), imgSize: r.config.imgSize ?? cfg.imgSize } : { baseRun: null });
                   }}
                   options={[
-                    { value: 0, label: "从预训练权重开始（从头训）" },
+                    { value: 0, label: t("从预训练权重开始（从头训）") },
                     ...baseRuns.map((r) => ({
                       value: r.id,
-                      label: `接着「${r.name}」继续训 · ${modelName(r)} · ${mn.m50} ${r.bestMap50?.toFixed(3) ?? "—"}`,
+                      label: `${t("接着「{name}」继续训", { name: r.name })} · ${modelName(r)} · ${mn.m50} ${r.bestMap50?.toFixed(3) ?? "—"}`,
                     })),
                   ]}
                 />
               </Form.Item>
               <Form.Item
-                label="模型"
+                label={t("模型")}
                 extra={
                   baseRun
-                    ? "接着训练时沿用那次的模型"
-                    : `标「推荐」的是按这台电脑推荐的（${
-                        isMac ? "Apple 芯片" : gpuMem ? `显卡 ${Math.round(gpuMem / 1024)}GB 显存` : "没有检测到 NVIDIA 显卡，CPU 训练选轻一点的"
-                      }）`
+                    ? t("接着训练时沿用那次的模型")
+                    : t("标「推荐」的是按这台电脑推荐的（{hw}）", {
+                        hw: isMac ? t("Apple 芯片") : gpuMem ? t("显卡 {n}GB 显存", { n: Math.round(gpuMem / 1024) }) : t("没有检测到 NVIDIA 显卡，CPU 训练选轻一点的"),
+                      })
                 }
               >
                 <Radio.Group value={cfg.model} disabled={!!baseRun} onChange={(e) => pickModel(e.target.value)}>
@@ -370,43 +381,43 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     {models.map((m) => (
                       <Radio key={m.value} value={m.value}>
                         <b>{m.name}</b>
-                        {m.value === recommended && <Tag color="blue" style={{ marginLeft: 6 }}>推荐</Tag>}
+                        {m.value === recommended && <Tag color="blue" style={{ marginLeft: 6 }}>{t("推荐")}</Tag>}
                         {m.yolox && <Tag color="green" style={{ marginLeft: 6 }}>YOLO</Tag>}
-                        {m.oneStage && <Tag style={{ marginLeft: 6 }}>单阶段</Tag>}
+                        {m.oneStage && <Tag style={{ marginLeft: 6 }}>{t("单阶段")}</Tag>}
                         <div className="dim" style={{ fontSize: 12 }}>{m.desc}</div>
                       </Radio>
                     ))}
                   </Space>
                 </Radio.Group>
               </Form.Item>
-              <Form.Item label="训练轮数" tooltip="数据越少需要的轮数越多；一般 20~50，YOLOX 建议 50 以上">
+              <Form.Item label={t("训练轮数")} tooltip={t("数据越少需要的轮数越多；一般 20~50，YOLOX 建议 50 以上")}>
                 <InputNumber min={1} max={500} value={cfg.epochs} onChange={(v) => update({ epochs: Number(v ?? 30) })} />
               </Form.Item>
-              <Form.Item label="训练数据" tooltip="选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存">
+              <Form.Item label={t("训练数据")} tooltip={t("选一个数据集版本训练，方便对比不同数据的效果；版本在「数据 → 管理 → 数据集版本」里保存")}>
                 <Select
                   style={{ width: "100%" }}
                   value={cfg.version != null && versions.some((v) => v.id === cfg.version) ? cfg.version : 0}
                   onChange={(v) => update({ version: v === 0 ? null : v })}
                   options={[
-                    { value: 0, label: `当前数据（${trainable} 张）` },
-                    ...versions.map((v) => ({ value: v.id, label: `版本「${v.name}」（${v.images} 张，${new Date(v.createdAt * 1000).toLocaleDateString()}）` })),
+                    { value: 0, label: t("当前数据（{n} 张）", { n: trainable }) },
+                    ...versions.map((v) => ({ value: v.id, label: t("版本「{name}」（{n} 张，{date}）", { name: v.name, n: v.images, date: new Date(v.createdAt * 1000).toLocaleDateString() }) })),
                   ]}
                 />
               </Form.Item>
               <Button type="link" size="small" style={{ padding: 0, marginBottom: 10 }} onClick={() => toggleAdv(!advOpen)}>
-                {advOpen ? "收起高级设置 ▴" : "高级设置：输入尺寸、批大小、数据增强、设备 ▾"}
+                {advOpen ? t("收起高级设置 ▴") : t("高级设置：输入尺寸、批大小、数据增强、设备 ▾")}
               </Button>
               {advOpen && (
                 <>
               <Space wrap>
                 <Form.Item
-                  label="输入尺寸"
+                  label={t("输入尺寸")}
                   tooltip={
                     picked?.fixedSize
-                      ? `这个模型固定用 ${picked.fixedSize}×${picked.fixedSize} 输入`
+                      ? t("这个模型固定用 {size}×{size} 输入", { size: picked.fixedSize })
                       : task === "classify"
-                        ? "分类一般用 224；细节多的图可以加大"
-                        : "目标小（远处的人、安全帽）用大尺寸，速度会变慢"
+                        ? t("分类一般用 224；细节多的图可以加大")
+                        : t("目标小（远处的人、安全帽）用大尺寸，速度会变慢")
                   }
                 >
                   <Select
@@ -417,7 +428,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     options={sizeOptions.map((v) => ({ value: v, label: v }))}
                   />
                 </Form.Item>
-                <Form.Item label="批大小" tooltip="显存不够报错时调小">
+                <Form.Item label={t("批大小")} tooltip={t("显存不够报错时调小")}>
                   <InputNumber min={1} max={64} value={cfg.batch} onChange={(v) => update({ batch: Number(v ?? 4) })} />
                 </Form.Item>
               </Space>
@@ -426,21 +437,21 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   style={{ marginBottom: 12 }}
                   type="info"
                   showIcon
-                  message="YOLOX 用官方的数据增强"
-                  description="Mosaic 拼图、MixUp、随机缩放旋转、颜色抖动、水平翻转、多尺度训练都自动开启，最后约 10% 的轮数关掉强增强收尾。学习率按批大小自动换算（界面上的学习率当作批大小 64 时的值）。"
+                  message={t("YOLOX 用官方的数据增强")}
+                  description={t("Mosaic 拼图、MixUp、随机缩放旋转、颜色抖动、水平翻转、多尺度训练都自动开启，最后约 10% 的轮数关掉强增强收尾。学习率按批大小自动换算（界面上的学习率当作批大小 64 时的值）。")}
                 />
               ) : (
                 <AugPanel value={cfg.aug} task={task} imgSize={picked?.fixedSize ?? cfg.imgSize} fixedSize={!!picked?.fixedSize} onChange={(aug) => update({ aug })} />
               )}
-              <Form.Item label="设备">
+              <Form.Item label={t("设备")}>
                 <Radio.Group value={cfg.device} onChange={(e) => update({ device: e.target.value })}>
-                  <Radio value="auto">自动（有显卡用显卡）</Radio>
-                  <Radio value="cpu">只用 CPU</Radio>
+                  <Radio value="auto">{t("自动（有显卡用显卡）")}</Radio>
+                  <Radio value="cpu">{t("只用 CPU")}</Radio>
                 </Radio.Group>
               </Form.Item>
               <Form.Item>
                 <Checkbox checked={cfg.onlyReviewed} onChange={(e) => update({ onlyReviewed: e.target.checked })}>
-                  只用已审核的图片
+                  {t("只用已审核的图片")}
                 </Checkbox>
               </Form.Item>
                 </>
@@ -453,7 +464,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                 disabled={running || (!useVersion && trainable === 0) || (env != null && !env.ready)}
                 onClick={start}
               >
-                {running ? "已有训练在进行" : "开始训练"}
+                {running ? t("已有训练在进行") : t("开始训练")}
               </Button>
             </Form>
           </div>
@@ -462,7 +473,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
         <div style={{ minWidth: 0 }}>
           {!run ? (
             <div className="card" style={{ padding: 48 }}>
-              <Empty description="还没有训练记录" />
+              <Empty description={t("还没有训练记录")} />
             </div>
           ) : (
             <>
@@ -474,28 +485,28 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     <span className="muted">
                       {modelName(run)} · {run.config?.imgSize}px ·{" "}
                       {run.config?.images
-                        ? `训练 ${run.config.images.train} 张 / 验证 ${run.config.images.val} 张 / ${run.config.images.anns ?? run.config.images.boxes} 个标注`
+                        ? t("训练 {train} 张 / 验证 {val} 张 / {anns} 个标注", { train: run.config.images.train, val: run.config.images.val, anns: run.config.images.anns ?? run.config.images.boxes })
                         : ""}
-                      {run.config?.batchRequested ? ` · 批大小 ${run.config.batch}（显存不够，从 ${run.config.batchRequested} 自动调小）` : ""}
+                      {run.config?.batchRequested ? ` · ${t("批大小 {batch}（显存不够，从 {req} 自动调小）", { batch: run.config.batch, req: run.config.batchRequested })}` : ""}
                     </span>
                   </div>
                   <Space>
                     {run.status === "running" && (
-                      <Button size="small" danger icon={<StopOutlined />} onClick={() => api.stopTraining(run.id).then(() => message.info("正在停止，当前这批算完就停")).catch((e) => message.error(errText(e)))}>
-                        停止
+                      <Button size="small" danger icon={<StopOutlined />} onClick={() => api.stopTraining(run.id).then(() => message.info(t("正在停止，当前这批算完就停"))).catch((e) => message.error(errText(e)))}>
+                        {t("停止")}
                       </Button>
                     )}
                     {run.hasWeights && (
                       <>
-                        <Button size="small" onClick={() => setPage("eval")}>看评估</Button>
+                        <Button size="small" onClick={() => setPage("eval")}>{t("看评估")}</Button>
                         {run.engine !== "external" && (
                           <Button size="small" icon={<ExportOutlined />} loading={exporting} onClick={doExport}>
-                            {run.hasOnnx ? "重新导出 ONNX" : "导出 ONNX"}
+                            {run.hasOnnx ? t("重新导出 ONNX") : t("导出 ONNX")}
                           </Button>
                         )}
                       </>
                     )}
-                    <Tooltip title="打开训练文件夹">
+                    <Tooltip title={t("打开训练文件夹")}>
                       <Button size="small" icon={<FolderOpenOutlined />} onClick={() => api.revealPath(run.dir).catch((e) => message.error(errText(e)))} />
                     </Tooltip>
                     {run.status !== "running" && <Button size="small" icon={<DeleteOutlined />} onClick={remove} />}
@@ -509,23 +520,23 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     />
                     <div className="dim" style={{ fontSize: 12 }}>
                       {prog
-                        ? `第 ${prog.epoch} / ${prog.epochs} 轮 · 本轮 ${prog.iter}/${prog.iters} · loss ${prog.loss.toFixed(4)} · 预计剩余 ${fmtDur(prog.eta)}`
-                        : "正在准备（首次会下载预训练权重）…"}
+                        ? t("第 {epoch} / {epochs} 轮 · 本轮 {iter}/{iters} · loss {loss} · 预计剩余 {eta}", { epoch: prog.epoch, epochs: prog.epochs, iter: prog.iter, iters: prog.iters, loss: prog.loss.toFixed(4), eta: fmtDur(prog.eta) })
+                        : t("正在准备（首次会下载预训练权重）…")}
                     </div>
                   </div>
                 )}
                 {detail?.error && run.status !== "running" && (
-                  <Alert type="error" style={{ marginTop: 12 }} message="训练出错" description={<pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12, maxHeight: 160, overflow: "auto" }}>{detail.error}</pre>} />
+                  <Alert type="error" style={{ marginTop: 12 }} message={t("训练出错")} description={<pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12, maxHeight: 160, overflow: "auto" }}>{detail.error}</pre>} />
                 )}
                 <div className="cards" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
-                    <div className="muted">损失 loss</div>
+                    <div className="muted">{t("损失 loss")}</div>
                     <LineChart xMax={epochs} yMin={0} series={[{ name: "loss", color: "#3d8bfd", values: metrics.map((m) => m.loss) }]} format={(v) => v.toFixed(2)} />
                   </div>
                   <div>
                     <div className="muted">
-                      验证集 <span style={{ color: "#2fb67c" }}>{mn.m50}</span> / <span style={{ color: "#9b7bf2" }}>{mn.m}</span>
-                      {run.bestMap50 != null && <span style={{ marginLeft: 8 }}>最好 {run.bestMap50.toFixed(3)}</span>}
+                      {t("验证集")} <span style={{ color: "#2fb67c" }}>{mn.m50}</span> / <span style={{ color: "#9b7bf2" }}>{mn.m}</span>
+                      {run.bestMap50 != null && <span style={{ marginLeft: 8 }}>{t("最好 {v}", { v: run.bestMap50.toFixed(3) })}</span>}
                     </div>
                     <LineChart
                       xMax={epochs}
@@ -540,7 +551,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                 </div>
               </div>
               <div className="card" style={{ marginBottom: 12 }}>
-                <div className="muted" style={{ marginBottom: 6 }}>日志</div>
+                <div className="muted" style={{ marginBottom: 6 }}>{t("日志")}</div>
                 <div ref={logBox} className="logbox">
                   {(detail?.log ?? []).join("\n") || "—"}
                 </div>
@@ -549,17 +560,17 @@ export default function Train({ project }: { project: ProjectInfo }) {
           )}
           <div className="card">
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-              <span className="muted">训练记录 <span className="dim">· 勾选两次以上可以对比</span></span>
+              <span className="muted">{t("训练记录")} <span className="dim">· {t("勾选两次以上可以对比")}</span></span>
               <Space>
                 {task === "detect" && (
-                  <Tooltip title="导入别处训好的 YOLO 等 ONNX 模型，用来预标注、评估、误报测试">
+                  <Tooltip title={t("导入别处训好的 YOLO 等 ONNX 模型，用来预标注、评估、误报测试")}>
                     <Button size="small" onClick={() => setImporting(true)}>
-                      导入外部模型
+                      {t("导入外部模型")}
                     </Button>
                   </Tooltip>
                 )}
                 <Button size="small" disabled={compareIds.length < 2} onClick={() => setComparing(true)}>
-                  对比所选{compareIds.length >= 2 ? `（${compareIds.length}）` : ""}
+                  {compareIds.length >= 2 ? t("对比所选（{n}）", { n: compareIds.length }) : t("对比所选")}
                 </Button>
               </Space>
             </div>
@@ -575,12 +586,12 @@ export default function Train({ project }: { project: ProjectInfo }) {
               }}
               onRow={(r) => ({ onClick: () => setSel(r.id), style: { cursor: "pointer", background: r.id === sel ? "rgba(61,139,253,.12)" : undefined } })}
               columns={[
-                { title: "时间", dataIndex: "createdAt", render: fmtTime },
-                { title: "模型", render: (_, r) => modelName(r) },
-                { title: "数据", render: (_, r) => r.config?.versionName ?? <span className="dim">当前数据</span> },
-                { title: "轮数", render: (_, r) => r.config?.epochs },
+                { title: t("时间"), dataIndex: "createdAt", render: fmtTime },
+                { title: t("模型"), render: (_, r) => modelName(r) },
+                { title: t("数据"), render: (_, r) => r.config?.versionName ?? <span className="dim">{t("当前数据")}</span> },
+                { title: t("轮数"), render: (_, r) => r.config?.epochs },
                 { title: mn.m50, dataIndex: "bestMap50", render: (v: number | null) => (v == null ? "—" : v.toFixed(3)) },
-                { title: "状态", dataIndex: "status", render: (s: RunStatus) => <Tag color={RUN_STATUS[s].color}>{RUN_STATUS[s].text}</Tag> },
+                { title: t("状态"), dataIndex: "status", render: (s: RunStatus) => <Tag color={RUN_STATUS[s].color}>{RUN_STATUS[s].text}</Tag> },
               ]}
             />
           </div>

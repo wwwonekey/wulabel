@@ -8,6 +8,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
+use crate::t;
+
 // ———————————————— 部署相关 ————————————————
 // 反馈服务入口：官网子域 feedback.xiaowuiot.com，由服务器 nginx 反代到反馈后端
 // （本机 127.0.0.1:8094）。自建部署改成你自己的地址即可。
@@ -102,17 +104,17 @@ pub(crate) fn device_id(app: &tauri::AppHandle) -> String {
 pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Result<(), String> {
     let message = input.message.trim().to_string();
     if message.is_empty() {
-        return Err("请先填写问题描述".into());
+        return Err(t!("请先填写问题描述"));
     }
     if message.chars().count() > MAX_MESSAGE_CHARS {
-        return Err(format!("问题描述太长（最多 {MAX_MESSAGE_CHARS} 字）"));
+        return Err(t!("问题描述太长（最多 {max} 字）", max = MAX_MESSAGE_CHARS));
     }
 
     // 去掉 dataURL 前缀，只留纯 base64，前后端对同一字符串签名/校验。
     let raw_shot = input.screenshot.unwrap_or_default();
     let shot = raw_shot.split_once(',').map(|(_, b)| b.to_string()).unwrap_or(raw_shot);
     if shot.len() > MAX_SHOT_BASE64 {
-        return Err("截图太大，请去掉截图后再提交".into());
+        return Err(t!("截图太大，请去掉截图后再提交"));
     }
 
     let contact = input.contact.unwrap_or_default().trim().to_string();
@@ -154,12 +156,12 @@ pub async fn submit_feedback(app: tauri::AppHandle, input: FeedbackInput) -> Res
                 .ok()
                 .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
                 .unwrap_or_else(|| match code {
-                    429 => "提交太频繁，请稍后再试".into(),
-                    _ => format!("提交失败（{code}）"),
+                    429 => t!("提交太频繁，请稍后再试"),
+                    _ => t!("提交失败（{code}）", code = code),
                 });
             Err(msg)
         }
-        Err(e) => Err(format!("网络连接失败，请检查网络后重试：{e}")),
+        Err(e) => Err(t!("网络连接失败，请检查网络后重试：{e}", e = e)),
     }
 }
 

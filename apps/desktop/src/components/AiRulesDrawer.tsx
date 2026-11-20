@@ -4,6 +4,7 @@ import { Alert, App, Button, Checkbox, Drawer, Empty, Input, Space, Switch, Tabs
 import { SendOutlined } from "@ant-design/icons";
 import { AiRules, api, ChatMsg, ChatReply, ClassRule, errText, PredResult } from "../api";
 import { useApp } from "../store";
+import { t } from "../i18n";
 
 interface Props {
   open: boolean;
@@ -60,7 +61,7 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
       try {
         await api.aiRulesPlatformEnabled(on);
         setPlatformOn(on);
-        message.success(on ? "巡瞳平台的识别也会按这套规则了" : "已停用，巡瞳平台恢复按原来的方式识别");
+        message.success(on ? t("巡瞳平台的识别也会按这套规则了") : t("已停用，巡瞳平台恢复按原来的方式识别"));
       } catch (e) {
         message.error(errText(e));
       }
@@ -70,11 +71,11 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
       return;
     }
     modal.confirm({
-      title: "让巡瞳平台的识别也用这套规则？",
+      title: t("让巡瞳平台的识别也用这套规则？"),
       content:
-        "打开后，你巡瞳账号里的识别（抓拍助手、告警推送、大模型识别接口）都会只按这个项目的类别识别，不再报其他隐患。适用的场景默认是全部，可以在巡瞳控制台的「识别规则」里调。账号里有多套启用的规则时，最早建的那套会接管所有场景。",
-      okText: "打开",
-      cancelText: "取消",
+        t("打开后，你巡瞳账号里的识别（抓拍助手、告警推送、大模型识别接口）都会只按这个项目的类别识别，不再报其他隐患。适用的场景默认是全部，可以在巡瞳控制台的「识别规则」里调。账号里有多套启用的规则时，最早建的那套会接管所有场景。"),
+      okText: t("打开@@启用"),
+      cancelText: t("取消"),
       onOk: apply,
     });
   };
@@ -95,7 +96,7 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
     try {
       const warn = await api.aiSaveRules(draft.instructions, draft.classes);
       if (warn) message.warning(warn);
-      else message.success(rules?.ruleSet ? "识别规则已保存，并同步到巡瞳平台" : "识别规则已保存");
+      else message.success(rules?.ruleSet ? t("识别规则已保存，并同步到巡瞳平台") : t("识别规则已保存"));
       await load();
       onSaved();
     } catch (e) {
@@ -107,13 +108,13 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
 
   const sync = async () => {
     if (dirty) {
-      message.warning("先保存规则再同步");
+      message.warning(t("先保存规则再同步"));
       return;
     }
     setSyncing(true);
     try {
       const code = await api.aiSyncRules();
-      message.success(`已同步到巡瞳平台（规则 ${code}）`);
+      message.success(t("已同步到巡瞳平台（规则 {code}）", { code }));
       await load();
     } catch (e) {
       message.error(errText(e));
@@ -125,7 +126,7 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
   const unbind = async () => {
     try {
       await api.aiUnbindRules();
-      message.success("已解除绑定，平台上的规则没有删除");
+      message.success(t("已解除绑定，平台上的规则没有删除"));
       await load();
     } catch (e) {
       message.error(errText(e));
@@ -147,7 +148,7 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
       const r = await api.aiChatRules(history.map(({ role, content, imageId }) => ({ role, content, imageId })));
       setTurns([
         ...history,
-        { role: "assistant", content: r.reply || "（AI 没有回答）", suggestion: r.rules, preview: r.preview, previewImageId: r.previewImageId },
+        { role: "assistant", content: r.reply || t("（AI 没有回答）"), suggestion: r.rules, preview: r.preview, previewImageId: r.previewImageId },
       ]);
     } catch (e) {
       message.error(errText(e));
@@ -171,7 +172,7 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
     try {
       const warn = await api.aiSaveRules(next.instructions, next.classes);
       if (warn) message.warning(warn);
-      else message.success("已采用 AI 建议的规则");
+      else message.success(t("已采用 AI 建议的规则"));
       await load();
       onSaved();
     } catch (e) {
@@ -187,7 +188,7 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
       </div>
       <Input.TextArea
         autoSize={{ minRows: 1, maxRows: 4 }}
-        placeholder="这个类别具体指什么、什么情况算 / 不算（可不填）"
+        placeholder={t("这个类别具体指什么、什么情况算 / 不算（可不填）")}
         value={c.description}
         disabled={!canEdit}
         maxLength={500}
@@ -197,82 +198,84 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
   );
 
   return (
-    <Drawer title="识别规则 · 和 AI 说怎么识别" open={open} onClose={onClose} width={520} destroyOnHidden>
+    <Drawer title={t("识别规则 · 和 AI 说怎么识别")} open={open} onClose={onClose} width={520} destroyOnHidden>
       <Tabs
         items={[
           {
             key: "chat",
-            label: "和 AI 聊",
+            label: t("和 AI 聊"),
             children: (
               <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 170px)" }}>
                 <Alert
                   type="info"
                   showIcon
                   style={{ marginBottom: 10 }}
-                  message="用大白话告诉 AI 怎么识别，比如「戴了帽子没系带也算未戴安全帽」「反光衣不算」「只看画面下半部分的通道」。AI 会整理成规则，你点「采用」后，之后用巡瞳 AI「按项目类别识别」就按这些规则来，只找项目里的类别。"
+                  message={t("用大白话告诉 AI 怎么识别，比如「戴了帽子没系带也算未戴安全帽」「反光衣不算」「只看画面下半部分的通道」。AI 会整理成规则，你点「采用」后，之后用巡瞳 AI「按项目类别识别」就按这些规则来，只找项目里的类别。")}
                 />
                 <div ref={listRef} style={{ flex: 1, overflow: "auto", paddingRight: 4 }}>
-                  {turns.length === 0 && <Empty description="还没有对话" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
-                  {turns.map((t, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: t.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                  {turns.length === 0 && <Empty description={t("还没有对话")} image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+                  {turns.map((turn, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: turn.role === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                       <div
                         style={{
                           maxWidth: "88%",
-                          background: t.role === "user" ? "rgba(61,139,253,.18)" : "var(--panel)",
+                          background: turn.role === "user" ? "rgba(61,139,253,.18)" : "var(--panel)",
                           border: "1px solid var(--line)",
                           borderRadius: 8,
                           padding: "8px 10px",
                           whiteSpace: "pre-wrap",
                         }}
                       >
-                        {t.content}
-                        {t.role === "user" && t.imageId != null && (
+                        {turn.content}
+                        {turn.role === "user" && turn.imageId != null && (
                           <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
-                            附图 #{t.imageId}
+                            {t("附图 #{id}", { id: turn.imageId })}
                           </div>
                         )}
-                        {t.suggestion && (
+                        {turn.suggestion && (
                           <div style={{ marginTop: 8, borderTop: "1px dashed var(--line)", paddingTop: 8 }}>
                             <div style={{ marginBottom: 4 }}>
-                              <Tag color="blue">AI 建议更新规则</Tag>
+                              <Tag color="blue">{t("AI 建议更新规则")}</Tag>
                             </div>
-                            {t.suggestion.instructions && <div style={{ fontSize: 12 }}>整体：{t.suggestion.instructions}</div>}
-                            {t.suggestion.classes.map((c) => (
+                            {turn.suggestion.instructions && <div style={{ fontSize: 12 }}>{t("整体：{text}", { text: turn.suggestion.instructions })}</div>}
+                            {turn.suggestion.classes.map((c) => (
                               <div key={c.name} style={{ fontSize: 12 }}>
                                 <b>{c.name}</b>：{c.description}
                               </div>
                             ))}
                             {canEdit ? (
-                              <Button size="small" type="primary" style={{ marginTop: 6 }} onClick={() => adopt(t.suggestion!)}>
-                                采用这些规则
+                              <Button size="small" type="primary" style={{ marginTop: 6 }} onClick={() => adopt(turn.suggestion!)}>
+                                {t("采用这些规则")}
                               </Button>
                             ) : (
                               <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                                你没有修改规则的权限，请发给发起人采用
+                                {t("你没有修改规则的权限，请发给发起人采用")}
                               </div>
                             )}
                           </div>
                         )}
-                        {t.preview && t.previewImageId != null && (
+                        {turn.preview && turn.previewImageId != null && (
                           <div style={{ marginTop: 8 }}>
                             <Button
                               size="small"
-                              disabled={t.previewImageId !== imageId}
-                              onClick={() => onApplyPreview(t.preview!)}
+                              disabled={turn.previewImageId !== imageId}
+                              onClick={() => onApplyPreview(turn.preview!)}
                             >
-                              {t.previewImageId === imageId ? `把试识别的 ${t.preview.boxes.length} 个框加到这张图` : `试识别的是图 #${t.previewImageId}`}
+                              {turn.previewImageId === imageId
+                                ? t("把试识别的 {n} 个框加到这张图", { n: turn.preview.boxes.length })
+                                : t("试识别的是图 #{id}", { id: turn.previewImageId })}
                             </Button>
                           </div>
                         )}
                       </div>
                     </div>
                   ))}
-                  {sending && <div className="dim">AI 正在思考…</div>}
+                  {sending && <div className="dim">{t("AI 正在思考…")}</div>}
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <Input.TextArea
                     autoSize={{ minRows: 2, maxRows: 5 }}
-                    placeholder="说说要怎么识别，或者问「这张图左边那个人为什么没认出来」（Ctrl+Enter 发送）"
+                    placeholder={t("说说要怎么识别，或者问「这张图左边那个人为什么没认出来」（Ctrl+Enter 发送）")}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => {
@@ -285,14 +288,14 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
                   />
                   <Space style={{ marginTop: 6, width: "100%", justifyContent: "space-between" }}>
                     <Checkbox checked={withImage} disabled={imageId == null} onChange={(e) => setWithImage(e.target.checked)}>
-                      附上当前这张图（AI 会按规则试识别）
+                      {t("附上当前这张图（AI 会按规则试识别）")}
                     </Checkbox>
                     <Button type="primary" icon={<SendOutlined />} loading={sending} onClick={send} disabled={!text.trim()}>
-                      发送
+                      {t("发送")}
                     </Button>
                   </Space>
                   <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
-                    每次对话会用巡瞳 AI 的额度（协作成员用的是发起人的额度）。
+                    {t("每次对话会用巡瞳 AI 的额度（协作成员用的是发起人的额度）。")}
                   </div>
                 </div>
               </div>
@@ -300,15 +303,15 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
           },
           {
             key: "rules",
-            label: "当前规则",
+            label: t("当前规则"),
             children: draft ? (
               <div onKeyDown={(e) => e.stopPropagation()}>
                 <div style={{ marginBottom: 6 }}>
-                  <b>整体规则</b> <span className="dim" style={{ fontSize: 12 }}>（对所有类别都适用）</span>
+                  <b>{t("整体规则")}</b> <span className="dim" style={{ fontSize: 12 }}>{t("（对所有类别都适用）")}</span>
                 </div>
                 <Input.TextArea
                   autoSize={{ minRows: 3, maxRows: 8 }}
-                  placeholder="比如：只关注画面里的人和车，忽略海报、屏幕里的内容；夜间画面也要识别"
+                  placeholder={t("比如：只关注画面里的人和车，忽略海报、屏幕里的内容；夜间画面也要识别")}
                   value={draft.instructions}
                   disabled={!canEdit}
                   maxLength={1000}
@@ -316,42 +319,42 @@ export default function AiRulesDrawer({ open, onClose, imageId, canEdit, onApply
                   style={{ marginBottom: 16 }}
                 />
                 <div style={{ marginBottom: 8 }}>
-                  <b>每个类别的识别说明</b>
+                  <b>{t("每个类别的识别说明")}</b>
                 </div>
-                {draft.classes.length === 0 ? <Empty description="项目里还没有类别" /> : draft.classes.map(classDesc)}
+                {draft.classes.length === 0 ? <Empty description={t("项目里还没有类别")} /> : draft.classes.map(classDesc)}
                 {canEdit ? (
                   <Button type="primary" disabled={!dirty} loading={saving} onClick={saveDraft}>
-                    保存规则
+                    {t("保存规则")}
                   </Button>
                 ) : (
-                  <div className="dim">发起人没有开放修改类别和规则</div>
+                  <div className="dim">{t("发起人没有开放修改类别和规则")}</div>
                 )}
                 {!remote && (
                   <div style={{ marginTop: 20, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
                     <div style={{ marginBottom: 6 }}>
-                      <b>同步到巡瞳平台</b>
+                      <b>{t("同步到巡瞳平台")}</b>
                     </div>
                     <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
-                      把类别和规则存到巡瞳平台上（默认不启用，不影响平台现在的识别）。绑定后每次保存规则会自动同步内容；想让巡瞳自己的抓拍、告警也只报你要的类别，再打开「平台识别也用这套规则」。
+                      {t("把类别和规则存到巡瞳平台上（默认不启用，不影响平台现在的识别）。绑定后每次保存规则会自动同步内容；想让巡瞳自己的抓拍、告警也只报你要的类别，再打开「平台识别也用这套规则」。")}
                     </div>
                     {rules?.ruleSet ? (
                       <Space wrap>
-                        <Tag color="green">已绑定平台规则 {rules.ruleSet}</Tag>
+                        <Tag color="green">{t("已绑定平台规则 {code}", { code: rules.ruleSet })}</Tag>
                         {platformOn !== null && (
                           <span>
-                            <Switch size="small" checked={platformOn} onChange={setPlatform} /> 平台识别也用这套规则
+                            <Switch size="small" checked={platformOn} onChange={setPlatform} /> {t("平台识别也用这套规则")}
                           </span>
                         )}
                         <Button size="small" loading={syncing} onClick={sync}>
-                          立即同步
+                          {t("立即同步")}
                         </Button>
                         <Button size="small" type="link" onClick={unbind}>
-                          解除绑定
+                          {t("解除绑定")}
                         </Button>
                       </Space>
                     ) : (
                       <Button size="small" loading={syncing} onClick={sync}>
-                        同步到巡瞳平台
+                        {t("同步到巡瞳平台")}
                       </Button>
                     )}
                   </div>

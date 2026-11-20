@@ -17,6 +17,7 @@ use crate::images;
 use crate::project::{Project, IMAGES_DIR};
 use crate::runtime::Runtime;
 use crate::training::{self, Predictor};
+use crate::t;
 
 /// 在 JSON 里按几种可能的路径找一个数
 fn find_f64(v: &serde_json::Value, paths: &[&[&str]]) -> Option<f64> {
@@ -48,16 +49,16 @@ pub fn upload_model(p: &Project, rt: &Runtime, run_id: i64, name: &str, log: &(d
     let (base, key) = ai::config(rt)?;
     let run = training::get_run(p, run_id)?;
     if run.engine == training::EXTERNAL {
-        return Err(msg("导入的外部模型不能上传，请上传在 Wulabel 里训练的模型"));
+        return Err(msg(t!("导入的外部模型不能上传，请上传在 Wulabel 里训练的模型")));
     }
     let task = p.meta.task.as_str();
     if task != "detect" {
-        return Err(msg("巡瞳平台目前只支持目标检测模型"));
+        return Err(msg(t!("巡瞳平台目前只支持目标检测模型")));
     }
     let dir = PathBuf::from(&run.dir);
     let onnx = dir.join("model.onnx");
     if !onnx.exists() {
-        log("先导出 ONNX…".into());
+        log(t!("先导出 ONNX…"));
         training::export_onnx(p, rt, run_id, log)?;
     }
     let meta_json: serde_json::Value = fs::read_to_string(dir.join("model.json"))
@@ -66,7 +67,7 @@ pub fn upload_model(p: &Project, rt: &Runtime, run_id: i64, name: &str, log: &(d
         .unwrap_or_default();
     let classes = meta_json["classes"].clone();
     if !classes.is_array() {
-        return Err(msg("读不到模型的类别（model.json），请重新导出 ONNX"));
+        return Err(msg(t!("读不到模型的类别（model.json），请重新导出 ONNX")));
     }
     let eval = training::detail(p, run_id).ok().and_then(|d| d.eval).unwrap_or_default();
     let conf = find_f64(&eval, &[&["thresholds", "best", "conf"], &["val", "thresholds", "best", "conf"], &["test", "thresholds", "best", "conf"]]);
@@ -84,7 +85,7 @@ pub fn upload_model(p: &Project, rt: &Runtime, run_id: i64, name: &str, log: &(d
         "recommendedConf": conf.map(|c| c.clamp(0.05, 0.95)),
         "metrics": { "map50": run.best_map50, "precision": precision, "recall": recall },
     });
-    let file = fs::read(&onnx).map_err(|e| msg(format!("读取模型文件失败：{e}")))?;
+    let file = fs::read(&onnx).map_err(|e| msg(t!("读取模型文件失败：{e}", e = e)))?;
     let boundary = format!("----wulabel{}", crate::team::token(8));
     let mut body = Vec::with_capacity(file.len() + 4096);
     body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"meta\"\r\nContent-Type: application/json; charset=utf-8\r\n\r\n").as_bytes());
@@ -94,7 +95,7 @@ pub fn upload_model(p: &Project, rt: &Runtime, run_id: i64, name: &str, log: &(d
     );
     body.extend_from_slice(&file);
     body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
-    log(format!("上传模型（{:.1} MB）…", file.len() as f64 / 1048576.0));
+    log(t!("上传模型（{mb} MB）…", mb = format!("{:.1}", file.len() as f64 / 1048576.0)));
     let resp = ureq::post(&format!("{base}/v1/custom-models"))
         .set("Authorization", &format!("Bearer {key}"))
         .set("Content-Type", &format!("multipart/form-data; boundary={boundary}"))
@@ -102,9 +103,8 @@ pub fn upload_model(p: &Project, rt: &Runtime, run_id: i64, name: &str, log: &(d
         .send_bytes(&body)
         .map_err(|e| match e {
             // 平台前面的 nginx 限制了上传大小，返回的是网页不是 JSON，单独说清楚
-            ureq::Error::Status(413, _) => msg(format!(
-                "模型文件 {:.1} MB，超过了巡瞳平台目前允许的上传大小。请联系平台放宽上传限制后再传",
-                file.len() as f64 / 1048576.0
+            ureq::Error::Status(413, _) => msg(t!("模型文件 {mb} MB，超过了巡瞳平台目前允许的上传大小。请联系平台放宽上传限制后再传",
+                mb = format!("{:.1}", file.len() as f64 / 1048576.0)
             )),
             e => ai::err_of(e),
         })?;
@@ -216,14 +216,14 @@ pub fn pull_alarms(
         let n = page.len();
         items.extend(page);
         cursor = v["nextCursor"].as_str().map(String::from);
-        log(format!("已取到 {} 条告警记录…", items.len()));
+        log(t!("已取到 {n} 条告警记录…", n = items.len()));
         if n == 0 || cursor.is_none() || items.len() >= max {
             break;
         }
     }
     items.truncate(max);
     if items.is_empty() {
-        return Err(msg("这段时间平台上没有告警记录（只有配置了推送通道的账号才会产生告警记录）"));
+        return Err(msg(t!("这段时间平台上没有告警记录（只有配置了推送通道的账号才会产生告警记录）")));
     }
     // 2. 下载图片到项目的 images/xuntong_日期/
     let folder = format!("xuntong_{}", chrono::Local::now().format("%Y%m%d_%H%M%S"));
@@ -249,7 +249,7 @@ pub fn pull_alarms(
             .map_err(ai::err_of)
             .and_then(|r| {
                 let mut buf = Vec::new();
-                std::io::Read::read_to_end(&mut r.into_reader(), &mut buf).map_err(|e| msg(format!("下载告警图片失败：{e}")))?;
+                std::io::Read::read_to_end(&mut r.into_reader(), &mut buf).map_err(|e| msg(t!("下载告警图片失败：{e}", e = e)))?;
                 Ok(buf)
             });
         match got {
@@ -319,7 +319,7 @@ fn device_name() -> String {
 /// 用系统默认浏览器打开网址
 pub fn open_url(url: &str) -> AppResult<()> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return Err(msg("地址不对"));
+        return Err(msg(t!("地址不对")));
     }
     #[cfg(target_os = "windows")]
     let r = crate::runtime::command("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn();
@@ -327,7 +327,7 @@ pub fn open_url(url: &str) -> AppResult<()> {
     let r = std::process::Command::new("open").arg(url).spawn();
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let r = std::process::Command::new("xdg-open").arg(url).spawn();
-    r.map(|_| ()).map_err(|e| msg(format!("打不开浏览器：{e}")))
+    r.map(|_| ()).map_err(|e| msg(t!("打不开浏览器：{e}", e = e)))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -349,12 +349,12 @@ pub fn login_start(rt: &Runtime) -> AppResult<DeviceCode> {
         .timeout(Duration::from_secs(30))
         .send_string(&body.to_string())
         .map_err(|e| match e {
-            ureq::Error::Status(404, _) => msg("巡瞳平台还不支持在 Wulabel 里登录（平台升级后就能用）。现在请先到巡瞳控制台创建 API Key，在下面的「手动填 API Key」里填"),
-            ureq::Error::Status(429, _) => msg("登录请求太频繁了，请过 10 分钟再试"),
+            ureq::Error::Status(404, _) => msg(t!("巡瞳平台还不支持在 Wulabel 里登录（平台升级后就能用）。现在请先到巡瞳控制台创建 API Key，在下面的「手动填 API Key」里填")),
+            ureq::Error::Status(429, _) => msg(t!("登录请求太频繁了，请过 10 分钟再试")),
             e => ai::err_of(e),
         })?;
     let v = ai::parse(resp)?;
-    let s = |k: &str| v[k].as_str().map(String::from).ok_or_else(|| msg(format!("巡瞳平台返回的登录信息缺少 {k}")));
+    let s = |k: &str| v[k].as_str().map(String::from).ok_or_else(|| msg(t!("巡瞳平台返回的登录信息缺少 {k}", k = k)));
     let code = DeviceCode {
         device_code: s("deviceCode")?,
         user_code: s("userCode")?,
@@ -378,7 +378,7 @@ pub fn login_poll(rt: &Runtime, device_code: &str) -> AppResult<serde_json::Valu
     match r {
         Ok(resp) => {
             let v = ai::parse(resp)?;
-            let key = v["apiKey"].as_str().filter(|k| !k.is_empty()).ok_or_else(|| msg("巡瞳平台没有返回 API Key"))?;
+            let key = v["apiKey"].as_str().filter(|k| !k.is_empty()).ok_or_else(|| msg(t!("巡瞳平台没有返回 API Key")))?;
             let mut s = rt.settings();
             s.ai_key = Some(key.to_string());
             rt.save_settings(&s)?;
@@ -392,7 +392,7 @@ pub fn login_poll(rt: &Runtime, device_code: &str) -> AppResult<serde_json::Valu
                 "slow_down" => "slow_down",
                 "expired_token" => "expired",
                 "access_denied" => "denied",
-                _ => return Err(msg(format!("登录失败：{}", body["message"].as_str().unwrap_or(code)))),
+                _ => return Err(msg(t!("登录失败：{e}", e = body["message"].as_str().unwrap_or(code)))),
             };
             Ok(serde_json::json!({ "status": status }))
         }

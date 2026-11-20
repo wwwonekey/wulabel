@@ -20,11 +20,12 @@ def main() -> int:
     # 桌面端按 UTF-8 解析输出
     sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
     sys.stdin.reconfigure(encoding="utf-8")
+    from .i18n import tr
     from .protocol import emit
 
     args = sys.argv[1:]
     if not args:
-        emit("error", msg="缺少命令")
+        emit("error", msg=tr("缺少命令"))
         return 2
     cmd = args[0]
     try:
@@ -85,7 +86,7 @@ def main() -> int:
             with open(args[1], encoding="utf-8") as f:
                 fptest.run(json.load(f))
         else:
-            emit("error", msg=f"未知命令：{cmd}")
+            emit("error", msg=tr("未知命令：{cmd}", cmd=cmd))
             return 2
     except KeyboardInterrupt:
         return 130

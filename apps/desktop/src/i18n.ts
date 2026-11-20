@@ -8,9 +8,17 @@
  * 语言默认跟随系统（中文系统显示中文，没有对应语言包的显示英文），设置里可以手动改。
  * 启动时先加载语言包再加载界面（见 main.tsx），所以模块顶层的常量里也能用 t()；
  * 切换语言后重新加载页面生效。
+ * 同一个中文在不同地方意思不同（如「关闭」按钮和「关闭」状态），键写成 "关闭@@状态"，中文界面只显示 @@ 前面的部分。
  */
 
-import { prefs } from "./store";
+// 不引用别的模块（store、api 等会反过来引用这里，循环引用时这里还没初始化）
+function readPref(): string {
+  try {
+    return localStorage.getItem("xlabel.lang") ?? "auto";
+  } catch {
+    return "auto";
+  }
+}
 
 export type Lang = "zh" | "zh-TW" | "en" | "ja" | "ko" | "es" | "pt" | "ru" | "de" | "fr" | "vi" | "id";
 
@@ -53,12 +61,16 @@ export function systemLang(): Lang {
 
 /** 用户在设置里选的语言，"auto" 表示跟随系统 */
 export function langSetting(): Lang | "auto" {
-  const v = prefs.get("lang", "auto");
+  const v = readPref();
   return v === "auto" || LANGS.some((l) => l.value === v) ? (v as Lang | "auto") : "auto";
 }
 
 export function setLangSetting(v: Lang | "auto") {
-  prefs.set("lang", v);
+  try {
+    localStorage.setItem("xlabel.lang", v);
+  } catch {
+    /* 忽略 */
+  }
 }
 
 export function currentLang(): Lang {
@@ -83,7 +95,9 @@ export async function initI18n(): Promise<Lang> {
 
 /** 翻译。zh 是中文原文（也是词条的键），vars 替换里面的 {名字} */
 export function t(zh: string, vars?: Record<string, string | number | null | undefined>): string {
-  let s = lang === "zh" ? zh : dict[zh] || fallback[zh] || zh;
+  // 同一个中文在不同地方意思不同时，键后面加「@@说明」区分（如 "关闭@@状态" 译成 Off），中文只显示 @@ 前面的部分
+  const shown = zh.includes("@@") ? zh.slice(0, zh.indexOf("@@")) : zh;
+  let s = lang === "zh" ? shown : dict[zh] || fallback[zh] || shown;
   if (vars) {
     for (const k in vars) s = s.split(`{${k}}`).join(String(vars[k] ?? ""));
   }

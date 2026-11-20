@@ -9,6 +9,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{msg, AppResult};
+use crate::t;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,7 +146,7 @@ impl Runtime {
 
     /// 运行 worker 的命令（已设置好 PYTHONPATH 等环境变量）
     pub fn worker(&self, args: &[&str]) -> AppResult<Command> {
-        let py = self.python().ok_or_else(|| msg("还没有训练环境，请先到「设置」里安装"))?;
+        let py = self.python().ok_or_else(|| msg(t!("还没有训练环境，请先到「设置」里安装")))?;
         let mut c = command(py);
         c.arg("-m").arg("xlabel_worker").args(args);
         c.env("PYTHONPATH", &self.worker_dir)
@@ -212,7 +213,7 @@ impl Runtime {
 
     /// 运行 `python -m xlabel_worker check`，结果缓存
     pub fn check(&self, refresh: bool) -> AppResult<serde_json::Value> {
-        let py = self.python().ok_or_else(|| msg("还没有训练环境"))?;
+        let py = self.python().ok_or_else(|| msg(t!("还没有训练环境")))?;
         let key = py.to_string_lossy().into_owned();
         if !refresh {
             if let Some((k, v)) = self.check_cache.lock().clone() {
@@ -229,7 +230,7 @@ impl Runtime {
             .find(|v| v["type"] == "env")
             .ok_or_else(|| {
                 let err = String::from_utf8_lossy(&out.stderr);
-                msg(format!("训练环境检查失败：{}", last_lines(&err, 6)))
+                msg(t!("训练环境检查失败：{e}", e = last_lines(&err, 6)))
             })?;
         *self.check_cache.lock() = Some((key, v.clone()));
         Ok(v)
@@ -265,13 +266,13 @@ impl Runtime {
 
     /// 确保环境里有某个 Python 包，没有就用 uv 装上（OpenCV、OpenVINO 等按需安装）
     pub fn ensure_package(&self, module: &str, package: &str, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
-        let py = self.python().ok_or_else(|| msg("还没有训练环境，请先到「设置」里安装"))?;
+        let py = self.python().ok_or_else(|| msg(t!("还没有训练环境，请先到「设置」里安装")))?;
         let ok = command(&py).args(["-c", &format!("import {module}")]).output().map(|o| o.status.success()).unwrap_or(false);
         if ok {
             return Ok(());
         }
-        let uv = self.uv().ok_or_else(|| msg(format!("缺少 {package}，并且没有找到 uv，无法自动安装")))?;
-        log(format!("首次使用，正在安装 {package}…"));
+        let uv = self.uv().ok_or_else(|| msg(t!("缺少 {package}，并且没有找到 uv，无法自动安装", package = package)))?;
+        log(t!("首次使用，正在安装 {package}…", package = package));
         let mut c = command(&uv);
         c.args(["pip", "install", "--python"]).arg(&py).arg(package);
         if self.settings().mirror == "china" {
@@ -291,7 +292,7 @@ impl Runtime {
         {
             let mut g = self.installing.lock();
             if *g {
-                return Err(msg("已经在安装了"));
+                return Err(msg(t!("已经在安装了")));
             }
             *g = true;
         }
@@ -308,14 +309,14 @@ impl Runtime {
         progress: &(dyn Fn(&str, u64, u64, u64) + Sync),
     ) -> AppResult<()> {
         let china = self.settings().mirror == "china";
-        log(format!("【1/5】准备 uv（Python 环境管理工具）"));
+        log(t!("【1/5】准备 uv（Python 环境管理工具）"));
         let uv = match self.uv() {
             Some(u) => u,
             None => download_uv(&self.root().join("bin"), log)?,
         };
-        log(format!("使用 {}", uv.display()));
+        log(t!("使用 {path}", path = uv.display()));
 
-        log("【2/5】创建 Python 3.11 环境（首次需要下载约 30MB）".into());
+        log(t!("【2/5】创建 Python 3.11 环境（首次需要下载约 30MB）"));
         let env = self.env_dir();
         let mut c = command(&uv);
         c.args(["venv", "--python", "3.11", "--allow-existing"]).arg(&env);
@@ -331,7 +332,7 @@ impl Runtime {
             "mps" => "300MB",
             _ => "3GB",
         };
-        log(format!("【3/5】安装 PyTorch（{variant}，约 {size}，耗时最长）"));
+        log(t!("【3/5】安装 PyTorch（{variant}，约 {size}，耗时最长）", variant = variant, size = size));
         let pypi = if china { "https://mirrors.aliyun.com/pypi/simple" } else { "https://pypi.org/simple" };
         let official = format!("https://download.pytorch.org/whl/{variant}");
         if variant == "mps" {
@@ -348,29 +349,29 @@ impl Runtime {
         } else {
             // 精确指定带 +cuXXX 的版本，避免装成同版本号的 CPU 包
             let page = http_get_text(&format!("{official}/torch/"))
-                .map_err(|e| msg(format!("无法访问 PyTorch 下载站：{e}")))?;
+                .map_err(|e| msg(t!("无法访问 PyTorch 下载站：{e}", e = e)))?;
             let torch_v = best_version(&page, "torch", variant)
-                .ok_or_else(|| msg(format!("PyTorch 官方没有适合这台电脑的 {variant} 版本")))?;
+                .ok_or_else(|| msg(t!("PyTorch 官方没有适合这台电脑的 {variant} 版本", variant = variant)))?;
             let vision_v = torchvision_for(&torch_v);
-            log(format!("选择 torch {torch_v}+{variant}、torchvision {vision_v}+{variant}"));
+            log(t!("选择 torch {torch_v}+{variant}、torchvision {vision_v}+{variant}", torch_v = torch_v, variant = variant, vision_v = vision_v));
             let on_aliyun = china
                 && http_get_text(&format!("https://mirrors.aliyun.com/pytorch-wheels/{variant}/"))
                     .ok()
                     .and_then(|p| best_version_matching(&p, "torch", variant, &torch_v))
                     .is_some();
             let base = if on_aliyun {
-                log("阿里云镜像有这个版本，从国内镜像下载".into());
+                log(t!("阿里云镜像有这个版本，从国内镜像下载"));
                 format!("https://mirrors.aliyun.com/pytorch-wheels/{variant}")
             } else {
                 if china {
-                    log("国内镜像还没有这个版本，从 PyTorch 官方下载".into());
+                    log(t!("国内镜像还没有这个版本，从 PyTorch 官方下载"));
                 }
                 official.clone()
             };
             // 先把两个大 wheel 自己下下来（带进度条），再本地安装；任何环节出错则退回 uv 直接装
             match self.download_wheels(&base, &torch_v, &vision_v, variant, log, progress) {
                 Ok((torch_whl, vision_whl)) => {
-                    log("下载完成，正在安装…".into());
+                    log(t!("下载完成，正在安装…"));
                     let mut c = command(&uv);
                     c.args(["pip", "install", "--python"]).arg(&py).arg(&torch_whl).arg(&vision_whl);
                     c.args(["--index-url", pypi]);
@@ -378,7 +379,7 @@ impl Runtime {
                     let _ = fs::remove_dir_all(self.root().join("wheels"));
                 }
                 Err(e) => {
-                    log(format!("自带下载不可用（{e}），改用 uv 下载"));
+                    log(t!("自带下载不可用（{e}），改用 uv 下载", e = e));
                     let mut c = command(&uv);
                     c.args(["pip", "install", "--python"]).arg(&py);
                     c.arg(format!("torch=={torch_v}+{variant}")).arg(format!("torchvision=={vision_v}+{variant}"));
@@ -392,10 +393,10 @@ impl Runtime {
             }
         }
         if !cuda_matches(&py, variant, &self.worker_dir) {
-            return Err(msg("装好的 PyTorch 不是显卡版本，请改用「官方源」后重新安装"));
+            return Err(msg(t!("装好的 PyTorch 不是显卡版本，请改用「官方源」后重新安装")));
         }
 
-        log("【4/5】安装其他依赖".into());
+        log(t!("【4/5】安装其他依赖"));
         let mut c = command(&uv);
         c.args(["pip", "install", "--python"]).arg(&py).args(["numpy", "pillow", "onnx", "onnxruntime", "opencv-python-headless"]);
         if china {
@@ -403,12 +404,12 @@ impl Runtime {
         }
         run_logged(c, log)?;
 
-        log("【5/5】检查环境".into());
+        log(t!("【5/5】检查环境"));
         *self.check_cache.lock() = None;
         let v = self.check(true)?;
-        log(format!("完成：{}", v));
+        log(t!("完成：{v}", v = v));
         if variant.starts_with("cu") && v["cuda"] != true {
-            return Err(msg("PyTorch 已安装，但显卡不可用。请更新 NVIDIA 驱动后重新安装，或改用 CPU 版本"));
+            return Err(msg(t!("PyTorch 已安装，但显卡不可用。请更新 NVIDIA 驱动后重新安装，或改用 CPU 版本")));
         }
         Ok(())
     }
@@ -427,9 +428,9 @@ impl Runtime {
         fs::create_dir_all(&dir)?;
         let torch_whl = dir.join(format!("torch-{torch_v}+{variant}{}", wheel_suffix()));
         let vision_whl = dir.join(format!("torchvision-{vision_v}+{variant}{}", wheel_suffix()));
-        log(format!("下载 torch（{torch_v}+{variant}）"));
+        log(t!("下载 torch（{torch_v}+{variant}）", torch_v = torch_v, variant = variant));
         download_file(&wheel_url(base, "torch", torch_v, variant), &torch_whl, &|d, t, s| progress("torch", d, t, s))?;
-        log(format!("下载 torchvision（{vision_v}+{variant}）"));
+        log(t!("下载 torchvision（{vision_v}+{variant}）", vision_v = vision_v, variant = variant));
         download_file(&wheel_url(base, "torchvision", vision_v, variant), &vision_whl, &|d, t, s| progress("torchvision", d, t, s))?;
         Ok((torch_whl, vision_whl))
     }
@@ -492,11 +493,11 @@ pub struct SpeedResult {
 /// 实测当前网络下「国内镜像」vs「官方源」下载 torch 的速度，推荐更快的那个
 pub fn speed_test(variant: &str) -> AppResult<SpeedResult> {
     if variant == "mps" || cfg!(target_os = "macos") {
-        return Err(msg("macOS 上 PyTorch 从 PyPI 安装，不需要测速；在国内选「国内镜像」即可"));
+        return Err(msg(t!("macOS 上 PyTorch 从 PyPI 安装，不需要测速；在国内选「国内镜像」即可")));
     }
     let official = format!("https://download.pytorch.org/whl/{variant}");
-    let page = http_get_text(&format!("{official}/torch/")).map_err(|e| msg(format!("无法访问 PyTorch 下载站：{e}")))?;
-    let torch_v = best_version(&page, "torch", variant).ok_or_else(|| msg(format!("没有找到适合的 {variant} 版本")))?;
+    let page = http_get_text(&format!("{official}/torch/")).map_err(|e| msg(t!("无法访问 PyTorch 下载站：{e}", e = e)))?;
+    let torch_v = best_version(&page, "torch", variant).ok_or_else(|| msg(t!("没有找到适合的 {variant} 版本", variant = variant)))?;
     let file = format!("torch-{torch_v}%2B{variant}{}", wheel_suffix());
     let china = measure_speed(&format!("https://mirrors.aliyun.com/pytorch-wheels/{variant}/{file}"));
     let official_speed = measure_speed(&format!("{official}/{file}"));
@@ -606,7 +607,7 @@ fn last_lines(s: &str, n: usize) -> String {
 /// 运行命令，stdout 和 stderr 逐行回调；失败时带上最后几行输出
 pub fn run_logged(mut c: Command, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
     c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = c.spawn().map_err(|e| msg(format!("无法启动 {:?}：{e}", c.get_program())))?;
+    let mut child = c.spawn().map_err(|e| msg(t!("无法启动 {prog}：{e}", prog = format!("{:?}", c.get_program()), e = e)))?;
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
     let tail = Mutex::new(Vec::<String>::new());
@@ -634,7 +635,7 @@ pub fn run_logged(mut c: Command, log: &(dyn Fn(String) + Sync)) -> AppResult<()
     });
     let status = child.wait()?;
     if !status.success() {
-        return Err(msg(format!("命令失败（{status}）：{}", tail.lock().join("\n"))));
+        return Err(msg(t!("命令失败（{status}）：{tail}", status = status, tail = tail.lock().join("\n"))));
     }
     Ok(())
 }
@@ -705,15 +706,15 @@ fn download_uv(bin: &Path, log: &(dyn Fn(String) + Sync)) -> AppResult<PathBuf> 
     };
     let mut errors = Vec::new();
     let github = format!("https://github.com/astral-sh/uv/releases/latest/download/uv-{target}.zip");
-    log(format!("下载 uv：{github}"));
+    log(t!("下载 uv：{github}", github = github));
     match http_get(&github).and_then(|b| extract_exe(&b, exe, &bin.join(exe))) {
         Ok(p) => return Ok(p),
         Err(e) => {
-            log(format!("GitHub 下载失败：{e}"));
+            log(t!("GitHub 下载失败：{e}", e = e));
             errors.push(e.to_string());
         }
     }
-    log("改从 PyPI 下载 uv…".into());
+    log(t!("改从 PyPI 下载 uv…"));
     let r = (|| -> AppResult<PathBuf> {
         let meta: serde_json::Value = serde_json::from_slice(&http_get("https://pypi.org/pypi/uv/json")?)?;
         let tag = if cfg!(windows) {
@@ -729,12 +730,12 @@ fn download_uv(bin: &Path, log: &(dyn Fn(String) + Sync)) -> AppResult<PathBuf> 
             .as_array()
             .and_then(|a| a.iter().find(|u| u["filename"].as_str().is_some_and(|f| f.ends_with(".whl") && f.contains(tag))))
             .and_then(|u| u["url"].as_str())
-            .ok_or_else(|| msg("PyPI 上没有找到对应的 uv 安装包"))?
+            .ok_or_else(|| msg(t!("PyPI 上没有找到对应的 uv 安装包")))?
             .to_string();
-        log(format!("下载 {url}"));
+        log(t!("下载 {url}", url = url));
         extract_exe(&http_get(&url)?, exe, &bin.join(exe))
     })();
-    r.map_err(|e| msg(format!("下载 uv 失败：{}；{e}。可以手动安装 uv 后在设置里指定路径", errors.join("；"))))
+    r.map_err(|e| msg(t!("下载 uv 失败：{errors}；{e}。可以手动安装 uv 后在设置里指定路径", errors = errors.join("；"), e = e)))
 }
 
 /// 下载 ffmpeg 静态版并解压出可执行文件。
@@ -760,14 +761,14 @@ fn download_ffmpeg(
             ("ffmpeg", vec![intel])
         }
     } else {
-        return Err(msg("没有找到 ffmpeg，请先用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径"));
+        return Err(msg(t!("没有找到 ffmpeg，请先用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径")));
     };
     fs::create_dir_all(bin)?;
     let out = bin.join(exe);
     let zip = bin.join("ffmpeg-download.zip");
     let mut errors = Vec::new();
     for url in sources {
-        log(format!("下载 ffmpeg：{url}"));
+        log(t!("下载 ffmpeg：{url}", url = url));
         let r = download_file(url, &zip, &|d, t, s| progress("ffmpeg", d, t, s))
             .and_then(|_| {
                 let bytes = fs::read(&zip)?;
@@ -777,12 +778,12 @@ fn download_ffmpeg(
         match r {
             Ok(p) => return Ok(p),
             Err(e) => {
-                log(format!("下载失败：{e}"));
+                log(t!("下载失败：{e}", e = e));
                 errors.push(e.to_string());
             }
         }
     }
-    Err(msg(format!("下载 ffmpeg 失败：{}。可以手动安装 ffmpeg 后在设置里指定路径", errors.join("；"))))
+    Err(msg(t!("下载 ffmpeg 失败：{errors}。可以手动安装 ffmpeg 后在设置里指定路径", errors = errors.join("；"))))
 }
 
 fn http_get(url: &str) -> AppResult<Vec<u8>> {
@@ -793,9 +794,9 @@ fn http_get(url: &str) -> AppResult<Vec<u8>> {
 }
 
 fn extract_exe(zip_bytes: &[u8], exe: &str, out: &Path) -> AppResult<PathBuf> {
-    let mut z = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).map_err(|e| msg(format!("解压失败：{e}")))?;
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).map_err(|e| msg(t!("解压失败：{e}", e = e)))?;
     for i in 0..z.len() {
-        let mut f = z.by_index(i).map_err(|e| msg(format!("解压失败：{e}")))?;
+        let mut f = z.by_index(i).map_err(|e| msg(t!("解压失败：{e}", e = e)))?;
         if f.name().rsplit('/').next() == Some(exe) {
             let mut w = fs::File::create(out)?;
             std::io::copy(&mut f, &mut w)?;
@@ -807,7 +808,7 @@ fn extract_exe(zip_bytes: &[u8], exe: &str, out: &Path) -> AppResult<PathBuf> {
             return Ok(out.to_path_buf());
         }
     }
-    Err(msg(format!("压缩包里没有 {exe}")))
+    Err(msg(t!("压缩包里没有 {exe}", exe = exe)))
 }
 
 #[cfg(test)]

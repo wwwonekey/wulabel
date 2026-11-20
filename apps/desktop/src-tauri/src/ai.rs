@@ -17,6 +17,7 @@ use crate::error::{msg, AppError, AppResult};
 use crate::project::Project;
 use crate::runtime::Runtime;
 use crate::training::{self, PredResult, Predictor, PrelabelResult, RawPred};
+use crate::t;
 
 /// 巡瞳 AI 默认地址（可在设置里改，比如私有化部署）
 pub const DEFAULT_URL: &str = "https://xuntongai.com";
@@ -47,7 +48,7 @@ pub(crate) fn config(rt: &Runtime) -> AppResult<(String, String)> {
     let s = rt.settings();
     let key = s.ai_key.unwrap_or_default().trim().to_string();
     if key.is_empty() {
-        return Err(msg("还没有填巡瞳 AI 的 API Key。请到「设置 → 巡瞳 AI」填写（在巡瞳 AI 控制台的「API Key」页创建）"));
+        return Err(msg(t!("还没有填巡瞳 AI 的 API Key。请到「设置 → 巡瞳 AI」填写（在巡瞳 AI 控制台的「API Key」页创建）")));
     }
     let url = s.ai_url.filter(|u| !u.trim().is_empty()).unwrap_or_else(|| DEFAULT_URL.to_string());
     Ok((url.trim().trim_end_matches('/').to_string(), key))
@@ -64,18 +65,18 @@ pub(crate) fn err_of(e: ureq::Error) -> AppError {
                 })
                 .unwrap_or_else(|| body.chars().take(200).collect());
             match code {
-                401 | 403 => msg(format!("巡瞳 AI 拒绝了请求（{code}）：{detail}。请到「设置」里检查 API Key 和 IP 白名单")),
-                402 | 429 => msg(format!("巡瞳 AI 额度不足或调用太频繁：{detail}")),
-                _ => msg(format!("巡瞳 AI 返回错误（{code}）：{detail}")),
+                401 | 403 => msg(t!("巡瞳 AI 拒绝了请求（{code}）：{detail}。请到「设置」里检查 API Key 和 IP 白名单", code = code, detail = detail)),
+                402 | 429 => msg(t!("巡瞳 AI 额度不足或调用太频繁：{detail}", detail = detail)),
+                _ => msg(t!("巡瞳 AI 返回错误（{code}）：{detail}", code = code, detail = detail)),
             }
         }
-        e => msg(format!("连不上巡瞳 AI：{e}")),
+        e => msg(t!("连不上巡瞳 AI：{e}", e = e)),
     }
 }
 
 pub(crate) fn parse(resp: ureq::Response) -> AppResult<serde_json::Value> {
-    let text = resp.into_string().map_err(|e| msg(format!("读取巡瞳 AI 返回失败：{e}")))?;
-    serde_json::from_str(&text).map_err(|_| msg("巡瞳 AI 返回的不是 JSON，请检查设置里的地址"))
+    let text = resp.into_string().map_err(|e| msg(t!("读取巡瞳 AI 返回失败：{e}", e = e)))?;
+    serde_json::from_str(&text).map_err(|_| msg(t!("巡瞳 AI 返回的不是 JSON，请检查设置里的地址")))
 }
 
 pub(crate) fn get(url: &str, key: &str) -> AppResult<serde_json::Value> {
@@ -100,13 +101,13 @@ fn cut(s: &str, n: usize) -> String {
 /// 规则换成平台接口要的 classes（检查数量、类别名长度，超长的说明截断）
 fn platform_classes(r: &Rules) -> AppResult<Vec<serde_json::Value>> {
     if r.classes.is_empty() {
-        return Err(msg("项目里还没有类别，先在右侧添加类别（可以写上识别说明）"));
+        return Err(msg(t!("项目里还没有类别，先在右侧添加类别（可以写上识别说明）")));
     }
     if r.classes.len() > MAX_CLASSES {
-        return Err(msg(format!("巡瞳按类别识别最多支持 {MAX_CLASSES} 个类别，项目里有 {} 个", r.classes.len())));
+        return Err(msg(t!("巡瞳按类别识别最多支持 {max} 个类别，项目里有 {n} 个", max = MAX_CLASSES, n = r.classes.len())));
     }
     if let Some(c) = r.classes.iter().find(|c| c.name.chars().count() > MAX_NAME) {
-        return Err(msg(format!("类别名「{}」超过 {MAX_NAME} 个字，巡瞳按类别识别用不了，请改短一些", c.name)));
+        return Err(msg(t!("类别名「{name}」超过 {max} 个字，巡瞳按类别识别用不了，请改短一些", name = c.name, max = MAX_NAME)));
     }
     Ok(r
         .classes
@@ -131,8 +132,8 @@ pub fn models(rt: &Runtime) -> AppResult<Vec<AiModel>> {
     let list = v.as_array().cloned().or_else(|| v["models"].as_array().cloned()).or_else(|| v["data"].as_array().cloned());
     let mut out: Vec<AiModel> = vec![AiModel {
         code: CLASSES.into(),
-        name: "按项目类别识别（推荐）".into(),
-        description: "只找项目里的类别，按每个类别的识别说明和整体规则来，不会多认别的东西".into(),
+        name: t!("按项目类别识别（推荐）"),
+        description: t!("只找项目里的类别，按每个类别的识别说明和整体规则来，不会多认别的东西"),
     }];
     let platform: Vec<AiModel> = list
         .unwrap_or_default()
@@ -148,8 +149,8 @@ pub fn models(rt: &Runtime) -> AppResult<Vec<AiModel>> {
     out.extend(platform);
     out.push(AiModel {
         code: LLM.into(),
-        name: "大模型通用识别".into(),
-        description: "按安全隐患类别（消防、电气、环境卫生等）找出画面里的隐患位置，每张图计 1 张大模型额度".into(),
+        name: t!("大模型通用识别"),
+        description: t!("按安全隐患类别（消防、电气、环境卫生等）找出画面里的隐患位置，每张图计 1 张大模型额度"),
     });
     Ok(out)
 }
@@ -177,7 +178,7 @@ fn encode_image(path: &Path) -> AppResult<(String, f64, f64)> {
     let mut buf = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 85)
         .encode_image(&rgb)
-        .map_err(|e| msg(format!("图片编码失败：{e}")))?;
+        .map_err(|e| msg(t!("图片编码失败：{e}", e = e)))?;
     Ok((format!("data:image/jpeg;base64,{}", b64(&buf)), w, h))
 }
 
@@ -275,7 +276,7 @@ pub(crate) fn to_pred(
         match crate::assist::boxes_to_polys(p, rt, pr, image_id, &bx, log) {
             Ok(polys) => raw.polys = polys,
             // SAM 用不了时退回矩形轮廓（task_annotations / 前端会把框转成矩形）
-            Err(e) => log(format!("SAM 出轮廓失败，先用矩形：{e}")),
+            Err(e) => log(t!("SAM 出轮廓失败，先用矩形：{e}", e = e)),
         }
     }
     Ok(training::to_result(raw, &map))
@@ -322,7 +323,7 @@ pub fn prelabel_all(
         let pred = match r {
             Ok(v) => v,
             // 额度用完、Key 不对等错误后面的图也会失败，直接停下，已经标好的保留
-            Err(e) => return Err(msg(format!("第 {} 张出错，已预标注 {} 张：{e}", n + 1, result.images))),
+            Err(e) => return Err(msg(t!("第 {n} 张出错，已预标注 {done} 张：{e}", n = n + 1, done = result.images, e = e))),
         };
         let anns = training::task_annotations(p, &pred, conf, "ai")?;
         if !anns.is_empty() {
@@ -352,7 +353,7 @@ fn detect_batch(base: &str, key: &str, reqs: &[serde_json::Value]) -> AppResult<
     match r {
         Ok(resp) => {
             let v = parse(resp)?;
-            v.as_array().cloned().map(Some).ok_or_else(|| msg("巡瞳 AI 批量识别返回的格式不对"))
+            v.as_array().cloned().map(Some).ok_or_else(|| msg(t!("巡瞳 AI 批量识别返回的格式不对")))
         }
         Err(ureq::Error::Status(429, _)) => Ok(None),
         Err(e) => Err(err_of(e)),
@@ -377,7 +378,7 @@ fn detect_single(base: &str, key: &str, req: &serde_json::Value) -> AppResult<se
             Err(e) => return Err(err_of(e)),
         }
     }
-    Err(msg("巡瞳 AI 一直提示调用太频繁，请稍后再试"))
+    Err(msg(t!("巡瞳 AI 一直提示调用太频繁，请稍后再试")))
 }
 /// 专用模型批量预标注：每批 8 张走批量接口，2 批并发；图片编码在后台线程里做。
 /// 结果回到当前线程统一保存（数据库、进度都在这里）
@@ -488,9 +489,9 @@ fn prelabel_special(
         }
     });
     if let Some(e) = first_err {
-        return Err(msg(format!("批量预标注中途停下，已预标注 {} 张：{e}", result.images)));
+        return Err(msg(t!("批量预标注中途停下，已预标注 {done} 张：{e}", done = result.images, e = e)));
     }
-    log(format!("巡瞳 AI 批量预标注完成：{} 张图、{} 个目标", result.images, result.boxes));
+    log(t!("巡瞳 AI 批量预标注完成：{images} 张图、{boxes} 个目标", images = result.images, boxes = result.boxes));
     Ok(result)
 }
 
@@ -560,7 +561,7 @@ pub fn sync_rules(p: &Project, rt: &Runtime) -> AppResult<String> {
     body["scenes"] = serde_json::json!(["*"]);
     // 超过每个账号 20 套的限制时，平台的提示原样带出来
     let v = post(&format!("{base}/v1/rule-sets"), &key, &body)?;
-    let code = v["code"].as_str().ok_or_else(|| msg("巡瞳平台没有返回规则编号"))?.to_string();
+    let code = v["code"].as_str().ok_or_else(|| msg(t!("巡瞳平台没有返回规则编号")))?.to_string();
     crate::team::set_setting(p, RULE_SET_KEY, &code)?;
     Ok(code)
 }
@@ -580,7 +581,7 @@ pub fn rule_set_info(p: &Project, rt: &Runtime) -> AppResult<serde_json::Value> 
 pub fn set_platform_enabled(p: &Project, rt: &Runtime, enabled: bool) -> AppResult<()> {
     let code = bound_code(&rules(p)?);
     if code.is_empty() {
-        return Err(msg("先同步到巡瞳平台"));
+        return Err(msg(t!("先同步到巡瞳平台")));
     }
     let (base, key) = config(rt)?;
     send_json("PUT", &format!("{base}/v1/rule-sets/{code}"), &key, &serde_json::json!({ "enabled": enabled }))?;
@@ -644,7 +645,7 @@ pub fn chat_rules(p: &Project, rt: &Runtime, pr: &Predictor, messages: &[ChatMsg
     // 平台最多收 30 条，最后一条必须是用户的
     let messages = &messages[messages.len().saturating_sub(MAX_MESSAGES)..];
     if messages.last().map(|m| m.role.as_str()) != Some("user") {
-        return Err(msg("最后一条要是你说的话"));
+        return Err(msg(t!("最后一条要是你说的话")));
     }
     // 只给最后一张附图编码（平台也只把最近一张图发给 AI，省流量）
     let last_img = messages.iter().rposition(|m| m.image_id.is_some());

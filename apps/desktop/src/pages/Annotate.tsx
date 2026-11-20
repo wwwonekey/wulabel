@@ -48,21 +48,22 @@ import {
 import { prefs, useApp } from "../store";
 import AnnotCanvas, { Box, Poly, RectXYWH, Tool } from "../components/AnnotCanvas";
 import AiRulesDrawer from "../components/AiRulesDrawer";
+import { t } from "../i18n";
 
 const PALETTE = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6", "#f472b6", "#a3e635", "#f97316", "#60a5fa"];
 const FILTERS = [
-  { label: "全部", value: "all" },
-  { label: "未标注", value: "todo" },
-  { label: "已标注", value: "labeled" },
-  { label: "已审核", value: "reviewed" },
+  { label: t("全部"), value: "all" },
+  { label: t("未标注"), value: "todo" },
+  { label: t("已标注"), value: "labeled" },
+  { label: t("已审核"), value: "reviewed" },
 ];
 const STATUS_TEXT: Record<ImageStatus, { text: string; color?: string }> = {
-  todo: { text: "未标注" },
-  labeled: { text: "已标注", color: "processing" },
-  reviewed: { text: "已审核", color: "success" },
-  skipped: { text: "已跳过" },
+  todo: { text: t("未标注") },
+  labeled: { text: t("已标注"), color: "processing" },
+  reviewed: { text: t("已审核"), color: "success" },
+  skipped: { text: t("已跳过") },
 };
-const SOURCE_TEXT: Record<string, string> = { manual: "手工", model: "模型", sam: "SAM", ai: "巡瞳", text: "文本", interp: "插值", track: "跟踪" };
+const SOURCE_TEXT: Record<string, string> = { manual: t("手工"), model: t("模型"), sam: "SAM", ai: t("巡瞳"), text: t("文本"), interp: t("插值"), track: t("跟踪") };
 const HISTORY_MAX = 200;
 // 底部缩略图条高度（像素）
 const STRIP_H_DEFAULT = 86;
@@ -70,8 +71,8 @@ const clampStrip = (h: number) => (Number.isFinite(h) ? Math.min(320, Math.max(6
 
 /** COCO 人体 17 点（和后端 keypoints.rs 的默认模板一致） */
 const COCO_PERSON: KeypointTemplate = {
-  name: "COCO 人体 17 点",
-  points: ["鼻子", "左眼", "右眼", "左耳", "右耳", "左肩", "右肩", "左肘", "右肘", "左腕", "右腕", "左髋", "右髋", "左膝", "右膝", "左踝", "右踝"],
+  name: t("COCO 人体 17 点"),
+  points: [t("鼻子"), t("左眼"), t("右眼"), t("左耳"), t("右耳"), t("左肩"), t("右肩"), t("左肘"), t("右肘"), t("左腕"), t("右腕"), t("左髋"), t("右髋"), t("左膝"), t("右膝"), t("左踝"), t("右踝")],
   skeleton: [
     [15, 13], [13, 11], [16, 14], [14, 12], [11, 12], [5, 11], [6, 12], [5, 6], [5, 7], [6, 8], [7, 9], [8, 10],
     [1, 2], [0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6],
@@ -257,7 +258,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   const labelMap = useMemo(() => new Map(labels.map((l) => [l.id, l])), [labels]);
   const colorOf = useCallback((id: number | null) => (id != null && labelMap.get(id)?.color) || "#9aa1ab", [labelMap]);
-  const nameOf = useCallback((id: number | null) => (id != null && labelMap.get(id)?.name) || "未分类", [labelMap]);
+  const nameOf = useCallback((id: number | null) => (id != null && labelMap.get(id)?.name) || t("未分类"), [labelMap]);
   const nk = template?.points.length ?? 0;
 
   // ---------- 保存 ----------
@@ -284,7 +285,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     } catch (e) {
       dirty.current = true;
       setSaveState("error");
-      message.error(`保存失败：${errText(e)}`);
+      message.error(t("保存失败：{err}", { err: errText(e) }));
     }
   }, [message]);
 
@@ -319,7 +320,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   /** 修改标注：记历史、自动保存 */
   const change = (s: Partial<Snap>) => {
     if (readOnlyRef.current) {
-      message.warning(`「${readOnlyRef.current}」正在标这张图，现在只能看`);
+      message.warning(t("「{name}」正在标这张图，现在只能看", { name: readOnlyRef.current }));
       return;
     }
     const h = history.current;
@@ -415,11 +416,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   const removeLabel = (l: Label) => {
     modal.confirm({
-      title: `删除类别「${l.name}」？`,
-      content: l.count > 0 ? `这个类别下的 ${l.count} 个标注会一起删除，无法恢复。` : "这个类别还没有标注。",
-      okText: "删除",
+      title: t("删除类别「{name}」？", { name: l.name }),
+      content: l.count > 0 ? t("这个类别下的 {n} 个标注会一起删除，无法恢复。", { n: l.count }) : t("这个类别还没有标注。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await flush();
@@ -578,7 +579,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           readOnlyRef.current = r.holder;
           setLockHolder(r.holder);
           setTeamInfo(r.info);
-          if (notify && was && !r.holder) message.info("对方已经离开这张图，现在可以编辑了");
+          if (notify && was && !r.holder) message.info(t("对方已经离开这张图，现在可以编辑了"));
         })
         .catch(() => {});
     const un = listen<ShareEvent>("share-event", (e) => {
@@ -603,7 +604,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             .catch(() => {});
         }
         relock(cur, false);
-        if (ev.kind === "status" && ev.action === "reject") message.warning(`「${ev.by}」打回了这张图`);
+        if (ev.kind === "status" && ev.action === "reject") message.warning(t("「{name}」打回了这张图", { name: ev.by }));
       }
       if (ev.kind === "lock" && ev.holder == null && readOnlyRef.current) relock(cur, true);
     });
@@ -626,7 +627,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     const m = metaRef.current;
     if (!m) return;
     if (readOnlyRef.current) {
-      message.warning(`「${readOnlyRef.current}」正在标这张图，现在只能看`);
+      message.warning(t("「{name}」正在标这张图，现在只能看", { name: readOnlyRef.current }));
       return;
     }
     // 标注员的「通过」是提交，等审核
@@ -648,7 +649,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   const needLabel = () => {
     if (curLabel == null) {
-      message.warning("先在右侧添加一个类别");
+      message.warning(t("先在右侧添加一个类别"));
       return true;
     }
     return false;
@@ -770,7 +771,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     for (const line of tplEdit.skeleton.split("\n").map((s) => s.trim()).filter(Boolean)) {
       const m = /^(\d+)\s*[-–—,，\s]\s*(\d+)$/.exec(line);
       if (!m) {
-        message.error(`连线「${line}」格式不对，应该写成 1-2`);
+        message.error(t("连线「{line}」格式不对，应该写成 1-2", { line }));
         return;
       }
       skeleton.push([Number(m[1]) - 1, Number(m[2]) - 1]);
@@ -779,7 +780,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       await api.saveKeypointTemplate({ name: tplEdit.name, points, skeleton });
       setTplEdit(null);
       await loadTemplate();
-      message.success("模板已保存");
+      message.success(t("模板已保存"));
     } catch (e) {
       message.error(errText(e));
     }
@@ -854,24 +855,28 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   /** 把一次预测结果放进当前图（和已有标注重叠很大的不重复添加）。source：model / text / ai */
   const applyPreds = (preds: PredResult, source: string) => {
-    const tagWord = source === "model" ? "模型" : source === "ai" ? "巡瞳 AI" : "文本提示";
+    const tagWord = source === "model" ? t("模型") : source === "ai" ? t("巡瞳 AI") : t("文本提示");
     if (isCls) {
       setTagHints(preds.tags.slice(0, 3));
       const top = preds.tags[0];
       if (!top) {
-        message.info("模型没有给出结果");
+        message.info(t("模型没有给出结果"));
       } else if (tagRef.current) {
-        message.info(`${tagWord}认为是「${nameOf(top.labelId)}」（${top.score.toFixed(2)}），已有类别不覆盖，可在下方点选`);
+        message.info(
+          t("{src}认为是「{name}」（{score}），已有类别不覆盖，可在下方点选", { src: tagWord, name: nameOf(top.labelId), score: top.score.toFixed(2) }),
+        );
       } else if (top.score >= conf) {
         commitTag({ labelId: top.labelId, source, score: top.score });
-        message.success(`${tagWord}认为是「${nameOf(top.labelId)}」（${top.score.toFixed(2)}），检查后按 Enter 通过`);
+        message.success(t("{src}认为是「{name}」（{score}），检查后按 Enter 通过", { src: tagWord, name: nameOf(top.labelId), score: top.score.toFixed(2) }));
       } else {
-        message.info(`${tagWord}最像「${nameOf(top.labelId)}」，但只有 ${top.score.toFixed(2)}，低于置信度，没有采用`);
+        message.info(
+          t("{src}最像「{name}」，但只有 {score}，低于置信度，没有采用", { src: tagWord, name: nameOf(top.labelId), score: top.score.toFixed(2) }),
+        );
       }
       return;
     }
-    const none = () => message.info(`${tagWord}没有找到目标，可以调低置信度试试`);
-    const allDone = () => message.info(`${tagWord}找到的目标都已经标过了`);
+    const none = () => message.info(t("{src}没有找到目标，可以调低置信度试试", { src: tagWord }));
+    const allDone = () => message.info(t("{src}找到的目标都已经标过了", { src: tagWord }));
     if (isPose) {
       // 关键点模型给完整的点；其他来源只有框，加成空的目标，再手工点关键点
       const have = posesRef.current.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h }));
@@ -884,7 +889,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         .map((c) => ({ key: newKey(), labelId: c.labelId, ...c.r, kpts: c.kpts, source, score: c.score }));
       if (fresh.length === 0) return allDone();
       commitPose([...posesRef.current, ...fresh]);
-      message.success(`添加了 ${fresh.length} 个目标（虚线）${fromPoses.length ? "" : "，选中后点「重放关键点」逐个标点"}`);
+      message.success(
+        fromPoses.length
+          ? t("添加了 {n} 个目标（虚线）", { n: fresh.length })
+          : t("添加了 {n} 个目标（虚线），选中后点「重放关键点」逐个标点", { n: fresh.length }),
+      );
       return;
     }
     if (isSeg) {
@@ -899,7 +908,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         .map((p) => ({ key: newKey(), labelId: p.labelId, points: p.points, source, score: p.score }));
       if (fresh.length === 0) return allDone();
       commitPoly([...polysRef.current, ...fresh]);
-      message.success(`添加了 ${fresh.length} 个预标注轮廓（虚线），检查后按 Enter 通过`);
+      message.success(t("添加了 {n} 个预标注轮廓（虚线），检查后按 Enter 通过", { n: fresh.length }));
       return;
     }
     if (preds.boxes.length === 0) return none();
@@ -908,7 +917,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       .map((p) => ({ key: newKey(), labelId: p.labelId, x: p.x, y: p.y, w: p.w, h: p.h, source, score: p.score }));
     if (fresh.length === 0) return allDone();
     commit([...boxesRef.current, ...fresh]);
-    message.success(`添加了 ${fresh.length} 个预标注框（虚线），检查后按 Enter 通过`);
+    message.success(t("添加了 {n} 个预标注框（虚线），检查后按 Enter 通过", { n: fresh.length }));
   };
 
   const predictCurrent = async () => {
@@ -936,17 +945,17 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   const predictAll = () => {
     if (aiSrc === "model" && modelId == null) return;
-    const what = { model: "模型", text: "文本提示", ai: "巡瞳 AI" }[aiSrc];
+    const what = { model: t("模型"), text: t("文本提示"), ai: t("巡瞳 AI") }[aiSrc];
     modal.confirm({
-      title: `批量预标注（${what}）`,
+      title: t("批量预标注（{what}）", { what }),
       content: (
         <>
-          对所有「未标注」且还没有标注的图片运行{what}。预标注的图片仍然算未标注，需要你逐张检查确认后才会用于训练。
-          {aiSrc === "ai" && <div style={{ marginTop: 8, color: "var(--warn)" }}>巡瞳 AI 每张图计 1 次调用，会消耗你的套餐额度。</div>}
+          {t("对所有「未标注」且还没有标注的图片运行{what}。预标注的图片仍然算未标注，需要你逐张检查确认后才会用于训练。", { what })}
+          {aiSrc === "ai" && <div style={{ marginTop: 8, color: "var(--warn)" }}>{t("巡瞳 AI 每张图计 1 次调用，会消耗你的套餐额度。")}</div>}
         </>
       ),
-      okText: "开始",
-      cancelText: "取消",
+      okText: t("开始"),
+      cancelText: t("取消"),
       onOk: async () => {
         await flush();
         setBatch({ done: 0, total: 0 });
@@ -960,8 +969,16 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 : await api.aiPrelabelAll(aiModel, conf);
           await loadLabels();
           await reloadCurrent();
-          const unit = isCls ? "个类别" : isSeg ? "个轮廓" : isPose ? "个目标" : "个框";
-          message.success(`已预标注 ${r.images} 张图片，共 ${r.boxes} ${unit}`);
+          const v = { images: r.images, n: r.boxes };
+          message.success(
+            isCls
+              ? t("已预标注 {images} 张图片，共 {n} 个类别", v)
+              : isSeg
+                ? t("已预标注 {images} 张图片，共 {n} 个轮廓", v)
+                : isPose
+                  ? t("已预标注 {images} 张图片，共 {n} 个目标", v)
+                  : t("已预标注 {images} 张图片，共 {n} 个框", v),
+          );
         } catch (e) {
           message.error(errText(e));
         } finally {
@@ -986,7 +1003,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       const r = await api.samSegment(m.id, points, box ? [box.x, box.y, box.x + box.w, box.y + box.h] : null);
       samUsed.current = true;
       if (metaRef.current?.id === m.id) setSamPreview(r.points.length >= 6 ? r : null);
-      if (r.points.length < 6) message.info("这里没分出目标，换个位置点，或者框一下试试");
+      if (r.points.length < 6) message.info(t("这里没分出目标，换个位置点，或者框一下试试"));
     } catch (e) {
       message.error(errText(e));
     } finally {
@@ -1059,7 +1076,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     try {
       await flush();
       const r = await api.interpolateFrames(m.id);
-      message.success(`已在中间 ${r.frames} 帧上插值 ${r.objects} 个目标${r.unmatched ? `，${r.unmatched} 个目标两头对不上，没有插值` : ""}`);
+      message.success(
+        r.unmatched
+          ? t("已在中间 {frames} 帧上插值 {objects} 个目标，{unmatched} 个目标两头对不上，没有插值", { frames: r.frames, objects: r.objects, unmatched: r.unmatched })
+          : t("已在中间 {frames} 帧上插值 {objects} 个目标", { frames: r.frames, objects: r.objects }),
+      );
       refreshStats();
     } catch (e) {
       message.error(errText(e));
@@ -1079,7 +1100,10 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       await flush();
       const r = await api.trackFrames(m.id, trackN);
       message.success(
-        `跟踪了 ${r.frames} 帧${r.lost ? `，${r.lost} 个目标中途跟丢` : ""}${r.hitKeyframe ? "，碰到后面手动标过的帧停下" : ""}。已跳到最后一帧，框偏了就拖正，再接着跟踪`,
+        t("跟踪了 {frames} 帧", { frames: r.frames }) +
+          (r.lost ? t("，{n} 个目标中途跟丢", { n: r.lost }) : "") +
+          (r.hitKeyframe ? t("，碰到后面手动标过的帧停下") : "") +
+          t("。已跳到最后一帧，框偏了就拖正，再接着跟踪"),
       );
       refreshStats();
       if (r.lastId != null && ids) {
@@ -1103,13 +1127,13 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       const cx = (v: number) => Math.min(Math.max(v, 0), W);
       const cy = (v: number) => Math.min(Math.max(v, 0), H);
       if (isCls) {
-        const t = prev.annotations.find((a) => a.type === "tag" && a.labelId != null);
-        if (!t) {
-          message.info("上一张还没有类别");
+        const tg = prev.annotations.find((a) => a.type === "tag" && a.labelId != null);
+        if (!tg) {
+          message.info(t("上一张还没有类别"));
           return;
         }
-        commitTag({ labelId: t.labelId as number, source: "manual" });
-        message.success(`已沿用上一张的类别「${nameOf(t.labelId)}」`);
+        commitTag({ labelId: tg.labelId as number, source: "manual" });
+        message.success(t("已沿用上一张的类别「{name}」", { name: nameOf(tg.labelId) }));
         return;
       }
       if (isPose) {
@@ -1123,11 +1147,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             return { ...p, key: newKey(), x, y, w: Math.min(p.w, W - x), h: Math.min(p.h, H - y), kpts, source: "manual", score: null };
           });
         if (copied.length === 0) {
-          message.info("上一张没有关键点目标");
+          message.info(t("上一张没有关键点目标"));
           return;
         }
         commitPose([...posesRef.current, ...copied]);
-        message.success(`已复制上一张的 ${copied.length} 个目标`);
+        message.success(t("已复制上一张的 {n} 个目标", { n: copied.length }));
         return;
       }
       if (isSeg) {
@@ -1142,11 +1166,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             score: null,
           }));
         if (copied.length === 0) {
-          message.info("上一张没有标注");
+          message.info(t("上一张没有标注"));
           return;
         }
         commitPoly([...polysRef.current, ...copied]);
-        message.success(`已复制上一张的 ${copied.length} 个轮廓`);
+        message.success(t("已复制上一张的 {n} 个轮廓", { n: copied.length }));
         return;
       }
       const copied = prev.annotations
@@ -1155,11 +1179,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         .map((b) => ({ ...b, x: Math.min(b.x, W - 1), y: Math.min(b.y, H - 1) }))
         .map((b) => ({ ...b, w: Math.min(b.w, W - b.x), h: Math.min(b.h, H - b.y), source: "manual" }));
       if (copied.length === 0) {
-        message.info("上一张没有标注");
+        message.info(t("上一张没有标注"));
         return;
       }
       commit([...boxesRef.current, ...copied]);
-      message.success(`已复制上一张的 ${copied.length} 个框`);
+      message.success(t("已复制上一张的 {n} 个框", { n: copied.length }));
     } catch (e) {
       message.error(errText(e));
     }
@@ -1236,7 +1260,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       metaRef.current = { ...m, status: "todo" };
       setMeta(metaRef.current);
       setRejecting(null);
-      message.success("已打回，图回到标注员的任务里");
+      message.success(t("已打回，图回到标注员的任务里"));
       go(idx + 1);
     } catch (e) {
       message.error(errText(e));
@@ -1249,11 +1273,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     return (
       <div className="empty-page">
         {remote ? (
-          <Empty description={isAnnotator ? "还没有分给你的图。发起人分配后这里会自动出现" : "项目里还没有图片"} />
+          <Empty description={isAnnotator ? t("还没有分给你的图。发起人分配后这里会自动出现") : t("项目里还没有图片")} />
         ) : (
-          <Empty description="项目里还没有图片">
+          <Empty description={t("项目里还没有图片")}>
             <Button type="primary" onClick={() => setPage("data")}>
-              去导入图片
+              {t("去导入图片")}
             </Button>
           </Empty>
         )}
@@ -1264,29 +1288,44 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const stripStart = Math.max(0, idx - 12);
   const strip = (ids ?? []).slice(stripStart, stripStart + 25);
   const curColor = colorOf(curLabel);
-  const saveText = { saved: "已保存", dirty: "未保存", saving: "保存中…", error: "保存失败" }[saveState];
+  const saveText = { saved: t("已保存"), dirty: t("未保存"), saving: t("保存中…"), error: t("保存失败") }[saveState];
   const kptCount = (p: Pose) => p.kpts.filter((_, i) => i % 3 === 2).filter((v) => v > 0).length;
 
   // 右侧「本图对象」：框、多边形、关键点目标合并成一个列表，连续编号
   const objects = [
     ...boxes.map((b) => ({ key: b.key, labelId: b.labelId, source: b.source, desc: `${Math.round(b.w)}×${Math.round(b.h)}` })),
-    ...polys.map((pl) => ({ key: pl.key, labelId: pl.labelId, source: pl.source, desc: `${pl.points.length / 2} 点` })),
-    ...poses.map((p) => ({ key: p.key, labelId: p.labelId, source: p.source, desc: `${kptCount(p)}/${nk} 点` })),
+    ...polys.map((pl) => ({ key: pl.key, labelId: pl.labelId, source: pl.source, desc: t("{n} 点", { n: pl.points.length / 2 }) })),
+    ...poses.map((p) => ({ key: p.key, labelId: p.labelId, source: p.source, desc: t("{n}/{total} 点", { n: kptCount(p), total: nk }) })),
   ];
   const selPose = poses.find((p) => p.key === selected) ?? null;
   const placingPose = placing ? poses.find((p) => p.key === placing.key) : null;
-  const toolLabel = isSeg ? "画多边形轮廓 (R)" : isPose ? "画目标框，再逐个点关键点 (R)" : "画矩形框 (R)";
+  const toolLabel = isSeg ? t("画多边形轮廓 (R)") : isPose ? t("画目标框，再逐个点关键点 (R)") : t("画矩形框 (R)");
   const hint = isCls
-    ? "1–9 选类别" + (autoNext ? "（选完自动下一张）" : "") + " · A/D 翻图 · Enter 审核通过 · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张" + " · ? 全部快捷键"
-    : `${isSeg ? "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）" : isPose ? "R 画目标框后逐个点关键点" : "R 画框"} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键`;
+    ? t("1–9 选类别{auto} · A/D 翻图 · Enter 审核通过 · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张 · ? 全部快捷键", {
+        auto: autoNext ? t("（选完自动下一张）") : "",
+      })
+    : t("{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键", {
+        draw: isSeg ? t("R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）") : isPose ? t("R 画目标框后逐个点关键点") : t("R 画框"),
+      });
+  // 点名要加粗，先整句翻译再从 {name} 处分开
+  const placeText = t("点击 {name}（{n}/{total}） · Shift+点击 = 被遮挡 · N 跳过 · 退格 回退 · Esc 结束", {
+    n: (placing?.idx ?? 0) + 1,
+    total: nk,
+  }).split("{name}");
+  // 中间有个编辑图标，先整句翻译再从 {icon} 处分开
+  const textHelp = (
+    isSeg
+      ? t("按类别名在图里找目标（开放词汇检测 + SAM 出轮廓）。模型只懂英文，常见的中文类别会自动对应英文（如 安全帽 → helmet，显示在类别名后面）；对不上或想改的，在类别的{icon}里填「英文提示词」。首次使用需要下载模型。")
+      : t("按类别名在图里找目标（开放词汇检测）。模型只懂英文，常见的中文类别会自动对应英文（如 安全帽 → helmet，显示在类别名后面）；对不上或想改的，在类别的{icon}里填「英文提示词」。首次使用需要下载模型。")
+  ).split("{icon}");
   const srcOptions = [
-    { label: "我的模型", value: "model" },
+    { label: t("我的模型"), value: "model" },
     // 协作成员不能直接用巡瞳 AI（用的是发起人的额度），可以用「识别规则」和 AI 聊
-    ...(isCls ? [] : [{ label: "文本提示", value: "text" }, ...(remote ? [] : [{ label: "巡瞳 AI", value: "ai" }])]),
+    ...(isCls ? [] : [{ label: t("文本提示"), value: "text" }, ...(remote ? [] : [{ label: t("巡瞳 AI"), value: "ai" }])]),
   ];
   const filterOpts = [
-    ...FILTERS.map((f) => (f.value === "all" && isAnnotator ? { ...f, label: "我的全部" } : f)),
-    ...(collab ? [{ label: "被打回", value: "rejected" }] : []),
+    ...FILTERS.map((f) => (f.value === "all" && isAnnotator ? { ...f, label: t("我的全部") } : f)),
+    ...(collab ? [{ label: t("被打回"), value: "rejected" }] : []),
   ];
   const canPredict = aiSrc === "model" ? modelId != null : aiSrc === "ai" ? !!aiModel && !aiError : labels.length > 0;
 
@@ -1330,7 +1369,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           onChange={(v) => setFilter(v as string)}
         />
         {queue && (
-          <Tooltip title="不再显示这批图">
+          <Tooltip title={t("不再显示这批图")}>
             <Button
               size="small"
               type="text"
@@ -1346,7 +1385,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         <div className="spacer" />
         {!remote && teamInfo?.assignee && (
           <span className="dim" style={{ fontSize: 12 }}>
-            分配给 {teamInfo.assignee}
+            {t("分配给 {name}", { name: teamInfo.assignee })}
           </span>
         )}
         <span className="dim" style={{ fontSize: 12 }}>
@@ -1358,7 +1397,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       <div className="annot-tools">
         {!isCls && (
           <>
-            <Tooltip title="选择 / 调整 (V)" placement="right">
+            <Tooltip title={t("选择 / 调整 (V)")} placement="right">
               <button className={tool === "select" ? "on" : ""} onClick={() => setTool("select")}>
                 <SelectOutlined />
                 <span className="k">V</span>
@@ -1371,7 +1410,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               </button>
             </Tooltip>
             <Tooltip
-              title="智能选取 SAM (S)：点目标自动出轮廓，Shift+点击排除，拖动框选；Enter 采用、Esc 放弃"
+              title={t("智能选取 SAM (S)：点目标自动出轮廓，Shift+点击排除，拖动框选；Enter 采用、Esc 放弃")}
               placement="right"
             >
               <button className={tool === "sam" ? "on" : ""} onClick={() => setTool("sam")}>
@@ -1382,17 +1421,17 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             <hr />
           </>
         )}
-        <Tooltip title="撤销 (Ctrl+Z)" placement="right">
+        <Tooltip title={t("撤销 (Ctrl+Z)")} placement="right">
           <button disabled={histLen.past === 0} onClick={undo}>
             <UndoOutlined />
           </button>
         </Tooltip>
-        <Tooltip title="重做 (Ctrl+Y)" placement="right">
+        <Tooltip title={t("重做 (Ctrl+Y)")} placement="right">
           <button disabled={histLen.future === 0} onClick={redo}>
             <RedoOutlined />
           </button>
         </Tooltip>
-        <Tooltip title={isCls ? "沿用上一张的类别 (Ctrl+D)" : "复制上一张的标注 (Ctrl+D)"} placement="right">
+        <Tooltip title={isCls ? t("沿用上一张的类别 (Ctrl+D)") : t("复制上一张的标注 (Ctrl+D)")} placement="right">
           <button disabled={idx === 0} onClick={copyPrev}>
             <CopyOutlined />
           </button>
@@ -1400,7 +1439,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         {canVideo && (
           <>
             <Tooltip
-              title="关键帧插值：先在前面某一帧和这一帧都标好框，点这里把中间的帧自动补上（按类别和位置对应同一个目标）"
+              title={t("关键帧插值：先在前面某一帧和这一帧都标好框，点这里把中间的帧自动补上（按类别和位置对应同一个目标）")}
               placement="right"
             >
               <button disabled={idx === 0 || !!videoBusy || !objects.length} onClick={interpolate}>
@@ -1410,16 +1449,16 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             <Popover
               placement="right"
               trigger="click"
-              title="往后跟踪"
+              title={t("往后跟踪")}
               content={
                 <div style={{ width: 240 }}>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                    从这一帧的框出发，自动跟到后面的帧（同一文件夹按文件名排序）。目标被挡住或跟丢就停；碰到手动标过的帧也停，不会覆盖人工标注。
+                    {t("从这一帧的框出发，自动跟到后面的帧（同一文件夹按文件名排序）。目标被挡住或跟丢就停；碰到手动标过的帧也停，不会覆盖人工标注。")}
                   </div>
                   <Space.Compact style={{ width: "100%" }}>
-                    <InputNumber min={1} max={500} value={trackN} addonBefore="帧数" onChange={(v) => setTrackN(Number(v ?? 30))} style={{ width: 150 }} />
+                    <InputNumber min={1} max={500} value={trackN} addonBefore={t("帧数")} onChange={(v) => setTrackN(Number(v ?? 30))} style={{ width: 150 }} />
                     <Button type="primary" loading={videoBusy === "track"} disabled={!objects.length || (!!videoBusy && videoBusy !== "track")} onClick={trackForward}>
-                      跟踪
+                      {t("跟踪")}
                     </Button>
                   </Space.Compact>
                   {videoBusy === "track" && trackProg && (
@@ -1428,7 +1467,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 </div>
               }
             >
-              <Tooltip title="往后跟踪：从这一帧的框自动跟到后面的帧" placement="right">
+              <Tooltip title={t("往后跟踪：从这一帧的框自动跟到后面的帧")} placement="right">
                 <button disabled={!!videoBusy && videoBusy !== "track"}>
                   {videoBusy === "track" ? <LoadingOutlined /> : <FastForwardOutlined />}
                 </button>
@@ -1436,7 +1475,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             </Popover>
           </>
         )}
-        <Tooltip title="适应窗口 (F)" placement="right">
+        <Tooltip title={t("适应窗口 (F)")} placement="right">
           <button onClick={() => setFitSignal((n) => n + 1)}>
             <ExpandOutlined />
           </button>
@@ -1446,13 +1485,19 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       <div className="annot-stage">
         {(lockHolder || teamInfo?.rejectReason) && (
           <div className="annot-banner">
-            {lockHolder && <Alert type="info" showIcon message={`「${lockHolder}」正在标这张图，你现在只能看，他的改动会实时显示`} />}
+            {lockHolder && <Alert type="info" showIcon message={t("「{name}」正在标这张图，你现在只能看，他的改动会实时显示", { name: lockHolder })} />}
             {teamInfo?.rejectReason && (
               <Alert
                 type="warning"
                 showIcon
-                message={`被打回：${teamInfo.rejectReason}`}
-                description={teamInfo.reviewedBy ? `审核：${teamInfo.reviewedBy}。改好后点「${isAnnotator ? "提交并下一张" : "通过并下一张"}」` : undefined}
+                message={t("被打回：{reason}", { reason: teamInfo.rejectReason })}
+                description={
+                  teamInfo.reviewedBy
+                    ? isAnnotator
+                      ? t("审核：{name}。改好后点「提交并下一张」", { name: teamInfo.reviewedBy })
+                      : t("审核：{name}。改好后点「通过并下一张」", { name: teamInfo.reviewedBy })
+                    : undefined
+                }
               />
             )}
           </div>
@@ -1503,69 +1548,71 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                       text: nameOf(tag.labelId) + (tag.source !== "manual" && tag.score != null ? ` · ${tag.score.toFixed(2)}` : ""),
                       color: colorOf(tag.labelId),
                     }
-                  : { text: "未分类 · 按 1–9 选类别", color: "rgba(60,64,72,.9)" }
+                  : { text: t("未分类 · 按 1–9 选类别"), color: "rgba(60,64,72,.9)" }
                 : null
             }
           />
         ) : (
-          ids?.length === 0 && <Empty description="没有符合筛选条件的图片" />
+          ids?.length === 0 && <Empty description={t("没有符合筛选条件的图片")} />
         )}
         {placing && placingPose && template && (
           <div className="place-hint">
-            点击 <b>{template.points[placing.idx]}</b>（{placing.idx + 1}/{nk}） · Shift+点击 = 被遮挡 · N 跳过 · 退格 回退 · Esc 结束
+            {placeText[0]}
+            <b>{template.points[placing.idx]}</b>
+            {placeText[1]}
           </div>
         )}
         {tool === "sam" && !isCls && (
           <div className="place-hint">
             {samBusy
               ? samUsed.current
-                ? "SAM 计算中…"
-                : `SAM 准备中…（首次使用要安装组件、下载模型，可能需要几分钟）${assistLog ? ` · ${assistLog.slice(0, 60)}` : ""}`
+                ? t("SAM 计算中…")
+                : t("SAM 准备中…（首次使用要安装组件、下载模型，可能需要几分钟）") + (assistLog ? ` · ${assistLog.slice(0, 60)}` : "")
               : samPreview
-                ? `已选出目标 · Enter 采用为「${nameOf(curLabel)}」 · 继续点击修正（Shift+点击排除） · Esc 放弃`
-                : "点击目标自动选出轮廓 · 也可以拖动框选 · Shift+点击排除区域"}
+                ? t("已选出目标 · Enter 采用为「{name}」 · 继续点击修正（Shift+点击排除） · Esc 放弃", { name: nameOf(curLabel) })
+                : t("点击目标自动选出轮廓 · 也可以拖动框选 · Shift+点击排除区域")}
           </div>
         )}
         <div className="annot-hint">{hint}</div>
       </div>
 
-      <Modal title="快捷键" open={keysOpen} onCancel={() => setKeysOpen(false)} footer={null} width={560}>
+      <Modal title={t("快捷键")} open={keysOpen} onCancel={() => setKeysOpen(false)} footer={null} width={560}>
         {(
           [
             [
-              "翻图和审核",
+              t("翻图和审核"),
               [
-                ["A / ←", "上一张"],
-                ["D / →", "下一张"],
-                ["Enter", "审核通过（并跳到下一张）"],
-                ["P", "用选中的模型预测当前图"],
-                ["Ctrl + D", "沿用上一张的标注"],
+                ["A / ←", t("上一张")],
+                ["D / →", t("下一张")],
+                ["Enter", t("审核通过（并跳到下一张）")],
+                ["P", t("用选中的模型预测当前图")],
+                ["Ctrl + D", t("沿用上一张的标注")],
               ],
             ],
             isCls
-              ? ["分类", [["1–9", "选类别" + (autoNext ? "（选完自动下一张）" : "")], ["Del", "清除这张图的类别"]]]
+              ? [t("分类"), [["1–9", autoNext ? t("选类别（选完自动下一张）") : t("选类别")], ["Del", t("清除这张图的类别")]]]
               : [
-                  "画框和编辑",
+                  t("画框和编辑"),
                   [
-                    ["V", "选择、移动、调整大小"],
-                    ["R", isSeg ? "画多边形轮廓：逐点点击，双击或 Enter 闭合，退格撤一个点" : isPose ? "画目标框，再逐个点关键点" : "画矩形框"],
-                    ["S", "智能选取（SAM）：点一下出轮廓，Enter 确认、Esc 清除、退格撤点"],
-                    ["1–9", "切换当前类别（选中框时改它的类别）"],
-                    ["Del / 退格", "删除选中的标注"],
-                    ["Esc", "取消选择"],
-                    ...(isPose ? [["N", "关键点：跳过当前点（看不见）"]] : []),
+                    ["V", t("选择、移动、调整大小")],
+                    ["R", isSeg ? t("画多边形轮廓：逐点点击，双击或 Enter 闭合，退格撤一个点") : isPose ? t("画目标框，再逐个点关键点") : t("画矩形框")],
+                    ["S", t("智能选取（SAM）：点一下出轮廓，Enter 确认、Esc 清除、退格撤点")],
+                    ["1–9", t("切换当前类别（选中框时改它的类别）")],
+                    [t("Del / 退格"), t("删除选中的标注")],
+                    ["Esc", t("取消选择")],
+                    ...(isPose ? [["N", t("关键点：跳过当前点（看不见）")]] : []),
                   ],
                 ],
             [
-              "视图和撤销",
+              t("视图和撤销"),
               [
-                ["滚轮", "缩放"],
-                ["空格 + 拖动 / 右键拖动", "移动画面"],
-                ["F", "适应窗口"],
-                ["H", "隐藏 / 显示类别名"],
-                ["Ctrl + Z", "撤销"],
-                ["Ctrl + Y / Ctrl + Shift + Z", "重做"],
-                ["?", "打开这个面板"],
+                [t("滚轮"), t("缩放")],
+                [t("空格 + 拖动 / 右键拖动"), t("移动画面")],
+                ["F", t("适应窗口")],
+                ["H", t("隐藏 / 显示类别名")],
+                ["Ctrl + Z", t("撤销")],
+                ["Ctrl + Y / Ctrl + Shift + Z", t("重做")],
+                ["?", t("打开这个面板")],
               ],
             ],
           ] as [string, string[][]][]
@@ -1588,11 +1635,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         {aiAllowed && (
         <section>
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-            <h3 style={{ margin: 0 }}>AI 辅助</h3>
+            <h3 style={{ margin: 0 }}>{t("AI 辅助")}</h3>
             {!isCls && (
-              <Tooltip title="告诉巡瞳 AI 每个类别具体指什么；可以和 AI 聊，它帮你整理规则、在这张图上试识别">
+              <Tooltip title={t("告诉巡瞳 AI 每个类别具体指什么；可以和 AI 聊，它帮你整理规则、在这张图上试识别")}>
                 <Button size="small" type="link" icon={<MessageOutlined />} style={{ padding: 0 }} onClick={() => setRulesOpen(true)}>
-                  识别规则
+                  {t("识别规则")}
                 </Button>
               </Tooltip>
             )}
@@ -1602,7 +1649,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           )}
           {aiSrc === "model" && models.length === 0 && (
             <div className="dim" style={{ fontSize: 12 }}>
-              标注几十张后去「训练」页训练一个模型，就能用它自动标注剩下的图片。
+              {t("标注几十张后去「训练」页训练一个模型，就能用它自动标注剩下的图片。")}
             </div>
           )}
           {aiSrc === "model" && models.length > 0 && (
@@ -1613,18 +1660,23 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               onChange={setModelId}
               options={models.map((r) => ({
                 value: r.id,
-                label: `${r.name} · ${isCls ? "准确率" : "mAP50"} ${r.bestMap50?.toFixed(3) ?? "—"}`,
+                label: `${r.name} · ${isCls ? t("准确率") : "mAP50"} ${r.bestMap50?.toFixed(3) ?? "—"}`,
               }))}
             />
           )}
           {aiSrc === "text" && (
             <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
-              按类别名在图里找目标（开放词汇检测{isSeg ? " + SAM 出轮廓" : ""}）。模型只懂英文，常见的中文类别会自动对应英文（如 安全帽 → helmet，显示在类别名后面）；对不上或想改的，在类别的
+              {textHelp[0]}
               <EditOutlined style={{ margin: "0 2px" }} />
-              里填「英文提示词」。首次使用需要下载模型。
+              {textHelp[1]}
               {labels.some((l) => !l.prompt && /[^\x00-\x7f]/.test(l.name)) && (
                 <div style={{ color: "var(--warn)", marginTop: 4 }}>
-                  还没填英文提示词：{labels.filter((l) => !l.prompt && /[^\x00-\x7f]/.test(l.name)).map((l) => l.name).join("、")}
+                  {t("还没填英文提示词：{names}", {
+                    names: labels
+                      .filter((l) => !l.prompt && /[^\x00-\x7f]/.test(l.name))
+                      .map((l) => l.name)
+                      .join(t("、")),
+                  })}
                 </div>
               )}
             </div>
@@ -1635,10 +1687,10 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 {aiError}
                 <div className="row" style={{ gap: 6, marginTop: 6 }}>
                   <Button size="small" onClick={() => setPage("settings")}>
-                    去设置
+                    {t("去设置")}
                   </Button>
                   <Button size="small" onClick={() => setAiModels(null)}>
-                    重试
+                    {t("重试")}
                   </Button>
                 </div>
               </div>
@@ -1648,7 +1700,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                   size="small"
                   style={{ width: "100%", marginBottom: 6 }}
                   value={aiModel || undefined}
-                  placeholder={aiModels ? "选择识别模型" : "正在读取可用模型…"}
+                  placeholder={aiModels ? t("选择识别模型") : t("正在读取可用模型…")}
                   loading={!aiModels}
                   onChange={(v) => {
                     setAiModel(v);
@@ -1658,14 +1710,14 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 />
                 <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
                   {aiModels?.find((m) => m.code === aiModel)?.description ?? ""}
-                  {isSeg && "（识别出的框会再用 SAM 出轮廓）"}
+                  {isSeg && t("（识别出的框会再用 SAM 出轮廓）")}
                 </div>
               </>
             ))}
           {(aiSrc !== "model" || models.length > 0) && (
             <>
               <div className="row" style={{ gap: 6, marginBottom: 6, flexWrap: "nowrap" }}>
-                <span className="dim" style={{ fontSize: 12, whiteSpace: "nowrap" }}>置信度</span>
+                <span className="dim" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{t("置信度")}</span>
                 <Slider
                   style={{ flex: 1, margin: "0 4px" }}
                   min={0.05}
@@ -1681,16 +1733,16 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               </div>
               {predicting && aiSrc !== "model" && (
                 <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
-                  {assistLog ? assistLog.slice(0, 80) : aiSrc === "text" ? "首次使用要安装组件、下载模型，可能需要几分钟…" : "正在请求巡瞳 AI…"}
+                  {assistLog ? assistLog.slice(0, 80) : aiSrc === "text" ? t("首次使用要安装组件、下载模型，可能需要几分钟…") : t("正在请求巡瞳 AI…")}
                 </div>
               )}
               <div className="row" style={{ gap: 6 }}>
                 <Button size="small" type="primary" icon={<ThunderboltOutlined />} loading={predicting} disabled={!canPredict} onClick={predictCurrent}>
-                  {isCls ? "预测本图 (P)" : "标注本图 (P)"}
+                  {isCls ? t("预测本图 (P)") : t("标注本图 (P)")}
                 </Button>
                 {!remote && (
                   <Button size="small" onClick={predictAll} disabled={!!batch || !canPredict}>
-                    批量预标注
+                    {t("批量预标注")}
                   </Button>
                 )}
               </div>
@@ -1699,7 +1751,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           {batch && <Progress size="small" percent={batch.total ? Math.floor((batch.done / batch.total) * 100) : 0} style={{ marginTop: 6 }} />}
           {isCls && tagHints.length > 0 && (
             <div style={{ marginTop: 8 }}>
-              <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>模型的候选（点选采用）</div>
+              <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>{t("模型的候选（点选采用）")}</div>
               {tagHints.map((h) => (
                 <div key={h.labelId} className="lbl" onClick={() => commitTag({ labelId: h.labelId, source: "model", score: h.score })}>
                   <span className="sw" style={{ background: colorOf(h.labelId) }} />
@@ -1714,10 +1766,10 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
         <section>
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-            <h3 style={{ margin: 0 }}>类别</h3>
+            <h3 style={{ margin: 0 }}>{t("类别")}</h3>
             {isCls && (
               <span className="row" style={{ gap: 6, fontSize: 12 }}>
-                <span className="dim">选完下一张</span>
+                <span className="dim">{t("选完下一张")}</span>
                 <Switch
                   size="small"
                   checked={autoNext}
@@ -1729,7 +1781,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               </span>
             )}
           </div>
-          {labels.length === 0 && <div className="dim" style={{ marginBottom: 8 }}>先添加要{isCls ? "区分" : "标注"}的类别</div>}
+          {labels.length === 0 && <div className="dim" style={{ marginBottom: 8 }}>{isCls ? t("先添加要区分的类别") : t("先添加要标注的类别")}</div>}
           {labels.map((l, i) => {
             const on = isCls ? tag?.labelId === l.id : l.id === curLabel;
             return (
@@ -1768,7 +1820,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           <Space.Compact style={{ width: "100%", marginTop: 8 }}>
             <Input
               size="small"
-              placeholder="新类别名，回车添加"
+              placeholder={t("新类别名，回车添加")}
               value={newLabel}
               maxLength={40}
               onChange={(e) => setNewLabel(e.target.value)}
@@ -1783,11 +1835,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           <section>
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
               <h3 style={{ margin: 0 }}>
-                关键点模板 <span className="dim">{nk} 点</span>
+                {t("关键点模板")} <span className="dim">{t("{n} 点", { n: nk })}</span>
               </h3>
               {!remote && (
                 <Button size="small" type="link" onClick={openTplEdit} style={{ padding: 0 }}>
-                  编辑
+                  {t("编辑")}
                 </Button>
               )}
             </div>
@@ -1797,7 +1849,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
         {isCls ? (
           <section>
-            <h3>本图类别</h3>
+            <h3>{t("本图类别")}</h3>
             {tag ? (
               <div className="obj on">
                 <span className="sw" style={{ background: colorOf(tag.labelId) }} />
@@ -1811,21 +1863,23 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 <DeleteOutlined className="del" onClick={() => commitTag(null)} />
               </div>
             ) : (
-              <div className="dim">还没有类别，点上面的类别或按 1–9</div>
+              <div className="dim">{t("还没有类别，点上面的类别或按 1–9")}</div>
             )}
           </section>
         ) : (
           <section>
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-              <h3 style={{ margin: 0 }}>本图对象 <span className="dim">{objects.length}</span></h3>
+              <h3 style={{ margin: 0 }}>
+                {t("本图对象")} <span className="dim">{objects.length}</span>
+              </h3>
               <span className="row" style={{ gap: 6, fontSize: 12 }}>
-                <span className="dim">类别名</span>
+                <span className="dim">{t("类别名")}</span>
                 <Switch size="small" checked={showNames} onChange={setShowNames} />
               </span>
             </div>
             {objects.length === 0 && (
               <div className="dim">
-                {isSeg ? "还没有轮廓，按 R 在目标边缘逐点点击，或按 S 智能选取" : isPose ? "还没有目标，按 R 画框后逐个点关键点" : "还没有框，按 R 在图上拖动画框"}
+                {isSeg ? t("还没有轮廓，按 R 在目标边缘逐点点击，或按 S 智能选取") : isPose ? t("还没有目标，按 R 画框后逐个点关键点") : t("还没有框，按 R 在图上拖动画框")}
               </div>
             )}
             {objects.map((o, i) => (
@@ -1861,13 +1915,13 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           <section>
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
               <h3 style={{ margin: 0 }}>
-                关键点 <span className="dim">{kptCount(selPose)}/{nk}</span>
+                {t("关键点")} <span className="dim">{kptCount(selPose)}/{nk}</span>
               </h3>
               <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setPlacing({ key: selPose.key, idx: 0 })}>
-                重放关键点
+                {t("重放关键点")}
               </Button>
             </div>
-            <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>点名字重新放这个点；点状态切换「可见 / 被遮挡」</div>
+            <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>{t("点名字重新放这个点；点状态切换「可见 / 被遮挡」")}</div>
             <div style={{ maxHeight: 260, overflow: "auto" }}>
               {template.points.map((name, i) => {
                 const v = selPose.kpts[i * 3 + 2] ?? 0;
@@ -1878,7 +1932,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                     <span style={{ flex: 1 }}>{name}</span>
                     <span
                       className="st"
-                      title={v === 2 ? "可见（点击改成被遮挡）" : v === 1 ? "被遮挡（点击改成可见）" : "还没标"}
+                      title={v === 2 ? t("可见（点击改成被遮挡）") : v === 1 ? t("被遮挡（点击改成可见）") : t("还没标")}
                       onClick={(e) => {
                         if (v === 0) return;
                         e.stopPropagation();
@@ -1904,31 +1958,31 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         )}
 
         <section>
-          <h3>审核</h3>
+          <h3>{t("审核")}</h3>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             <Button size="small" icon={<CheckOutlined />} onClick={() => setStatus("reviewed", true)}>
-              {isAnnotator ? "提交并下一张" : "通过并下一张"}
+              {isAnnotator ? t("提交并下一张") : t("通过并下一张")}
             </Button>
             {collab && canReview && meta && (meta.status === "labeled" || meta.status === "reviewed") && (
               <Button size="small" danger icon={<RollbackOutlined />} onClick={() => setRejecting("")}>
-                打回
+                {t("打回")}
               </Button>
             )}
             <Button size="small" icon={<StepForwardOutlined />} onClick={() => setStatus("skipped", true)}>
-              跳过
+              {t("跳过")}
             </Button>
             {meta && (meta.status === "reviewed" || meta.status === "skipped") && (
               <Button size="small" onClick={() => setStatus(objects.length || tag ? "labeled" : "todo", false)}>
-                撤回
+                {t("撤回")}
               </Button>
             )}
           </div>
           {teamInfo && (teamInfo.assignee || teamInfo.labeledBy || teamInfo.reviewedBy) && (
             <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
               {[
-                teamInfo.assignee && `分配给 ${teamInfo.assignee}`,
-                teamInfo.labeledBy && `${teamInfo.labeledBy} 标的`,
-                teamInfo.reviewedBy && `${teamInfo.reviewedBy} 审过`,
+                teamInfo.assignee && t("分配给 {name}", { name: teamInfo.assignee }),
+                teamInfo.labeledBy && t("{name} 标的", { name: teamInfo.labeledBy }),
+                teamInfo.reviewedBy && t("{name} 审过", { name: teamInfo.reviewedBy }),
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -1936,15 +1990,15 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           )}
           <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
             {isAnnotator
-              ? "提交后等审核员审核；被打回的图会出现在「被打回」里，原因显示在图上方。"
-              : "「跳过」的图不参与训练，可用于模糊、无关的图片。"}
+              ? t("提交后等审核员审核；被打回的图会出现在「被打回」里，原因显示在图上方。")
+              : t("「跳过」的图不参与训练，可用于模糊、无关的图片。")}
           </div>
         </section>
       </aside>
 
       <div
         className="annot-strip-grip"
-        title="拖动调整缩略图大小，双击恢复默认"
+        title={t("拖动调整缩略图大小，双击恢复默认")}
         onMouseDown={startStripResize}
         onDoubleClick={() => {
           setStripH(STRIP_H_DEFAULT);
@@ -1969,20 +2023,20 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       />
 
       <Modal
-        title="打回这张图"
+        title={t("打回这张图")}
         open={rejecting !== null}
         onCancel={() => setRejecting(null)}
         onOk={reject}
-        okText="打回"
+        okText={t("打回")}
         okButtonProps={{ danger: true }}
-        cancelText="取消"
+        cancelText={t("取消")}
         width={440}
       >
         <div className="dim" style={{ fontSize: 12, margin: "8px 0" }}>
-          写清楚哪里要改，标注员会在图上方看到。
+          {t("写清楚哪里要改，标注员会在图上方看到。")}
         </div>
         <Space wrap style={{ marginBottom: 8 }}>
-          {["漏标", "框不准", "类别标错", "多标了", "关键点不对"].map((r) => (
+          {[t("漏标"), t("框不准"), t("类别标错"), t("多标了"), t("关键点不对")].map((r) => (
             <Tag.CheckableTag
               key={r}
               checked={(rejecting ?? "").split("；").includes(r)}
@@ -2000,18 +2054,18 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         <Input.TextArea
           autoSize={{ minRows: 2, maxRows: 5 }}
           value={rejecting ?? ""}
-          placeholder="比如：左下角还有两个安全帽没标"
+          placeholder={t("比如：左下角还有两个安全帽没标")}
           onChange={(e) => setRejecting(e.target.value)}
         />
       </Modal>
 
       <Modal
-        title="编辑类别"
+        title={t("编辑类别")}
         open={!!editing}
         onCancel={() => setEditing(null)}
         onOk={saveLabelEdit}
-        okText="保存"
-        cancelText="取消"
+        okText={t("保存")}
+        cancelText={t("取消")}
         width={420}
       >
         {editing && (
@@ -2020,7 +2074,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               <ColorPicker
                 value={editing.color}
                 disabledAlpha
-                presets={[{ label: "常用", colors: PALETTE }]}
+                presets={[{ label: t("常用"), colors: PALETTE }]}
                 onChange={(c) => setEditing({ ...editing, color: c.toHexString() })}
               />
               <Input
@@ -2034,12 +2088,12 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             {!isCls && (
               <div style={{ marginTop: 12 }}>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
-                  英文提示词（「文本提示」自动标注用；可写多个，用逗号隔开，如 helmet, hard hat）
+                  {t("英文提示词（「文本提示」自动标注用；可写多个，用逗号隔开，如 helmet, hard hat）")}
                 </div>
                 <Input
                   value={editing.prompt ?? ""}
                   maxLength={120}
-                  placeholder="例如 helmet"
+                  placeholder={t("例如 helmet")}
                   onChange={(e) => setEditing({ ...editing, prompt: e.target.value })}
                   onPressEnter={saveLabelEdit}
                 />
@@ -2048,13 +2102,13 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             {!isCls && (
               <div style={{ marginTop: 12 }}>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
-                  识别说明（巡瞳 AI「按项目类别识别」用：这个类别具体指什么、什么情况算 / 不算，可不填）
+                  {t("识别说明（巡瞳 AI「按项目类别识别」用：这个类别具体指什么、什么情况算 / 不算，可不填）")}
                 </div>
                 <Input.TextArea
                   autoSize={{ minRows: 2, maxRows: 5 }}
                   maxLength={500}
                   value={editing.description ?? ""}
-                  placeholder="比如：头上没有安全帽的人；戴了帽子但没系带也算"
+                  placeholder={t("比如：头上没有安全帽的人；戴了帽子但没系带也算")}
                   onChange={(e) => setEditing({ ...editing, description: e.target.value })}
                 />
               </div>
@@ -2064,32 +2118,32 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       </Modal>
 
       <Modal
-        title="关键点模板"
+        title={t("关键点模板")}
         open={!!tplEdit}
         onCancel={() => setTplEdit(null)}
         onOk={saveTpl}
-        okText="保存"
-        cancelText="取消"
+        okText={t("保存")}
+        cancelText={t("取消")}
         width={520}
       >
         {tplEdit && (
           <>
             <div className="dim" style={{ fontSize: 12, margin: "8px 0" }}>
-              点的顺序就是标注时点击的顺序。已经有关键点标注后只能改名字和连线，不能增减点数。
+              {t("点的顺序就是标注时点击的顺序。已经有关键点标注后只能改名字和连线，不能增减点数。")}
             </div>
             <Input
               value={tplEdit.name}
               onChange={(e) => setTplEdit({ ...tplEdit, name: e.target.value })}
-              placeholder="模板名"
+              placeholder={t("模板名")}
               style={{ marginBottom: 8 }}
             />
             <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
               <div style={{ flex: 1 }}>
-                <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>点名（每行一个）</div>
+                <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>{t("点名（每行一个）")}</div>
                 <Input.TextArea rows={12} value={tplEdit.points} onChange={(e) => setTplEdit({ ...tplEdit, points: e.target.value })} />
               </div>
               <div style={{ width: 150 }}>
-                <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>连线（每行一对序号，如 1-2）</div>
+                <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>{t("连线（每行一对序号，如 1-2）")}</div>
                 <Input.TextArea rows={12} value={tplEdit.skeleton} onChange={(e) => setTplEdit({ ...tplEdit, skeleton: e.target.value })} />
               </div>
             </div>
@@ -2104,7 +2158,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                 })
               }
             >
-              使用 COCO 人体 17 点
+              {t("使用 COCO 人体 17 点")}
             </Button>
           </>
         )}

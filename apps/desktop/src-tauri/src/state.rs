@@ -4,6 +4,7 @@ use parking_lot::RwLock;
 
 use crate::error::{msg, AppResult};
 use crate::project::Project;
+use crate::t;
 
 #[derive(Default)]
 pub struct AppState {
@@ -12,7 +13,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn current(&self) -> AppResult<Arc<Project>> {
-        self.project.read().clone().ok_or_else(|| msg("还没有打开项目"))
+        self.project.read().clone().ok_or_else(|| msg(t!("还没有打开项目")))
     }
 
     pub fn try_current(&self) -> Option<Arc<Project>> {
