@@ -76,10 +76,10 @@ Ist `with_image` beim Webhook aktiviert, kommt ein zusätzliches Feld `image_bas
 curl -X POST --data-binary @test.jpg "http://127.0.0.1:8090/predict?conf=0.4"
 ```
 
-## Rückfluss aus dem Feld
+## Felddaten-Rückfluss
 
 Bilder, bei denen sich das Modell unsicher ist (Konfidenz zwischen `low` und `high`), werden in `reflux/` gespeichert (höchstens eines pro Stream alle `interval` Sekunden).
-Kopieren Sie den Ordner `reflux` regelmäßig zurück, klicken Sie in Wulabel auf der Seite „Bereitstellen“ auf „Bilder aus dem Feldeinsatz importieren“, annotieren Sie die Bilder und trainieren Sie neu – so wird das Modell mit der Zeit immer genauer.
+Kopieren Sie den Ordner `reflux` regelmäßig zurück, klicken Sie in Wulabel auf der Seite „Bereitstellen“ auf „Felddaten-Bilder importieren“, annotieren Sie die Bilder und trainieren Sie neu – so wird das Modell mit der Zeit immer genauer.
 
 ## Dateien
 

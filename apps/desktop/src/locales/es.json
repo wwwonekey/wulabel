@@ -444,7 +444,7 @@
   "导入带标注的数据集（YOLO / COCO / VOC）": "Importar conjunto de datos anotado (YOLO / COCO / VOC)",
   "导入带标注的数据集（YOLO-pose / COCO 关键点）": "Importar conjunto de datos anotado (YOLO-pose / puntos clave COCO)",
   "导入文件夹": "Importar carpeta",
-  "导入现场回流图片": "Importar imágenes devueltas desde campo",
+  "导入现场回流图片": "Importar imágenes de campo",
   "导入的外部模型还没有评估，点「用当前数据评估」算一下它在你数据上的表现": "Este modelo externo importado aún no se ha evaluado. Haz clic en «Evaluar con los datos actuales» para ver cómo funciona con tus datos.",
   "导入视频（抽帧）": "Importar videos (extraer fotogramas)",
   "导出": "Exportar",
