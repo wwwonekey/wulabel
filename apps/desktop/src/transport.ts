@@ -2,6 +2,7 @@
 // 页面代码统一用这里的 invoke / listen，不直接用 @tauri-apps/api。
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen, type UnlistenFn } from "@tauri-apps/api/event";
+import { t } from "./i18n";
 
 /** 在浏览器里打开（协作成员），不是 Wulabel 软件本身 */
 export const isRemote = typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);
@@ -58,7 +59,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
       body: JSON.stringify(args ?? {}),
     });
   } catch {
-    throw "连不上发起人的 Wulabel，请检查网络，或确认发起人还开着协作";
+    throw t("连不上发起人的 Wulabel，请检查网络，或确认发起人还开着协作");
   }
   let j: unknown = null;
   try {
@@ -69,9 +70,9 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   const errOf = (fallback: string) => (j && typeof j === "object" && "error" in j ? String((j as { error: unknown }).error) : fallback);
   if (r.status === 401) {
     authLost?.();
-    throw errOf("登录已失效，请重新登录");
+    throw errOf(t("登录已失效，请重新登录"));
   }
-  if (!r.ok) throw errOf(r.status === 503 ? "发起人的 Wulabel 现在不在线" : `请求失败（${r.status}）`);
+  if (!r.ok) throw errOf(r.status === 503 ? t("发起人的 Wulabel 现在不在线") : t("请求失败（{status}）", { status: r.status }));
   return j as T;
 }
 
@@ -89,7 +90,7 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
     /* 不是 JSON */
   }
   if (!r.ok) {
-    const e = j && typeof j === "object" && "error" in j ? String((j as { error: unknown }).error) : `请求失败（${r.status}）`;
+    const e = j && typeof j === "object" && "error" in j ? String((j as { error: unknown }).error) : t("请求失败（{status}）", { status: r.status });
     throw e;
   }
   return j as T;

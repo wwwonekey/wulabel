@@ -3,15 +3,16 @@ import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Select, 
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, errText, Label, OnnxInfo } from "../api";
+import { t } from "../i18n";
 
 const KINDS = [
-  { value: "yolov8", label: "YOLOv8 / v11（Ultralytics）" },
+  { value: "yolov8", label: t("YOLOv8 / v11（Ultralytics）") },
   { value: "yolov5", label: "YOLOv5 / v7" },
-  { value: "yolo_e2e", label: "YOLOv10 等端到端（模型里已做 NMS）" },
-  { value: "yolox", label: "YOLOX（官方导出）" },
-  { value: "rtdetr", label: "RT-DETR（Ultralytics）" },
+  { value: "yolo_e2e", label: t("YOLOv10 等端到端（模型里已做 NMS）") },
+  { value: "yolox", label: t("YOLOX（官方导出）") },
+  { value: "rtdetr", label: t("RT-DETR（Ultralytics）") },
   { value: "detr", label: "DETR / RF-DETR" },
-  { value: "wulabel", label: "Wulabel 导出的模型" },
+  { value: "wulabel", label: t("Wulabel 导出的模型") },
 ];
 
 /** 导入别处训练好的 ONNX 检测模型，用来预标注、体检、评估、误报测试 */
@@ -45,7 +46,7 @@ export default function ImportModelModal({ open: visible, onClose, onDone }: { o
   };
 
   const pick = async () => {
-    const f = await open({ title: "选择 ONNX 模型", filters: [{ name: "ONNX 模型", extensions: ["onnx"] }] });
+    const f = await open({ title: t("选择 ONNX 模型"), filters: [{ name: t("ONNX 模型"), extensions: ["onnx"] }] });
     if (typeof f !== "string") return;
     setPath(f);
     setProbing(true);
@@ -57,7 +58,7 @@ export default function ImportModelModal({ open: visible, onClose, onDone }: { o
       setImgSize(i.imgSize || 640);
       setClassText(i.classes.join("\n"));
       setUse(defaultUse(i.classes));
-      setName(f.split(/[\\/]/).pop()?.replace(/\.onnx$/i, "") ?? "外部模型");
+      setName(f.split(/[\\/]/).pop()?.replace(/\.onnx$/i, "") ?? t("外部模型"));
     } catch (e) {
       message.error(errText(e));
     } finally {
@@ -71,13 +72,13 @@ export default function ImportModelModal({ open: visible, onClose, onDone }: { o
     try {
       const all = use.length === classes.length;
       const id = await api.importOnnx(path, {
-        name: name.trim() || "外部模型",
+        name: name.trim() || t("外部模型"),
         kind,
         classes,
         imgSize,
         useClasses: all ? null : use.filter((i) => i < classes.length),
       });
-      message.success("已导入，可以在标注页用它预标注，或在评估页评估");
+      message.success(t("已导入，可以在标注页用它预标注，或在评估页评估"));
       onDone(id);
       onClose();
     } catch (e) {
@@ -89,21 +90,21 @@ export default function ImportModelModal({ open: visible, onClose, onDone }: { o
 
   return (
     <Modal
-      title="导入外部模型（ONNX）"
+      title={t("导入外部模型（ONNX）")}
       open={visible}
       onCancel={onClose}
       onOk={save}
-      okText="导入"
-      cancelText="取消"
+      okText={t("导入")}
+      cancelText={t("取消")}
       okButtonProps={{ disabled: !info || classes.length === 0, loading: saving }}
       width={640}
       destroyOnHidden
     >
       <p className="muted" style={{ marginTop: 0 }}>
-        在别处（比如 Ultralytics YOLO）训好的检测模型导出成 ONNX 后导进来，就能用它预标注、体检、评估和误报测试。
+        {t("在别处（比如 Ultralytics YOLO）训好的检测模型导出成 ONNX 后导进来，就能用它预标注、体检、评估和误报测试。")}
       </p>
       <Button icon={<FolderOpenOutlined />} onClick={pick} loading={probing}>
-        {path ? "换一个模型" : "选择 .onnx 文件"}
+        {path ? t("换一个模型") : t("选择 .onnx 文件")}
       </Button>
       {path && <div className="dim" style={{ fontSize: 12, marginTop: 6, wordBreak: "break-all" }}>{path}</div>}
       {probing && (
@@ -115,22 +116,26 @@ export default function ImportModelModal({ open: visible, onClose, onDone }: { o
         <Form layout="vertical" size="small" style={{ marginTop: 12 }}>
           {info.note && <Alert type="info" showIcon style={{ marginBottom: 10 }} message={info.note} />}
           <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
-            <Form.Item label="名称" style={{ flex: 1 }}>
+            <Form.Item label={t("名称")} style={{ flex: 1 }}>
               <Input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
             </Form.Item>
-            <Form.Item label="格式" tooltip="已按模型输出自动识别，不对的话手动改" style={{ width: 230 }}>
+            <Form.Item label={t("格式")} tooltip={t("已按模型输出自动识别，不对的话手动改")} style={{ width: 230 }}>
               <Select value={kind} onChange={setKind} options={KINDS} />
             </Form.Item>
-            <Form.Item label="输入尺寸" style={{ width: 100 }}>
+            <Form.Item label={t("输入尺寸")} style={{ width: 100 }}>
               <InputNumber min={32} max={4096} step={32} value={imgSize} onChange={(v) => setImgSize(Number(v ?? 640))} />
             </Form.Item>
           </div>
           <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
-            输出：{info.outputs.map((o) => `${o.name} [${o.shape.join(", ")}]`).join("；")}
+            {t("输出：{list}", { list: info.outputs.map((o) => `${o.name} [${o.shape.join(", ")}]`).join(t("；")) })}
           </div>
           <Form.Item
-            label={`类别名（每行一个，顺序要和模型一致；共 ${classes.length} 个${info.numClasses ? `，模型输出 ${info.numClasses} 类` : ""}）`}
-            extra="改成项目里的类别名就能对应上，比如把 person 改成「人」"
+            label={
+              info.numClasses
+                ? t("类别名（每行一个，顺序要和模型一致；共 {n} 个，模型输出 {k} 类）", { n: classes.length, k: info.numClasses })
+                : t("类别名（每行一个，顺序要和模型一致；共 {n} 个）", { n: classes.length })
+            }
+            extra={t("改成项目里的类别名就能对应上，比如把 person 改成「人」")}
           >
             <Input.TextArea
               rows={6}
@@ -142,7 +147,7 @@ export default function ImportModelModal({ open: visible, onClose, onDone }: { o
               }}
             />
           </Form.Item>
-          <Form.Item label="要用的类别" extra="没勾的类别预标注时不会加进来；和项目同名的类别默认勾上">
+          <Form.Item label={t("要用的类别")} extra={t("没勾的类别预标注时不会加进来；和项目同名的类别默认勾上")}>
             <div style={{ maxHeight: 140, overflow: "auto" }}>
               <Checkbox.Group
                 value={use}

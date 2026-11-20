@@ -37,6 +37,7 @@ use crate::protocol;
 use crate::runtime::Runtime;
 use crate::team::{self, Member, HOST};
 use crate::training::{self, Predictor};
+use crate::t;
 
 /// 锁多久没续就自动放开（人走了、断网了）
 const LOCK_TTL: Duration = Duration::from_secs(90);
@@ -185,7 +186,7 @@ impl Share {
     pub async fn start(&self, app: AppHandle, project: Arc<Project>, mut opts: ShareOptions) -> AppResult<ShareStatus> {
         self.stop();
         if opts.port < 1024 {
-            return Err(msg("端口请用 1024 以上的数字，比如 8765"));
+            return Err(msg(t!("端口请用 1024 以上的数字，比如 8765")));
         }
         if opts.host_name.trim().is_empty() {
             opts.host_name = "管理员".into();
@@ -197,21 +198,21 @@ impl Share {
             "lan" => {}
             "relay" => {
                 if opts.relay_url.trim().is_empty() {
-                    return Err(msg("请填写中转服务器地址"));
+                    return Err(msg(t!("请填写中转服务器地址")));
                 }
             }
             "xuntong" => {
                 let key = app.state::<Runtime>().settings().ai_key.unwrap_or_default();
                 if key.trim().is_empty() {
-                    return Err(msg("用巡瞳官方中转需要巡瞳 AI 的 API Key，请先到「设置 → 巡瞳 AI」填写"));
+                    return Err(msg(t!("用巡瞳官方中转需要巡瞳 AI 的 API Key，请先到「设置 → 巡瞳 AI」填写")));
                 }
             }
-            _ => return Err(msg("共享方式不对")),
+            _ => return Err(msg(t!("共享方式不对"))),
         }
         save_options(&project, &opts)?;
         let listener = tokio::net::TcpListener::bind(("0.0.0.0", opts.port))
             .await
-            .map_err(|e| msg(format!("端口 {} 打不开：{e}。可能被别的程序占用了，换一个端口试试", opts.port)))?;
+            .map_err(|e| msg(t!("端口 {port} 打不开：{e}。可能被别的程序占用了，换一个端口试试", port = opts.port, e = e)))?;
         let (sd_tx, sd_rx) = oneshot::channel::<()>();
         let (tx, _) = broadcast::channel(256);
         let (closed, _) = watch::channel(false);
@@ -481,7 +482,7 @@ impl Hub {
     pub fn check_write(&self, m: &Member, image_id: i64) -> AppResult<()> {
         if let Some(l) = self.locks.lock().get(&image_id) {
             if l.member_id != m.id && l.at.elapsed() < LOCK_TTL {
-                return Err(msg(format!("「{}」正在标这张图，等他标完再改", l.name)));
+                return Err(msg(t!("「{name}」正在标这张图，等他标完再改", name = l.name)));
             }
         }
         Ok(())
@@ -523,7 +524,7 @@ impl Hub {
 
     pub fn review(&self, m: &Member, image_id: i64, pass: bool, reason: &str) -> AppResult<String> {
         if !m.can_review() {
-            return Err(msg("只有审核员能审核"));
+            return Err(msg(t!("只有审核员能审核")));
         }
         let s = team::review(&self.project, m.id, image_id, pass, reason)?;
         self.status_changed(m, image_id, &s, if pass { "pass" } else { "reject" });
@@ -543,14 +544,14 @@ impl Hub {
 // ---------- 成员调用的命令 ----------
 
 fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> AppResult<T> {
-    serde_json::from_value(args.get(key).cloned().unwrap_or(Value::Null)).map_err(|e| msg(format!("参数 {key} 不对：{e}")))
+    serde_json::from_value(args.get(key).cloned().unwrap_or(Value::Null)).map_err(|e| msg(t!("参数 {key} 不对：{e}", key = key, e = e)))
 }
 
 fn need_ai(hub: &Hub) -> AppResult<()> {
     if hub.opts.lock().allow_ai {
         Ok(())
     } else {
-        Err(msg("发起人没有开放 AI 辅助"))
+        Err(msg(t!("发起人没有开放 AI 辅助")))
     }
 }
 
@@ -558,7 +559,7 @@ fn need_labels(hub: &Hub, m: &Member) -> AppResult<()> {
     if m.role == "admin" || hub.opts.lock().members_edit_labels {
         Ok(())
     } else {
-        Err(msg("发起人没有开放修改类别，请联系发起人"))
+        Err(msg(t!("发起人没有开放修改类别，请联系发起人")))
     }
 }
 
@@ -597,7 +598,7 @@ fn call(hub: &Hub, m: &Member, cmd: &str, args: &Value) -> AppResult<Value> {
             need_labels(hub, m)?;
             let name: String = arg(args, "name")?;
             let l = annotations::add_label(p, &name, &arg::<String>(args, "color")?)?;
-            hub.labels_changed(m, &format!("新增类别「{name}」"));
+            hub.labels_changed(m, &t!("新增类别「{name}」", name = name));
             serde_json::to_value(l)?
         }
         "update_label" => {
@@ -609,10 +610,10 @@ fn call(hub: &Hub, m: &Member, cmd: &str, args: &Value) -> AppResult<Value> {
             if let Some(d) = arg::<Option<String>>(args, "description")? {
                 annotations::set_label_description(p, id, &d)?;
             }
-            hub.labels_changed(m, &format!("修改类别「{name}」"));
+            hub.labels_changed(m, &t!("修改类别「{name}」", name = name));
             Value::Null
         }
-        "delete_label" => return Err(msg("删除类别会删掉它的全部标注，只有发起人能删")),
+        "delete_label" => return Err(msg(t!("删除类别会删掉它的全部标注，只有发起人能删"))),
         "keypoint_template" => serde_json::to_value(keypoints::get(p)?)?,
         "list_image_ids" => {
             let status: Option<String> = arg(args, "status")?;
@@ -691,12 +692,12 @@ fn call(hub: &Hub, m: &Member, cmd: &str, args: &Value) -> AppResult<Value> {
             let instructions: Option<String> = arg(args, "instructions")?;
             let classes: Vec<crate::ai::ClassRule> = arg(args, "classes")?;
             crate::ai::save_rules(p, instructions.as_deref(), &classes)?;
-            hub.labels_changed(m, "更新了识别规则");
+            hub.labels_changed(m, &t!("更新了识别规则"));
             // 绑定了巡瞳平台规则就顺手同步（用的是发起人的账号）；失败只提醒
             if !crate::ai::rules(p)?.rule_set.is_empty() {
                 match crate::ai::sync_rules(p, &app.state::<Runtime>()) {
                     Ok(_) => Value::Null,
-                    Err(e) => json!(format!("规则已保存，但同步到巡瞳平台失败：{e}")),
+                    Err(e) => json!(t!("规则已保存，但同步到巡瞳平台失败：{e}", e = e)),
                 }
             } else {
                 Value::Null
@@ -712,7 +713,7 @@ fn call(hub: &Hub, m: &Member, cmd: &str, args: &Value) -> AppResult<Value> {
             let r = crate::ai::chat_rules(p, &app.state::<Runtime>(), &app.state::<Predictor>(), &messages, &|_| {})?;
             serde_json::to_value(r)?
         }
-        _ => return Err(msg("这个功能只能在发起人的电脑上用")),
+        _ => return Err(msg(t!("这个功能只能在发起人的电脑上用"))),
     };
     Ok(v)
 }
@@ -784,8 +785,8 @@ async fn logout(AxState(hub): HubState, headers: HeaderMap) -> Response {
 }
 
 async fn rpc(AxState(hub): HubState, AxPath(cmd): AxPath<String>, headers: HeaderMap, body: axum::body::Bytes) -> Response {
-    let Some(token) = bearer(&headers) else { return err(StatusCode::UNAUTHORIZED, "请先登录") };
-    let Some(m) = hub.member_of(&token) else { return err(StatusCode::UNAUTHORIZED, "登录已失效，请重新登录") };
+    let Some(token) = bearer(&headers) else { return err(StatusCode::UNAUTHORIZED, t!("请先登录")) };
+    let Some(m) = hub.member_of(&token) else { return err(StatusCode::UNAUTHORIZED, t!("登录已失效，请重新登录")) };
     let args: Value = if body.is_empty() { json!({}) } else { serde_json::from_slice(&body).unwrap_or(json!({})) };
     let h = hub.clone();
     match tokio::task::spawn_blocking(move || call(&h, &m, &cmd, &args)).await {
@@ -809,7 +810,7 @@ async fn thumb(state: HubState, id: AxPath<i64>, q: Query<TokenQ>) -> Response {
 }
 
 async fn send_image(AxState(hub): HubState, AxPath(id): AxPath<i64>, Query(q): Query<TokenQ>, kind: &'static str) -> Response {
-    let Some(m) = q.t.as_deref().and_then(|t| hub.member_of(t)) else { return err(StatusCode::UNAUTHORIZED, "请先登录") };
+    let Some(m) = q.t.as_deref().and_then(|t| hub.member_of(t)) else { return err(StatusCode::UNAUTHORIZED, t!("请先登录")) };
     let h = hub.clone();
     let r = tokio::task::spawn_blocking(move || -> AppResult<(Vec<u8>, &'static str)> {
         team::ensure_access(&h.project, &m, id)?;
@@ -824,7 +825,7 @@ async fn send_image(AxState(hub): HubState, AxPath(id): AxPath<i64>, Query(q): Q
 }
 
 async fn ws(AxState(hub): HubState, Query(q): Query<TokenQ>, upgrade: WebSocketUpgrade) -> Response {
-    let Some(m) = q.t.as_deref().and_then(|t| hub.member_of(t)) else { return err(StatusCode::UNAUTHORIZED, "请先登录") };
+    let Some(m) = q.t.as_deref().and_then(|t| hub.member_of(t)) else { return err(StatusCode::UNAUTHORIZED, t!("请先登录")) };
     upgrade.on_upgrade(move |socket: WebSocket| async move {
         let (mut sink, stream) = socket.split();
         let (out_tx, mut out_rx) = mpsc::channel::<String>(128);
@@ -901,14 +902,14 @@ fn mime_of(path: &str) -> &'static str {
 async fn static_file(AxState(hub): HubState, uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/').to_string();
     if path.starts_with("api/") {
-        return err(StatusCode::NOT_FOUND, "没有这个接口");
+        return err(StatusCode::NOT_FOUND, t!("没有这个接口"));
     }
     let app = hub.app.clone();
     let q = uri.query().map(|s| s.to_string());
     let r = tokio::task::spawn_blocking(move || find_asset(&app, &path, q.as_deref())).await;
     match r {
         Ok(Some((bytes, ct))) => ([(header::CONTENT_TYPE, ct)], Body::from(bytes)).into_response(),
-        _ => err(StatusCode::NOT_FOUND, "找不到页面"),
+        _ => err(StatusCode::NOT_FOUND, t!("找不到页面")),
     }
 }
 

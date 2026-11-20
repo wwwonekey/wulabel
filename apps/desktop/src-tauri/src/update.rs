@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::t;
+
 // 和反馈服务是同一个后端（server/feedback/）。自建部署改成你自己的地址即可。
 const UPDATE_ENDPOINT: &str = "https://feedback.xiaowuiot.com/update";
 
@@ -74,10 +76,10 @@ pub async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
 
     let text = match result {
         Ok(resp) => resp.into_string().map_err(|e| e.to_string())?,
-        Err(ureq::Error::Status(code, _)) => return Err(format!("检查更新失败（{code}）")),
-        Err(e) => return Err(format!("网络连接失败：{e}")),
+        Err(ureq::Error::Status(code, _)) => return Err(t!("检查更新失败（{code}）", code = code)),
+        Err(e) => return Err(t!("网络连接失败：{e}", e = e)),
     };
-    let r: UpdateResp = serde_json::from_str(&text).map_err(|_| "检查更新失败：服务端返回的内容不对".to_string())?;
+    let r: UpdateResp = serde_json::from_str(&text).map_err(|_| t!("检查更新失败：服务端返回的内容不对"))?;
     let latest = r.latest.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| current.clone());
     let dl = r.download.unwrap_or_default();
     let download_url = dl.url.unwrap_or_default();
@@ -112,8 +114,8 @@ pub async fn auto_update(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri::Emitter;
     use tauri_plugin_updater::UpdaterExt;
 
-    let updater = app.updater().map_err(|e| format!("自动更新不可用：{e}"))?;
-    let Some(update) = updater.check().await.map_err(|e| format!("检查更新失败：{e}"))? else {
+    let updater = app.updater().map_err(|e| t!("自动更新不可用：{e}", e = e))?;
+    let Some(update) = updater.check().await.map_err(|e| t!("检查更新失败：{e}", e = e))? else {
         return Ok(false);
     };
     let a = app.clone();
@@ -127,7 +129,7 @@ pub async fn auto_update(app: tauri::AppHandle) -> Result<bool, String> {
             || {},
         )
         .await
-        .map_err(|e| format!("自动更新失败：{e}"))?;
+        .map_err(|e| t!("自动更新失败：{e}", e = e))?;
     // Windows 上安装程序会自己结束软件；Mac / Linux 换好文件后重启
     app.restart();
 }
@@ -140,11 +142,11 @@ pub async fn install_update(app: tauri::AppHandle, url: String, sha256: String) 
     use tauri::Emitter;
 
     if !trusted_url(&url) {
-        return Err("安装包地址不对".into());
+        return Err(t!("安装包地址不对"));
     }
     let sha256 = sha256.trim().to_lowercase();
     if sha256.len() != 64 {
-        return Err("缺少安装包校验值，请到官网下载".into());
+        return Err(t!("缺少安装包校验值，请到官网下载"));
     }
     let name = url.rsplit('/').next().unwrap_or("wulabel-setup").to_string();
     let dir = std::env::temp_dir().join("wulabel-update");
@@ -159,20 +161,20 @@ pub async fn install_update(app: tauri::AppHandle, url: String, sha256: String) 
         let resp = ureq::get(&url)
             .timeout(Duration::from_secs(1800))
             .call()
-            .map_err(|e| format!("下载失败：{e}"))?;
+            .map_err(|e| t!("下载失败：{e}", e = e))?;
         let total: u64 = resp.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(0);
         let mut reader = resp.into_reader();
         let tmp = path2.with_extension("part");
-        let mut file = std::fs::File::create(&tmp).map_err(|e| format!("保存安装包失败：{e}"))?;
+        let mut file = std::fs::File::create(&tmp).map_err(|e| t!("保存安装包失败：{e}", e = e))?;
         let mut hasher = Sha256::new();
         let mut buf = vec![0u8; 256 * 1024];
         let mut downloaded = 0u64;
         loop {
-            let n = reader.read(&mut buf).map_err(|e| format!("下载中断：{e}"))?;
+            let n = reader.read(&mut buf).map_err(|e| t!("下载中断：{e}", e = e))?;
             if n == 0 {
                 break;
             }
-            file.write_all(&buf[..n]).map_err(|e| format!("保存安装包失败：{e}"))?;
+            file.write_all(&buf[..n]).map_err(|e| t!("保存安装包失败：{e}", e = e))?;
             hasher.update(&buf[..n]);
             downloaded += n as u64;
             let _ = app2.emit("update-progress", Progress { downloaded, total });
@@ -181,9 +183,9 @@ pub async fn install_update(app: tauri::AppHandle, url: String, sha256: String) 
         let got: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
         if got != sha256 {
             let _ = std::fs::remove_file(&tmp);
-            return Err("安装包校验不通过（可能没下载完整），请重试或到官网下载".into());
+            return Err(t!("安装包校验不通过（可能没下载完整），请重试或到官网下载"));
         }
-        std::fs::rename(&tmp, &path2).map_err(|e| format!("保存安装包失败：{e}"))?;
+        std::fs::rename(&tmp, &path2).map_err(|e| t!("保存安装包失败：{e}", e = e))?;
         Ok(())
     })
     .await
@@ -195,7 +197,7 @@ pub async fn install_update(app: tauri::AppHandle, url: String, sha256: String) 
     let r = std::process::Command::new("open").arg(&path).spawn();
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let r = std::process::Command::new("xdg-open").arg(&path).spawn();
-    r.map_err(|e| format!("打开安装程序失败：{e}。安装包在 {}", path.display()))?;
+    r.map_err(|e| t!("打开安装程序失败：{e}。安装包在 {path}", e = e, path = path.display()))?;
 
     // 留一点时间让安装程序起来，再退出软件，免得安装时文件被占用
     tauri::async_runtime::spawn(async move {

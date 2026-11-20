@@ -3,6 +3,7 @@ import { App, Button, Empty, Input, Modal, Space, Table, Tag, Tooltip } from "an
 import { DeleteOutlined, DiffOutlined, EditOutlined, ExportOutlined, RollbackOutlined } from "@ant-design/icons";
 import { api, errText, ProjectInfo, VersionDiff, VersionInfo } from "../api";
 import { useApp } from "../store";
+import { t } from "../i18n";
 import ExportModal from "./ExportModal";
 
 const fmtTime = (ts: number) => new Date(ts * 1000).toLocaleString();
@@ -41,7 +42,7 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
       const v = await api.createVersion(name, note, [0.8, 0.2, 0]);
       setName("");
       setNote("");
-      message.success(`已保存版本「${v.name}」：${v.images} 张图、${v.annotations} 个标注`);
+      message.success(t("已保存版本「{name}」：{images} 张图、{anns} 个标注", { name: v.name, images: v.images, anns: v.annotations }));
       await load();
     } catch (e) {
       message.error(errText(e));
@@ -60,22 +61,26 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
 
   const restore = (v: VersionInfo) => {
     modal.confirm({
-      title: `恢复到版本「${v.name}」？`,
+      title: t("恢复到版本「{name}」？", { name: v.name }),
       width: 520,
       content: (
         <div>
-          版本里这 {v.images} 张图的标注、训练/验证/测试划分、审核状态会改回保存时的样子。
+          {t("版本里这 {n} 张图的标注、训练/验证/测试划分、审核状态会改回保存时的样子。", { n: v.images })}
           <div className="muted" style={{ marginTop: 6 }}>
-            恢复前会自动把当前数据存成「恢复前自动备份」版本，随时可以再恢复回来。版本里没有的图不受影响。
+            {t("恢复前会自动把当前数据存成「恢复前自动备份」版本，随时可以再恢复回来。版本里没有的图不受影响。")}
           </div>
         </div>
       ),
-      okText: "恢复",
-      cancelText: "取消",
+      okText: t("恢复"),
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           const r = await api.restoreVersion(v.id);
-          message.success(`已恢复 ${r.images} 张图的标注${r.missing ? `，${r.missing} 张图已从项目删除，没法恢复` : ""}`);
+          message.success(
+            r.missing
+              ? t("已恢复 {n} 张图的标注，{missing} 张图已从项目删除，没法恢复", { n: r.images, missing: r.missing })
+              : t("已恢复 {n} 张图的标注", { n: r.images }),
+          );
           await load();
           await refreshStats();
         } catch (e) {
@@ -87,11 +92,11 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
 
   const remove = (v: VersionInfo) => {
     modal.confirm({
-      title: `删除版本「${v.name}」？`,
-      content: "只删除这个快照，不影响当前的图片和标注，也不影响已经训练好的模型。",
-      okText: "删除",
+      title: t("删除版本「{name}」？", { name: v.name }),
+      content: t("只删除这个快照，不影响当前的图片和标注，也不影响已经训练好的模型。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await api.deleteVersion(v.id);
@@ -116,15 +121,15 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
 
   return (
     <>
-      <Modal title="数据集版本" open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden>
+      <Modal title={t("数据集版本")} open={open} onCancel={onClose} footer={null} width={860} destroyOnHidden>
         <p className="muted" style={{ marginTop: 0 }}>
-          把当前已标注、已审核的图片和标注存成一个快照。之后可以用某个版本训练（方便对比不同数据的效果）、导出、和当前数据对比，或者恢复回去。
+          {t("把当前已标注、已审核的图片和标注存成一个快照。之后可以用某个版本训练（方便对比不同数据的效果）、导出、和当前数据对比，或者恢复回去。")}
         </p>
         <Space.Compact style={{ width: "100%", marginBottom: 12 }}>
-          <Input style={{ width: 200 }} placeholder="版本名，如 v1、补充夜间图" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
-          <Input placeholder="备注（可选）：这一版改了什么" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} onPressEnter={create} />
+          <Input style={{ width: 200 }} placeholder={t("版本名，如 v1、补充夜间图")} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder={t("备注（可选）：这一版改了什么")} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} onPressEnter={create} />
           <Button type="primary" loading={creating} onClick={create}>
-            保存当前数据为新版本
+            {t("保存当前数据为新版本")}
           </Button>
         </Space.Compact>
         <Table<VersionInfo>
@@ -133,7 +138,7 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
           loading={loading}
           dataSource={list}
           pagination={false}
-          locale={{ emptyText: <Empty description="还没有版本" /> }}
+          locale={{ emptyText: <Empty description={t("还没有版本")} /> }}
           expandable={{
             expandedRowRender: (v) => (
               <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
@@ -147,7 +152,7 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
           }}
           columns={[
             {
-              title: "版本",
+              title: t("版本"),
               render: (_, v) => (
                 <div>
                   <b>{v.name}</b>
@@ -155,27 +160,31 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
                 </div>
               ),
             },
-            { title: "时间", dataIndex: "createdAt", render: fmtTime, width: 160 },
-            { title: "图片", render: (_, v) => `${v.images}（训 ${v.train} / 验 ${v.val} / 测 ${v.test}）`, width: 190 },
-            { title: "标注", dataIndex: "annotations", width: 70 },
+            { title: t("时间"), dataIndex: "createdAt", render: fmtTime, width: 160 },
+            {
+              title: t("图片"),
+              render: (_, v) => t("{n}（训 {train} / 验 {val} / 测 {test}）", { n: v.images, train: v.train, val: v.val, test: v.test }),
+              width: 190,
+            },
+            { title: t("标注@@数量"), dataIndex: "annotations", width: 70 },
             {
               title: "",
               width: 170,
               render: (_, v) => (
                 <Space size={2}>
-                  <Tooltip title="和当前数据对比">
+                  <Tooltip title={t("和当前数据对比")}>
                     <Button size="small" type="text" icon={<DiffOutlined />} onClick={() => showDiff(v)} />
                   </Tooltip>
-                  <Tooltip title="导出这个版本">
+                  <Tooltip title={t("导出这个版本")}>
                     <Button size="small" type="text" icon={<ExportOutlined />} onClick={() => setExporting(v)} />
                   </Tooltip>
-                  <Tooltip title="恢复到这个版本">
+                  <Tooltip title={t("恢复到这个版本")}>
                     <Button size="small" type="text" icon={<RollbackOutlined />} onClick={() => restore(v)} />
                   </Tooltip>
-                  <Tooltip title="改名、备注">
+                  <Tooltip title={t("改名、备注")}>
                     <Button size="small" type="text" icon={<EditOutlined />} onClick={() => setEditing({ v, name: v.name, note: v.note })} />
                   </Tooltip>
-                  <Tooltip title="删除这个版本">
+                  <Tooltip title={t("删除这个版本")}>
                     <Button size="small" type="text" icon={<DeleteOutlined />} onClick={() => remove(v)} />
                   </Tooltip>
                 </Space>
@@ -183,19 +192,19 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
             },
           ]}
         />
-        <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>在「训练」页的「训练数据」里可以选用某个版本训练。</div>
+        <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>{t("在「训练」页的「训练数据」里可以选用某个版本训练。")}</div>
       </Modal>
 
-      <Modal title={diff ? `版本「${diff.v.name}」→ 当前数据` : ""} open={!!diff} onCancel={() => setDiff(null)} footer={null} width={560}>
+      <Modal title={diff ? t("版本「{name}」→ 当前数据", { name: diff.v.name }) : ""} open={!!diff} onCancel={() => setDiff(null)} footer={null} width={560}>
         {diff && (
           <>
             <div className="cards" style={{ gridTemplateColumns: "repeat(3, 1fr)", margin: "8px 0 12px" }}>
-              <div className="card"><div className="muted">新增的图</div><div className="kpi">{diff.d.added.length}</div></div>
-              <div className="card"><div className="muted">移出的图</div><div className="kpi">{diff.d.removed.length}</div></div>
-              <div className="card"><div className="muted">标注改过的图</div><div className="kpi">{diff.d.changed.length}</div></div>
+              <div className="card"><div className="muted">{t("新增的图")}</div><div className="kpi">{diff.d.added.length}</div></div>
+              <div className="card"><div className="muted">{t("移出的图")}</div><div className="kpi">{diff.d.removed.length}</div></div>
+              <div className="card"><div className="muted">{t("标注改过的图")}</div><div className="kpi">{diff.d.changed.length}</div></div>
             </div>
             {diff.d.classes.length === 0 ? (
-              <div className="muted">各类别的标注数量没有变化。</div>
+              <div className="muted">{t("各类别的标注数量没有变化。")}</div>
             ) : (
               <Table
                 size="small"
@@ -203,11 +212,11 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
                 pagination={false}
                 dataSource={diff.d.classes}
                 columns={[
-                  { title: "类别", dataIndex: "name" },
-                  { title: "版本里", dataIndex: "before" },
-                  { title: "当前", dataIndex: "after" },
+                  { title: t("类别"), dataIndex: "name" },
+                  { title: t("版本里"), dataIndex: "before" },
+                  { title: t("当前"), dataIndex: "after" },
                   {
-                    title: "变化",
+                    title: t("变化"),
                     render: (_, c) => {
                       const d = c.after - c.before;
                       return <span style={{ color: d > 0 ? "var(--good, #2fb67c)" : "var(--bad)" }}>{d > 0 ? `+${d}` : d}</span>;
@@ -216,16 +225,16 @@ export default function VersionsModal({ project, open, onClose }: { project: Pro
                 ]}
               />
             )}
-            <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>「移出的图」是版本里有、现在变成未标注 / 跳过 / 已删除的图。</div>
+            <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>{t("「移出的图」是版本里有、现在变成未标注 / 跳过 / 已删除的图。")}</div>
           </>
         )}
       </Modal>
 
-      <Modal title="修改版本" open={!!editing} onCancel={() => setEditing(null)} onOk={saveEdit} okText="保存" cancelText="取消" width={420}>
+      <Modal title={t("修改版本")} open={!!editing} onCancel={() => setEditing(null)} onOk={saveEdit} okText={t("保存")} cancelText={t("取消")} width={420}>
         {editing && (
           <Space direction="vertical" style={{ width: "100%", marginTop: 8 }}>
             <Input value={editing.name} maxLength={60} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-            <Input.TextArea rows={3} value={editing.note} maxLength={200} placeholder="备注" onChange={(e) => setEditing({ ...editing, note: e.target.value })} />
+            <Input.TextArea rows={3} value={editing.note} maxLength={200} placeholder={t("备注")} onChange={(e) => setEditing({ ...editing, note: e.target.value })} />
           </Space>
         )}
       </Modal>

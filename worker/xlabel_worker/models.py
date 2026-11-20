@@ -11,6 +11,7 @@ from pathlib import Path
 
 import torch
 
+from .i18n import tr
 from .protocol import log
 
 # 名称和说明给界面展示（界面另有一份，见桌面端 Train.tsx 的 MODELS）
@@ -122,17 +123,17 @@ def is_cls(key: str) -> bool:
 def _with_weights(builder, pretrained: bool, extra: dict, label: str):
     """先试完整预训练权重，再试只用骨干网络权重，都不行就随机初始化"""
     if pretrained:
-        tries = [(dict(weights="DEFAULT"), f"{label}预训练权重")]
+        tries = [(dict(weights="DEFAULT"), tr("{label}预训练权重", label=label))]
         if label != "ImageNet ":
-            tries.append((dict(weights=None, weights_backbone="DEFAULT"), "骨干网络预训练权重"))
+            tries.append((dict(weights=None, weights_backbone="DEFAULT"), tr("骨干网络预训练权重")))
         for kw, what in tries:
             try:
                 m = builder(**kw, **extra)
-                log(f"已加载 {what}")
+                log(tr("已加载 {what}", what=what))
                 return m
             except Exception as e:  # 多半是网络问题
-                log(f"加载 {what} 失败：{e}")
-        log("没有可用的预训练权重，从头训练，效果会差很多")
+                log(tr("加载 {what} 失败：{e}", what=what, e=e))
+        log(tr("没有可用的预训练权重，从头训练，效果会差很多"))
     if label == "ImageNet ":
         return builder(weights=None, **extra)
     return builder(weights=None, weights_backbone=None, **extra)
@@ -154,7 +155,7 @@ def _build_cls(key: str, num_classes: int, pretrained: bool) -> torch.nn.Module:
 def build(key: str, num_classes: int, img_size: int, pretrained: bool = True, num_keypoints: int = 17) -> torch.nn.Module:
     """num_classes 不含背景。预训练权重下载失败时退回只用骨干网络权重，再不行就随机初始化。"""
     if key not in MODELS:
-        raise ValueError(f"不支持的模型：{key}")
+        raise ValueError(tr("不支持的模型：{key}", key=key))
     kind = kind_of(key)
     if kind == "cls":
         return _build_cls(key, num_classes, pretrained)
@@ -230,7 +231,7 @@ def load_init(model: torch.nn.Module, key: str, path: str, classes: list[str]) -
     """接着上次的模型训练：同结构的参数都沿用；类别变了的话，分类相关的头重新学"""
     ck = torch.load(path, map_location="cpu", weights_only=False)
     if ck.get("model") != key:
-        raise RuntimeError("接着训练要选和上次相同的模型")
+        raise RuntimeError(tr("接着训练要选和上次相同的模型"))
     same = list(ck.get("classes", [])) == list(classes)
     heads = [] if same else class_heads(key, model)
     own = model.state_dict()
@@ -240,10 +241,10 @@ def load_init(model: torch.nn.Module, key: str, path: str, classes: list[str]) -
         if k in own and own[k].shape == v.shape and not any(k.startswith(h) for h in heads)
     }
     model.load_state_dict(keep, strict=False)
-    msg = f"接着上次的模型训练：沿用 {len(keep)}/{len(own)} 组参数"
-    if not same:
-        msg += "；类别和上次不一样，分类部分重新学"
-    log(msg)
+    if same:
+        log(tr("接着上次的模型训练：沿用 {keep}/{own} 组参数", keep=len(keep), own=len(own)))
+    else:
+        log(tr("接着上次的模型训练：沿用 {keep}/{own} 组参数；类别和上次不一样，分类部分重新学", keep=len(keep), own=len(own)))
 
 
 def save(path: Path, model: torch.nn.Module, key: str, classes: list[str], img_size: int, extra: dict | None = None):

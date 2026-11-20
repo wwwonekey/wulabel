@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::db;
 use crate::error::{msg, AppResult};
 use crate::project::Project;
+use crate::t;
 
 const STATUSES: [&str; 4] = ["todo", "labeled", "reviewed", "skipped"];
 const TYPES: [&str; 5] = ["bbox", "polygon", "mask", "keypoints", "tag"];
@@ -41,50 +42,50 @@ pub struct ImageAnnotations {
 
 fn validate(a: &Annotation, w: u32, h: u32) -> AppResult<()> {
     if !TYPES.contains(&a.kind.as_str()) {
-        return Err(msg(format!("不支持的标注类型：{}", a.kind)));
+        return Err(msg(t!("不支持的标注类型：{kind}", kind = a.kind)));
     }
     if a.kind == "bbox" {
-        let v: Vec<f64> = serde_json::from_value(a.data.clone()).map_err(|_| msg("矩形框数据格式不对"))?;
+        let v: Vec<f64> = serde_json::from_value(a.data.clone()).map_err(|_| msg(t!("矩形框数据格式不对")))?;
         if v.len() != 4 || v.iter().any(|x| !x.is_finite()) {
-            return Err(msg("矩形框数据格式不对"));
+            return Err(msg(t!("矩形框数据格式不对")));
         }
         let (x, y, bw, bh) = (v[0], v[1], v[2], v[3]);
         // 允许 1 像素的误差
         if bw <= 0.0 || bh <= 0.0 || x < -1.0 || y < -1.0 || x + bw > w as f64 + 1.0 || y + bh > h as f64 + 1.0 {
-            return Err(msg("矩形框超出了图片范围"));
+            return Err(msg(t!("矩形框超出了图片范围")));
         }
     }
     if a.kind == "polygon" {
         // 分割多边形：[x1, y1, x2, y2, ...]，至少 3 个点，原图像素坐标
-        let v: Vec<f64> = serde_json::from_value(a.data.clone()).map_err(|_| msg("多边形数据格式不对"))?;
+        let v: Vec<f64> = serde_json::from_value(a.data.clone()).map_err(|_| msg(t!("多边形数据格式不对")))?;
         if v.len() < 6 || v.len() % 2 != 0 || v.iter().any(|x| !x.is_finite()) {
-            return Err(msg("多边形至少要有 3 个点"));
+            return Err(msg(t!("多边形至少要有 3 个点")));
         }
         for pt in v.chunks(2) {
             if pt[0] < -1.0 || pt[1] < -1.0 || pt[0] > w as f64 + 1.0 || pt[1] > h as f64 + 1.0 {
-                return Err(msg("多边形超出了图片范围"));
+                return Err(msg(t!("多边形超出了图片范围")));
             }
         }
     }
     if a.kind == "tag" {
         // 图像分类：整张图一个类别标签，类别就是 label_id，data 不用
         if a.label_id.is_none() {
-            return Err(msg("分类标签缺少类别"));
+            return Err(msg(t!("分类标签缺少类别")));
         }
     }
     if a.kind == "keypoints" {
         // {"box": [x, y, w, h], "kpts": [x, y, v, ...]}
-        let (b, k) = crate::keypoints::parse(&a.data).ok_or_else(|| msg("关键点数据格式不对"))?;
+        let (b, k) = crate::keypoints::parse(&a.data).ok_or_else(|| msg(t!("关键点数据格式不对")))?;
         if b[2] <= 0.0 || b[3] <= 0.0 || b[0] < -1.0 || b[1] < -1.0 || b[0] + b[2] > w as f64 + 1.0 || b[1] + b[3] > h as f64 + 1.0 {
-            return Err(msg("关键点目标的框超出了图片范围"));
+            return Err(msg(t!("关键点目标的框超出了图片范围")));
         }
         for pt in k.chunks(3) {
             let v = pt[2];
             if v != 0.0 && v != 1.0 && v != 2.0 {
-                return Err(msg("关键点可见性只能是 0、1、2"));
+                return Err(msg(t!("关键点可见性只能是 0、1、2")));
             }
             if v > 0.0 && (pt[0] < -1.0 || pt[1] < -1.0 || pt[0] > w as f64 + 1.0 || pt[1] > h as f64 + 1.0) {
-                return Err(msg("关键点超出了图片范围"));
+                return Err(msg(t!("关键点超出了图片范围")));
             }
         }
     }
@@ -98,7 +99,7 @@ pub fn load(p: &Project, image_id: i64) -> AppResult<ImageAnnotations> {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })
         .optional()?
-        .ok_or_else(|| msg(format!("图片不存在：{image_id}")))?;
+        .ok_or_else(|| msg(t!("图片不存在：{image_id}", image_id = image_id)))?;
     let mut stmt =
         conn.prepare("SELECT label_id, type, data_json, score, source FROM annotations WHERE image_id = ?1 ORDER BY id")?;
     let annotations = stmt
@@ -123,7 +124,7 @@ pub fn save(p: &Project, image_id: i64, anns: &[Annotation]) -> AppResult<String
     let (w, h): (u32, u32) = conn
         .query_row("SELECT width, height FROM images WHERE id = ?1", [image_id], |r| Ok((r.get(0)?, r.get(1)?)))
         .optional()?
-        .ok_or_else(|| msg(format!("图片不存在：{image_id}")))?;
+        .ok_or_else(|| msg(t!("图片不存在：{image_id}", image_id = image_id)))?;
     for a in anns {
         validate(a, w, h)?;
     }
@@ -181,11 +182,11 @@ pub fn save_predictions(p: &Project, image_id: i64, anns: &[Annotation]) -> AppR
 
 pub fn set_status(p: &Project, image_id: i64, status: &str) -> AppResult<()> {
     if !STATUSES.contains(&status) {
-        return Err(msg(format!("不支持的状态：{status}")));
+        return Err(msg(t!("不支持的状态：{status}", status = status)));
     }
     let n = p.conn.lock().execute("UPDATE images SET status = ?2 WHERE id = ?1", params![image_id, status])?;
     if n == 0 {
-        return Err(msg(format!("图片不存在：{image_id}")));
+        return Err(msg(t!("图片不存在：{image_id}", image_id = image_id)));
     }
     Ok(())
 }
@@ -224,10 +225,10 @@ pub struct Label {
 fn check_name(name: &str) -> AppResult<String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err(msg("类别名不能为空"));
+        return Err(msg(t!("类别名不能为空")));
     }
     if name.chars().count() > 40 {
-        return Err(msg("类别名不能超过 40 个字"));
+        return Err(msg(t!("类别名不能超过 40 个字")));
     }
     Ok(name.to_string())
 }
@@ -235,7 +236,7 @@ fn check_name(name: &str) -> AppResult<String> {
 fn map_unique(e: rusqlite::Error, name: &str) -> crate::error::AppError {
     match e {
         rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => {
-            msg(format!("类别「{name}」已存在"))
+            msg(t!("类别「{name}」已存在", name = name))
         }
         e => e.into(),
     }
@@ -291,7 +292,7 @@ pub fn update_label(p: &Project, id: i64, name: &str, color: &str, prompt: Optio
         .execute("UPDATE labels SET name = ?2, color = ?3 WHERE id = ?1", params![id, name, color])
         .map_err(|e| map_unique(e, &name))?;
     if n == 0 {
-        return Err(msg("类别不存在"));
+        return Err(msg(t!("类别不存在")));
     }
     if let Some(pr) = prompt {
         let pr: String = pr.trim().chars().take(120).collect();
@@ -305,7 +306,7 @@ pub fn set_label_description(p: &Project, id: i64, description: &str) -> AppResu
     let d: String = description.trim().chars().take(500).collect();
     let n = p.conn.lock().execute("UPDATE labels SET description = ?2 WHERE id = ?1", params![id, d])?;
     if n == 0 {
-        return Err(msg("类别不存在"));
+        return Err(msg(t!("类别不存在")));
     }
     Ok(())
 }

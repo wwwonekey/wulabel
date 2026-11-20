@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Modal, Spin } from "antd";
 import { FormOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { ImageItem, imageUrl } from "../api";
+import { t } from "../i18n";
 
 interface Props {
   projectPath: string;
@@ -110,12 +111,12 @@ export default function ImageViewer({ projectPath, items, index, onIndex, onAnno
             <span>
               {item.name}{" "}
               <span className="dim" style={{ fontWeight: 400 }}>
-                · {item.width}×{item.height} · 本页第 {index! + 1} / {items.length} 张 · ← → 翻页
+                · {item.width}×{item.height} · {t("本页第 {n} / {total} 张 · ← → 翻页", { n: index! + 1, total: items.length })}
               </span>
             </span>
             {onAnnotate && (
               <Button size="small" type="primary" icon={<FormOutlined />} onClick={() => onAnnotate(item.id)}>
-                标注这张
+                {t("标注这张")}
               </Button>
             )}
           </span>

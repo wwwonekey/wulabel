@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Modal, Progress, Space } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import { api, errText, UpdateInfo } from "../api";
+import { t } from "../i18n";
 
 const isMac = navigator.userAgent.includes("Mac");
 
@@ -21,7 +22,7 @@ export default function UpdateModal({ info, open, onClose }: { info: UpdateInfo 
     const fallback = () =>
       info.downloadUrl && info.sha256
         ? api.installUpdate(info.downloadUrl, info.sha256).then(() => setDone(true))
-        : Promise.reject(new Error("自动更新没成功，请到官网下载新版安装包，直接覆盖安装即可"));
+        : Promise.reject(new Error(t("自动更新没成功，请到官网下载新版安装包，直接覆盖安装即可")));
     api
       .autoUpdate()
       .then((ok) => (ok ? setDone(true) : fallback()))
@@ -40,7 +41,7 @@ export default function UpdateModal({ info, open, onClose }: { info: UpdateInfo 
 
   return (
     <Modal
-      title={info ? `更新到 v${info.latest}` : "更新"}
+      title={info ? t("更新到 v{version}", { version: info.latest }) : t("更新")}
       open={open}
       onCancel={onClose}
       maskClosable={false}
@@ -48,29 +49,31 @@ export default function UpdateModal({ info, open, onClose }: { info: UpdateInfo 
       footer={
         error ? (
           <Space>
-            {info?.url && <Button onClick={() => api.openUrl(info.url).catch(() => {})}>去官网下载</Button>}
-            <Button type="primary" onClick={onClose}>关闭</Button>
+            {info?.url && <Button onClick={() => api.openUrl(info.url).catch(() => {})}>{t("去官网下载")}</Button>}
+            <Button type="primary" onClick={onClose}>{t("关闭")}</Button>
           </Space>
         ) : null
       }
     >
       {error ? (
-        <Alert type="error" showIcon message="更新失败" description={error} />
+        <Alert type="error" showIcon message={t("更新失败")} description={error} />
       ) : done ? (
         <Alert
           type="success"
           showIcon
-          message="新版本已下载，正在安装"
-          description={isMac ? "在打开的窗口里把 Wulabel 拖进「应用程序」，选择替换即可。" : "按安装程序的提示完成安装，项目和数据都会保留。"}
+          message={t("新版本已下载，正在安装")}
+          description={isMac ? t("在打开的窗口里把 Wulabel 拖进「应用程序」，选择替换即可。") : t("按安装程序的提示完成安装，项目和数据都会保留。")}
         />
       ) : (
         <>
           <div style={{ marginBottom: 8 }}>
-            正在下载安装包{progress && progress.total ? `（${mb(progress.downloaded)} / ${mb(progress.total)} MB）` : "…"}
+            {progress && progress.total
+              ? t("正在下载安装包（{done} / {total} MB）", { done: mb(progress.downloaded), total: mb(progress.total) })
+              : t("正在下载安装包…")}
           </div>
           <Progress percent={pct} status="active" />
           <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
-            下载完成后会核对安装包并自动安装，装好后软件会自己重新打开，项目和数据都会保留。正在训练的任务请先等它结束。
+            {t("下载完成后会核对安装包并自动安装，装好后软件会自己重新打开，项目和数据都会保留。正在训练的任务请先等它结束。")}
           </div>
         </>
       )}

@@ -27,6 +27,7 @@ use crate::track;
 use crate::versions;
 use crate::video;
 use crate::training::{self, Jobs, Predictor, PredResult, PrelabelResult, RunDetail, RunInfo, TrainConfig};
+use crate::t;
 
 fn config_dir(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(app.path().app_config_dir()?)
@@ -110,7 +111,7 @@ pub async fn import_images(
     tauri::async_runtime::spawn_blocking(move || {
         let files = images::collect(&paths);
         if files.is_empty() {
-            return Err(msg("没有找到图片（支持 jpg、png、bmp、webp、tif）"));
+            return Err(msg(t!("没有找到图片（支持 jpg、png、bmp、webp、tif）")));
         }
         let last = std::sync::atomic::AtomicUsize::new(0);
         images::import(&project, &files, copy, &|done, total| {
@@ -123,7 +124,7 @@ pub async fn import_images(
         })
     })
     .await
-    .map_err(|e| msg(format!("导入任务异常：{e}")))?
+    .map_err(|e| msg(t!("导入任务异常：{e}", e = e)))?
 }
 
 #[derive(Clone, Serialize)]
@@ -165,7 +166,7 @@ pub async fn extract_video(
         video::extract(&project, &rt, &paths, every, max_frames, &progress, &|_line| {})
     })
     .await
-    .map_err(|e| msg(format!("抽帧任务异常：{e}")))?
+    .map_err(|e| msg(t!("抽帧任务异常：{e}", e = e)))?
 }
 
 /// 测试连接：探测视频流信息（可达性、分辨率、直播还是回放）
@@ -183,7 +184,7 @@ pub async fn probe_stream(app: AppHandle, url: String) -> AppResult<video::Strea
         video::probe_stream(&rt, &url, &|_line| {}, &progress)
     })
     .await
-    .map_err(|e| msg(format!("探测任务异常：{e}")))?
+    .map_err(|e| msg(t!("探测任务异常：{e}", e = e)))?
 }
 
 /// 从视频流抽帧：直播用最多帧数 / 最长时长做上限，回放读到结尾；dedup 跳过相似帧
@@ -219,7 +220,7 @@ pub async fn extract_stream(
         )
     })
     .await
-    .map_err(|e| msg(format!("采集任务异常：{e}")))?
+    .map_err(|e| msg(t!("采集任务异常：{e}", e = e)))?
 }
 
 // ---------- 外部模型、重新评估、误报测试 ----------
@@ -228,7 +229,7 @@ pub async fn extract_stream(
 pub async fn inspect_onnx(app: AppHandle, path: String) -> AppResult<serde_json::Value> {
     tauri::async_runtime::spawn_blocking(move || evaltools::inspect_onnx(&app.state::<Runtime>(), &path))
         .await
-        .map_err(|e| msg(format!("读取模型异常：{e}")))?
+        .map_err(|e| msg(t!("读取模型异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -253,7 +254,7 @@ pub async fn evaluate_run(app: AppHandle, state: State<'_, AppState>, run_id: i6
         })
     })
     .await
-    .map_err(|e| msg(format!("评估异常：{e}")))?
+    .map_err(|e| msg(t!("评估异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -267,7 +268,7 @@ pub async fn fp_test(app: AppHandle, state: State<'_, AppState>, config: evaltoo
         evaltools::fp_test(&project, &app.state::<Runtime>(), &app.state::<evaltools::FpTest>(), &config, &sink)
     })
     .await
-    .map_err(|e| msg(format!("误报测试异常：{e}")))?
+    .map_err(|e| msg(t!("误报测试异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -289,7 +290,7 @@ pub async fn split_packages(app: AppHandle, state: State<'_, AppState>, options:
         collab::split(&project, &options, &rt, &log, &progress)
     })
     .await
-    .map_err(|e| msg(format!("分包异常：{e}")))?
+    .map_err(|e| msg(t!("分包异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -303,7 +304,7 @@ pub async fn merge_package(state: State<'_, AppState>, options: collab::MergeOpt
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || collab::merge(&project, &options))
         .await
-        .map_err(|e| msg(format!("合并异常：{e}")))?
+        .map_err(|e| msg(t!("合并异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -311,7 +312,7 @@ pub async fn export_report(state: State<'_, AppState>, run_id: i64, path: String
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || report::export(&project, run_id, &PathBuf::from(path)))
         .await
-        .map_err(|e| msg(format!("导出报告异常：{e}")))?
+        .map_err(|e| msg(t!("导出报告异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -322,7 +323,7 @@ pub async fn quality_scan(app: AppHandle, state: State<'_, AppState>, only_todo:
         quality::scan(&project, only_todo, &progress)
     })
     .await
-    .map_err(|e| msg(format!("质量筛查异常：{e}")))?
+    .map_err(|e| msg(t!("质量筛查异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -333,7 +334,7 @@ pub async fn uncertain_images(app: AppHandle, state: State<'_, AppState>, run_id
         training::uncertain_images(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), run_id, limit, &progress)
     })
     .await
-    .map_err(|e| msg(format!("挑图异常：{e}")))?
+    .map_err(|e| msg(t!("挑图异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -341,7 +342,7 @@ pub async fn aug_preview(app: AppHandle, state: State<'_, AppState>, aug: serde_
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || evaltools::aug_preview(&project, &app.state::<Runtime>(), &aug, img_size, 4))
         .await
-        .map_err(|e| msg(format!("预览异常：{e}")))?
+        .map_err(|e| msg(t!("预览异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -414,7 +415,7 @@ pub async fn export_version(
         Ok(res)
     })
     .await
-    .map_err(|e| msg(format!("导出异常：{e}")))?
+    .map_err(|e| msg(t!("导出异常：{e}", e = e)))?
 }
 
 /// 关键点项目的模板（点名 + 骨架），没有时返回默认的 COCO 人体 17 点
@@ -466,11 +467,11 @@ pub async fn delete_images(state: State<'_, AppState>, scope: String, ids: Optio
         "ids" => DeleteScope::Ids(ids.unwrap_or_default()),
         "last" => DeleteScope::LastImport,
         "all" => DeleteScope::All,
-        s => return Err(msg(format!("不支持的删除范围：{s}"))),
+        s => return Err(msg(t!("不支持的删除范围：{s}", s = s))),
     };
     tauri::async_runtime::spawn_blocking(move || images::delete(&project, scope))
         .await
-        .map_err(|e| msg(format!("删除任务异常：{e}")))?
+        .map_err(|e| msg(t!("删除任务异常：{e}", e = e)))?
 }
 
 // ---------- 训练环境 ----------
@@ -480,7 +481,7 @@ pub async fn delete_images(state: State<'_, AppState>, scope: String, ids: Optio
 pub async fn env_status(app: AppHandle, refresh: bool) -> AppResult<EnvStatus> {
     tauri::async_runtime::spawn_blocking(move || app.state::<Runtime>().status(refresh))
         .await
-        .map_err(|e| msg(format!("环境检查异常：{e}")))
+        .map_err(|e| msg(t!("环境检查异常：{e}", e = e)))
 }
 
 #[tauri::command]
@@ -508,7 +509,7 @@ pub async fn env_install(app: AppHandle, variant: String) -> AppResult<()> {
         )
     })
     .await
-    .map_err(|e| msg(format!("安装任务异常：{e}")))?
+    .map_err(|e| msg(t!("安装任务异常：{e}", e = e)))?
 }
 
 /// 实测当前网络下国内镜像 / 官方源的下载速度，推荐更快的
@@ -516,7 +517,7 @@ pub async fn env_install(app: AppHandle, variant: String) -> AppResult<()> {
 pub async fn speed_test(variant: String) -> AppResult<SpeedResult> {
     tauri::async_runtime::spawn_blocking(move || runtime::speed_test(&variant))
         .await
-        .map_err(|e| msg(format!("测速任务异常：{e}")))?
+        .map_err(|e| msg(t!("测速任务异常：{e}", e = e)))?
 }
 
 // ---------- 训练 ----------
@@ -552,7 +553,7 @@ pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: 
         training::start(project, &rt, jobs, config, sink)
     })
     .await
-    .map_err(|e| msg(format!("启动训练异常：{e}")))?
+    .map_err(|e| msg(t!("启动训练异常：{e}", e = e)))?
 }
 
 /// 训练结束：发系统通知、任务栏闪一下（训练常常要几十分钟，人多半不在电脑前）
@@ -560,8 +561,8 @@ fn notify_training(app: &AppHandle, status: &str) {
     use tauri_plugin_notification::NotificationExt;
 
     let (title, body) = match status {
-        "done" => ("Wulabel 训练完成", "可以去评估页看效果，或者用训好的模型预标注剩下的图"),
-        "failed" => ("Wulabel 训练失败", "打开 Wulabel 的训练页看日志"),
+        "done" => (t!("Wulabel 训练完成"), t!("可以去评估页看效果，或者用训好的模型预标注剩下的图")),
+        "failed" => (t!("Wulabel 训练失败"), t!("打开 Wulabel 的训练页看日志")),
         _ => return,
     };
     let _ = app.notification().builder().title(title).body(body).show();
@@ -591,7 +592,7 @@ pub async fn export_onnx(app: AppHandle, state: State<'_, AppState>, id: i64) ->
         })
     })
     .await
-    .map_err(|e| msg(format!("导出异常：{e}")))?
+    .map_err(|e| msg(t!("导出异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -601,7 +602,7 @@ pub async fn predict_image(app: AppHandle, state: State<'_, AppState>, run_id: i
         training::predict_one(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), run_id, image_id, conf)
     })
     .await
-    .map_err(|e| msg(format!("预测异常：{e}")))?
+    .map_err(|e| msg(t!("预测异常：{e}", e = e)))?
 }
 
 // ---------- 标注辅助：SAM、文本提示、巡瞳 AI ----------
@@ -628,7 +629,7 @@ pub async fn sam_segment(
         assist::sam_segment(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), image_id, &points, bbox, &log)
     })
     .await
-    .map_err(|e| msg(format!("SAM 异常：{e}")))?
+    .map_err(|e| msg(t!("SAM 异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -639,7 +640,7 @@ pub async fn text_detect(app: AppHandle, state: State<'_, AppState>, image_id: i
         assist::text_detect(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), image_id, conf, &log)
     })
     .await
-    .map_err(|e| msg(format!("文本提示异常：{e}")))?
+    .map_err(|e| msg(t!("文本提示异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -651,14 +652,14 @@ pub async fn text_prelabel_all(app: AppHandle, state: State<'_, AppState>, conf:
         assist::text_prelabel_all(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), conf, &progress, &log)
     })
     .await
-    .map_err(|e| msg(format!("预标注异常：{e}")))?
+    .map_err(|e| msg(t!("预标注异常：{e}", e = e)))?
 }
 
 #[tauri::command]
 pub async fn ai_models(app: AppHandle) -> AppResult<Vec<ai::AiModel>> {
     tauri::async_runtime::spawn_blocking(move || ai::models(&app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("读取模型异常：{e}")))?
+        .map_err(|e| msg(t!("读取模型异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -669,7 +670,7 @@ pub async fn ai_detect(app: AppHandle, state: State<'_, AppState>, image_id: i64
         ai::detect(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), image_id, &model, conf, &log)
     })
     .await
-    .map_err(|e| msg(format!("巡瞳 AI 异常：{e}")))?
+    .map_err(|e| msg(t!("巡瞳 AI 异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -681,7 +682,7 @@ pub async fn ai_prelabel_all(app: AppHandle, state: State<'_, AppState>, model: 
         ai::prelabel_all(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), &model, conf, &progress, &log)
     })
     .await
-    .map_err(|e| msg(format!("预标注异常：{e}")))?
+    .map_err(|e| msg(t!("预标注异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -692,7 +693,7 @@ pub async fn prelabel_all(app: AppHandle, state: State<'_, AppState>, run_id: i6
         training::prelabel_all(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), run_id, conf, &progress)
     })
     .await
-    .map_err(|e| msg(format!("预标注异常：{e}")))?
+    .map_err(|e| msg(t!("预标注异常：{e}", e = e)))?
 }
 
 /// 在资源管理器里打开文件夹（或选中文件）
@@ -700,7 +701,7 @@ pub async fn prelabel_all(app: AppHandle, state: State<'_, AppState>, run_id: i6
 pub async fn reveal_path(path: String) -> AppResult<()> {
     let p = PathBuf::from(&path);
     if !p.exists() {
-        return Err(msg("路径不存在"));
+        return Err(msg(t!("路径不存在")));
     }
     #[cfg(windows)]
     {
@@ -734,7 +735,7 @@ pub async fn live_start(app: AppHandle, state: State<'_, AppState>, run_id: i64,
         live.start(project, &app.state::<Runtime>(), run_id, &source, conf, sink)
     })
     .await
-    .map_err(|e| msg(format!("启动实时验证异常：{e}")))?
+    .map_err(|e| msg(t!("启动实时验证异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -771,7 +772,7 @@ pub async fn export_formats(
         })
     })
     .await
-    .map_err(|e| msg(format!("导出异常：{e}")))?
+    .map_err(|e| msg(t!("导出异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -791,7 +792,7 @@ pub async fn build_service(
         })
     })
     .await
-    .map_err(|e| msg(format!("生成服务包异常：{e}")))?
+    .map_err(|e| msg(t!("生成服务包异常：{e}", e = e)))?
 }
 
 // ---------- 体检 ----------
@@ -818,7 +819,7 @@ pub async fn health_run(app: AppHandle, state: State<'_, AppState>, run_id: Opti
         health::run(&project, run, predict_ref, &progress)
     })
     .await
-    .map_err(|e| msg(format!("体检任务异常：{e}")))?
+    .map_err(|e| msg(t!("体检任务异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -860,7 +861,7 @@ pub async fn interpolate_frames(state: State<'_, AppState>, image_id: i64) -> Ap
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || track::interpolate(&project, image_id))
         .await
-        .map_err(|e| msg(format!("插值异常：{e}")))?
+        .map_err(|e| msg(t!("插值异常：{e}", e = e)))?
 }
 
 /// 视频标注：从这一帧往后跟踪 count 帧
@@ -877,7 +878,7 @@ pub async fn track_frames(app: AppHandle, state: State<'_, AppState>, image_id: 
         track::track(&project, &rt, image_id, count, &log, &progress)
     })
     .await
-    .map_err(|e| msg(format!("跟踪异常：{e}")))?
+    .map_err(|e| msg(t!("跟踪异常：{e}", e = e)))?
 }
 
 /// 导出完再给导出的图片打码（导出时已经强制复制，不会动原图）
@@ -914,7 +915,7 @@ pub async fn export_dataset(
         Ok(res)
     })
     .await
-    .map_err(|e| msg(format!("导出任务异常：{e}")))?
+    .map_err(|e| msg(t!("导出任务异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -925,7 +926,7 @@ pub async fn import_dataset(app: AppHandle, state: State<'_, AppState>, dir: Str
         dataset_import::import(&project, &PathBuf::from(dir), &progress)
     })
     .await
-    .map_err(|e| msg(format!("导入任务异常：{e}")))?
+    .map_err(|e| msg(t!("导入任务异常：{e}", e = e)))?
 }
 
 // ---------- 标注 ----------
@@ -986,7 +987,7 @@ pub async fn add_label(state: State<'_, AppState>, share: State<'_, Share>, name
     let project = state.current()?;
     let l = annotations::add_label(&project, &name, &color)?;
     if let Some(h) = share.hub_for(&project) {
-        h.labels_changed(&h.host_member(), &format!("新增类别「{name}」"));
+        h.labels_changed(&h.host_member(), &t!("新增类别「{name}」", name = name));
     }
     Ok(l)
 }
@@ -1007,7 +1008,7 @@ pub async fn update_label(
         annotations::set_label_description(&project, id, &d)?;
     }
     if let Some(h) = share.hub_for(&project) {
-        h.labels_changed(&h.host_member(), &format!("修改类别「{name}」"));
+        h.labels_changed(&h.host_member(), &t!("修改类别「{name}」", name = name));
     }
     Ok(())
 }
@@ -1019,7 +1020,7 @@ pub async fn fill_label_prompts(state: State<'_, AppState>, share: State<'_, Sha
     let n = annotations::fill_prompts(&project)?;
     if n > 0 {
         if let Some(h) = share.hub_for(&project) {
-            h.labels_changed(&h.host_member(), "自动补了英文提示词");
+            h.labels_changed(&h.host_member(), &t!("自动补了英文提示词"));
         }
     }
     Ok(n)
@@ -1030,7 +1031,7 @@ pub async fn delete_label(state: State<'_, AppState>, share: State<'_, Share>, i
     let project = state.current()?;
     let n = annotations::delete_label(&project, id)?;
     if let Some(h) = share.hub_for(&project) {
-        h.labels_changed(&h.host_member(), "删除了一个类别");
+        h.labels_changed(&h.host_member(), &t!("删除了一个类别"));
     }
     Ok(n)
 }
@@ -1148,7 +1149,7 @@ pub async fn team_assign(state: State<'_, AppState>, share: State<'_, Share>, op
     let project = state.current()?;
     let r = team::assign(&project, &options)?;
     let total: usize = r.iter().map(|x| x.count).sum();
-    team::log(&project, team::HOST, None, "assign", None, total as i64, &format!("分配 {total} 张"))?;
+    team::log(&project, team::HOST, None, "assign", None, total as i64, &t!("分配 {total} 张", total = total))?;
     if let Some(h) = share.hub_for(&project) {
         h.broadcast("assign", serde_json::json!({}));
     }
@@ -1171,7 +1172,7 @@ pub async fn team_stats(state: State<'_, AppState>, share: State<'_, Share>, fro
     let name = host_name(&share, &project);
     tauri::async_runtime::spawn_blocking(move || team::stats(&project, from, to, &name))
         .await
-        .map_err(|e| msg(format!("统计异常：{e}")))?
+        .map_err(|e| msg(t!("统计异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -1180,7 +1181,7 @@ pub async fn team_export_csv(state: State<'_, AppState>, share: State<'_, Share>
     let name = host_name(&share, &project);
     tauri::async_runtime::spawn_blocking(move || team::export_csv(&project, from, to, &name, &PathBuf::from(path)))
         .await
-        .map_err(|e| msg(format!("导出异常：{e}")))?
+        .map_err(|e| msg(t!("导出异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -1214,7 +1215,7 @@ pub async fn ai_save_rules(
     let project = state.current()?;
     ai::save_rules(&project, instructions.as_deref(), &classes)?;
     if let Some(h) = share.hub_for(&project) {
-        h.labels_changed(&h.host_member(), "更新了识别规则");
+        h.labels_changed(&h.host_member(), &t!("更新了识别规则"));
     }
     sync_if_bound(app, project).await
 }
@@ -1226,8 +1227,8 @@ async fn sync_if_bound(app: AppHandle, project: Arc<Project>) -> AppResult<Optio
     }
     let r = tauri::async_runtime::spawn_blocking(move || ai::sync_rules(&project, &app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("同步异常：{e}")))?;
-    Ok(r.err().map(|e| format!("规则已保存，但同步到巡瞳平台失败：{e}")))
+        .map_err(|e| msg(t!("同步异常：{e}", e = e)))?;
+    Ok(r.err().map(|e| t!("规则已保存，但同步到巡瞳平台失败：{e}", e = e)))
 }
 
 /// 把识别规则同步到巡瞳平台（没绑定就新建并绑定），返回平台规则编号
@@ -1236,7 +1237,7 @@ pub async fn ai_sync_rules(app: AppHandle, state: State<'_, AppState>) -> AppRes
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || ai::sync_rules(&project, &app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("同步异常：{e}")))?
+        .map_err(|e| msg(t!("同步异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -1252,7 +1253,7 @@ pub async fn ai_chat_rules(app: AppHandle, state: State<'_, AppState>, messages:
         ai::chat_rules(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), &messages, &log)
     })
     .await
-    .map_err(|e| msg(format!("聊天异常：{e}")))?
+    .map_err(|e| msg(t!("聊天异常：{e}", e = e)))?
 }
 
 // ---------- 巡瞳 AI 平台：上传模型、拉告警图片 ----------
@@ -1268,14 +1269,14 @@ pub async fn xt_upload_model(app: AppHandle, state: State<'_, AppState>, run_id:
         crate::xuntong::upload_model(&project, &app.state::<Runtime>(), run_id, &name, &log)
     })
     .await
-    .map_err(|e| msg(format!("上传异常：{e}")))?
+    .map_err(|e| msg(t!("上传异常：{e}", e = e)))?
 }
 
 #[tauri::command]
 pub async fn xt_models(app: AppHandle) -> AppResult<Vec<crate::xuntong::PlatformModel>> {
     tauri::async_runtime::spawn_blocking(move || crate::xuntong::list_models(&app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("读取异常：{e}")))?
+        .map_err(|e| msg(t!("读取异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -1290,14 +1291,14 @@ pub async fn xt_pull_alarms(app: AppHandle, state: State<'_, AppState>, options:
         crate::xuntong::pull_alarms(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), &options, &progress, &log)
     })
     .await
-    .map_err(|e| msg(format!("拉取异常：{e}")))?
+    .map_err(|e| msg(t!("拉取异常：{e}", e = e)))?
 }
 
 #[tauri::command]
 pub async fn xt_delete_model(app: AppHandle, id: String) -> AppResult<()> {
     tauri::async_runtime::spawn_blocking(move || crate::xuntong::delete_model(&app.state::<Runtime>(), &id))
         .await
-        .map_err(|e| msg(format!("删除异常：{e}")))?
+        .map_err(|e| msg(t!("删除异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -1305,7 +1306,7 @@ pub async fn ai_rule_set_info(app: AppHandle, state: State<'_, AppState>) -> App
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || ai::rule_set_info(&project, &app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("读取异常：{e}")))?
+        .map_err(|e| msg(t!("读取异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -1313,7 +1314,7 @@ pub async fn ai_rules_platform_enabled(app: AppHandle, state: State<'_, AppState
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || ai::set_platform_enabled(&project, &app.state::<Runtime>(), enabled))
         .await
-        .map_err(|e| msg(format!("设置异常：{e}")))?
+        .map_err(|e| msg(t!("设置异常：{e}", e = e)))?
 }
 
 // ---------- 登录巡瞳账号 ----------
@@ -1322,28 +1323,28 @@ pub async fn ai_rules_platform_enabled(app: AppHandle, state: State<'_, AppState
 pub async fn xt_login_start(app: AppHandle) -> AppResult<crate::xuntong::DeviceCode> {
     tauri::async_runtime::spawn_blocking(move || crate::xuntong::login_start(&app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("登录异常：{e}")))?
+        .map_err(|e| msg(t!("登录异常：{e}", e = e)))?
 }
 
 #[tauri::command]
 pub async fn xt_login_poll(app: AppHandle, device_code: String) -> AppResult<serde_json::Value> {
     tauri::async_runtime::spawn_blocking(move || crate::xuntong::login_poll(&app.state::<Runtime>(), &device_code))
         .await
-        .map_err(|e| msg(format!("登录异常：{e}")))?
+        .map_err(|e| msg(t!("登录异常：{e}", e = e)))?
 }
 
 #[tauri::command]
 pub async fn xt_account(app: AppHandle) -> AppResult<serde_json::Value> {
     tauri::async_runtime::spawn_blocking(move || crate::xuntong::account(&app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("读取异常：{e}")))?
+        .map_err(|e| msg(t!("读取异常：{e}", e = e)))?
 }
 
 #[tauri::command]
 pub async fn xt_logout(app: AppHandle) -> AppResult<()> {
     tauri::async_runtime::spawn_blocking(move || crate::xuntong::logout(&app.state::<Runtime>()))
         .await
-        .map_err(|e| msg(format!("退出异常：{e}")))?
+        .map_err(|e| msg(t!("退出异常：{e}", e = e)))?
 }
 
 #[tauri::command]

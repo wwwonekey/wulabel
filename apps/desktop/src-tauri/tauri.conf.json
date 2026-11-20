@@ -30,15 +30,17 @@
     "targets": ["nsis"],
     "windows": {
       "nsis": {
-        "languages": ["SimpChinese"],
+        "languages": ["SimpChinese", "English", "TradChinese", "Japanese", "Korean", "Spanish", "PortugueseBR", "Russian", "German", "French", "Vietnamese", "Indonesian"],
         "displayLanguageSelector": false
       }
     },
     "resources": {
       "../../../worker/xlabel_worker/*.py": "worker/xlabel_worker/",
       "../../../worker/xlabel_worker/yolox/*.py": "worker/xlabel_worker/yolox/",
+      "../../../worker/xlabel_worker/locales/*.json": "worker/xlabel_worker/locales/",
       "../../../worker/xlabel_worker/yolox/LICENSE": "worker/xlabel_worker/yolox/LICENSE",
       "../../../worker/service/*": "worker/service/",
+      "../../../worker/service-i18n/*": "worker/service-i18n/",
       "../../../NOTICE": "NOTICE"
     },
     "icon": [

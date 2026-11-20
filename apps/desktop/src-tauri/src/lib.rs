@@ -11,6 +11,7 @@ mod error;
 mod evaltools;
 mod feedback;
 mod health;
+mod i18n;
 mod images;
 mod keypoints;
 mod project;
@@ -188,6 +189,7 @@ pub fn run() {
             commands::open_url,
             feedback::submit_feedback,
             feedback::feedback_logs,
+            i18n::set_language,
             update::check_update,
             update::install_update,
             update::auto_update,

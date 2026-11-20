@@ -8,9 +8,16 @@ use crate::annotations;
 use crate::error::{msg, AppResult};
 use crate::project::Project;
 use crate::training;
+use crate::t;
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// 表头一行
+fn ths(names: &[String]) -> String {
+    let cells: String = names.iter().map(|n| format!("<th>{n}</th>")).collect();
+    format!("<tr>{cells}</tr>")
 }
 
 fn pct(v: &serde_json::Value) -> String {
@@ -33,7 +40,7 @@ fn chart(series: &[(&str, &str, Vec<Option<f64>>)], y_max: Option<f64>, x_labels
     let n = series.iter().map(|s| s.2.len()).max().unwrap_or(0).max(1) as f64;
     let vals: Vec<f64> = series.iter().flat_map(|s| s.2.iter().flatten().copied()).filter(|v| v.is_finite()).collect();
     if vals.is_empty() {
-        return "<p class=\"dim\">没有数据</p>".into();
+        return format!("<p class=\"dim\">{}</p>", t!("没有数据"));
     }
     let lo = 0.0_f64.min(vals.iter().cloned().fold(f64::MAX, f64::min));
     let mut hi = y_max.unwrap_or_else(|| vals.iter().cloned().fold(f64::MIN, f64::max));
@@ -82,15 +89,16 @@ pub fn export(p: &Project, run_id: i64, out: &Path) -> AppResult<()> {
     let c = &run.config;
     let task = p.meta.task.as_str();
     let cls = task == "classify";
-    let (m50, m) = if cls { ("准确率", "宏平均 F1") } else { ("mAP50", "mAP50-95") };
+    let (m50, m): (String, String) = if cls { (t!("准确率"), t!("宏平均 F1")) } else { ("mAP50".into(), "mAP50-95".into()) };
     let task_name = match task {
-        "segment" => "实例分割",
-        "classify" => "图像分类",
-        "pose" => "关键点",
-        _ => "目标检测",
+        "segment" => t!("实例分割"),
+        "classify" => t!("图像分类"),
+        "pose" => t!("关键点"),
+        _ => t!("目标检测"),
     };
     let model = if run.engine == training::EXTERNAL {
-        format!("{}（外部导入）", c["displayName"].as_str().unwrap_or("外部模型"))
+        let name = c["displayName"].as_str().map(String::from).unwrap_or_else(|| t!("外部模型"));
+        t!("{name}（外部导入）", name = name)
     } else {
         c["model"].as_str().unwrap_or("").to_string()
     };
@@ -100,31 +108,37 @@ pub fn export(p: &Project, run_id: i64, out: &Path) -> AppResult<()> {
 
     // ---------- 概览 ----------
     h += &format!(
-        "<h1>{} · 模型交付报告</h1><p class=\"dim\">任务：{task_name} · 模型：{} · 训练记录 {} · 生成于 {}</p>",
-        esc(&p.meta.name),
-        esc(&model),
-        esc(&run.name),
-        chrono::Local::now().format("%Y-%m-%d %H:%M")
+        "<h1>{}</h1><p class=\"dim\">{}</p>",
+        t!("{name} · 模型交付报告", name = esc(&p.meta.name)),
+        t!("任务：{task} · 模型：{model} · 训练记录 {run} · 生成于 {time}",
+            task = task_name,
+            model = esc(&model),
+            run = esc(&run.name),
+            time = chrono::Local::now().format("%Y-%m-%d %H:%M")
+        )
     );
     let ev = detail.eval.as_ref();
     let split_key = ev.and_then(|e| e["splits"].as_object()).and_then(|s| if s.contains_key("test") { Some("test") } else if s.contains_key("val") { Some("val") } else { None });
     let sp = split_key.and_then(|k| ev.map(|e| &e["splits"][k]));
     if let Some(sp) = sp {
-        let which = if split_key == Some("test") { "测试集" } else { "验证集" };
+        let which = if split_key == Some("test") { t!("测试集") } else { t!("验证集") };
         h += &format!(
-            "<div class=\"kpis\"><div><b>{}</b><span>{m50}</span></div><div><b>{}</b><span>{m}</span></div><div><b>{}</b><span>精确率</span></div><div><b>{}</b><span>召回率</span></div></div><p class=\"dim\">以上为{which}（{} 张图）上的结果。</p>",
+            "<div class=\"kpis\"><div><b>{}</b><span>{m50}</span></div><div><b>{}</b><span>{m}</span></div><div><b>{}</b><span>{}</span></div><div><b>{}</b><span>{}</span></div></div><p class=\"dim\">{}</p>",
             if cls { pct(&sp["map50"]) } else { num(&sp["map50"], 3) },
             num(&sp["map"], 3),
             pct(&sp["precision"]),
+            t!("精确率"),
             pct(&sp["recall"]),
-            sp["images"]
+            t!("召回率"),
+            t!("以上为{which}（{n} 张图）上的结果。", which = which, n = sp["images"])
         );
     } else {
-        h += "<p class=\"warn\">这次训练还没有评估结果，请在评估页点「用当前数据评估」后再导出报告。</p>";
+        h += &format!("<p class=\"warn\">{}</p>", t!("这次训练还没有评估结果，请在评估页点「用当前数据评估」后再导出报告。"));
     }
 
     // ---------- 数据 ----------
-    h += "<h2>数据</h2><table><tr><th>项目图片</th><th>已标注</th><th>已审核</th><th>跳过</th><th>训练 / 验证 / 测试</th><th>数据来源</th></tr>";
+    h += &format!("<h2>{}</h2><table>", t!("数据"));
+    h += &ths(&[t!("项目图片"), t!("已标注"), t!("已审核"), t!("跳过"), t!("训练 / 验证 / 测试"), t!("数据来源")]);
     let im = &c["images"];
     h += &format!(
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{} / {} / {}</td><td>{}</td></tr></table>",
@@ -135,45 +149,46 @@ pub fn export(p: &Project, run_id: i64, out: &Path) -> AppResult<()> {
         im["train"],
         im["val"],
         im["test"],
-        esc(c["versionName"].as_str().map(|v| format!("数据集版本「{v}」")).as_deref().unwrap_or("训练时的当前数据"))
+        esc(&c["versionName"].as_str().map(|v| t!("数据集版本「{v}」", v = v)).unwrap_or_else(|| t!("训练时的当前数据")))
     );
-    h += "<h3>各类别标注数量</h3><table><tr><th>类别</th><th>标注数</th></tr>";
+    h += &format!("<h3>{}</h3><table>", t!("各类别标注数量"));
+    h += &ths(&[t!("类别"), t!("标注数")]);
     for l in &labels {
         h += &format!("<tr><td><i class=\"sw\" style=\"background:{}\"></i>{}</td><td>{}</td></tr>", esc(&l.color), esc(&l.name), l.count);
     }
     h += "</table>";
 
     // ---------- 训练 ----------
-    h += "<h2>训练</h2><table>";
+    h += &format!("<h2>{}</h2><table>", t!("训练"));
     let row = |k: &str, v: String| format!("<tr><th>{k}</th><td>{}</td></tr>", esc(&v));
-    h += &row("模型", model.clone());
+    h += &row(&t!("模型"), model.clone());
     if run.engine != training::EXTERNAL {
-        h += &row("训练轮数", c["epochs"].to_string());
-        h += &row("输入尺寸", format!("{} px", c["imgSize"]));
-        h += &row("批大小 / 学习率", format!("{} / {}", c["batch"], c["lr"]));
-        h += &row("起点", c["baseRunName"].as_str().map(|n| format!("接着「{n}」继续训练")).unwrap_or_else(|| "预训练权重".into()));
+        h += &row(&t!("训练轮数"), c["epochs"].to_string());
+        h += &row(&t!("输入尺寸"), format!("{} px", c["imgSize"]));
+        h += &row(&t!("批大小 / 学习率"), format!("{} / {}", c["batch"], c["lr"]));
+        h += &row(&t!("起点"), c["baseRunName"].as_str().map(|n| t!("接着「{n}」继续训练", n = n)).unwrap_or_else(|| t!("预训练权重")));
         if let Some(b) = ev.and_then(|e| e["bestEpoch"].as_i64()) {
-            h += &row("最好的一轮", format!("第 {b} 轮"));
+            h += &row(&t!("最好的一轮"), t!("第 {b} 轮", b = b));
         }
         if let Some(t) = detail.metrics.last().and_then(|m| m["time"].as_f64()) {
-            h += &row("训练用时", format!("{:.0} 分钟", t / 60.0));
+            h += &row(&t!("训练用时"), t!("{n} 分钟", n = format!("{:.0}", t / 60.0)));
         }
     }
-    h += &row("训练时间", fmt_time(run.created_at));
+    h += &row(&t!("训练时间"), fmt_time(run.created_at));
     h += "</table>";
     if !detail.metrics.is_empty() {
         let get = |k: &str| detail.metrics.iter().map(|m| m[k].as_f64()).collect::<Vec<_>>();
-        h += "<div class=\"two\"><div><h3>验证集指标</h3>";
-        h += &chart(&[(m50, "#2fb67c", get("map50")), (m, "#9b7bf2", get("map"))], Some(1.0), None);
-        h += "</div><div><h3>训练损失</h3>";
+        h += &format!("<div class=\"two\"><div><h3>{}</h3>", t!("验证集指标"));
+        h += &chart(&[(m50.as_str(), "#2fb67c", get("map50")), (m.as_str(), "#9b7bf2", get("map"))], Some(1.0), None);
+        h += &format!("</div><div><h3>{}</h3>", t!("训练损失"));
         h += &chart(&[("loss", "#3d8bfd", get("loss"))], None, None);
         h += "</div></div>";
     }
 
     // ---------- 评估 ----------
     if let (Some(sp), Some(ev)) = (sp, ev) {
-        h += "<h2>评估</h2><h3>各类别</h3><table><tr><th>类别</th>";
-        h += if cls { "<th>图片数</th><th>精确率</th><th>召回率</th><th>F1</th></tr>" } else { "<th>真实目标</th><th>精确率</th><th>召回率</th><th>AP50</th></tr>" };
+        h += &format!("<h2>{}</h2><h3>{}</h3><table>", t!("评估"), t!("各类别"));
+        h += &ths(&[t!("类别"), if cls { t!("图片数") } else { t!("真实目标") }, t!("精确率"), t!("召回率"), if cls { "F1".into() } else { "AP50".into() }]);
         for pc in sp["perClass"].as_array().into_iter().flatten() {
             h += &format!(
                 "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -189,10 +204,10 @@ pub fn export(p: &Project, run_id: i64, out: &Path) -> AppResult<()> {
         let classes: Vec<String> = ev["classes"].as_array().into_iter().flatten().filter_map(|v| v.as_str().map(String::from)).collect();
         let mut names = classes.clone();
         if !cls {
-            names.push("背景".into());
+            names.push(t!("背景"));
         }
         if let Some(cm) = sp["confusion"].as_array() {
-            h += "<h3>混淆矩阵 <span class=\"dim\">（行：真实，列：预测）</span></h3><table class=\"cm\"><tr><th></th>";
+            h += &format!("<h3>{} <span class=\"dim\">{}</span></h3><table class=\"cm\"><tr><th></th>", t!("混淆矩阵"), t!("（行：真实，列：预测）"));
             for n in &names {
                 h += &format!("<th>{}</th>", esc(n));
             }
@@ -213,17 +228,22 @@ pub fn export(p: &Project, run_id: i64, out: &Path) -> AppResult<()> {
         if let Some(curve) = th["curve"].as_array() {
             let best = &th["best"];
             h += &format!(
-                "<h2>推荐置信度阈值</h2><p>部署时建议阈值 <b>{}</b>：精确率 {}、召回率 {}（精确率和召回率兼顾，F1 最高）。误报多就调高，漏报多就调低。</p>",
-                num(&best["conf"], 2),
-                pct(&best["precision"]),
-                pct(&best["recall"])
+                "<h2>{}</h2><p>{}</p>",
+                t!("推荐置信度阈值"),
+                t!("部署时建议阈值 <b>{conf}</b>：精确率 {p}、召回率 {r}（精确率和召回率兼顾，F1 最高）。误报多就调高，漏报多就调低。",
+                    conf = num(&best["conf"], 2),
+                    p = pct(&best["precision"]),
+                    r = pct(&best["recall"])
+                )
             );
             let labels_x: Vec<String> = curve.iter().map(|p| num(&p["conf"], 2)).collect();
             let g = |k: &str| curve.iter().map(|p| p[k].as_f64()).collect::<Vec<_>>();
-            h += &chart(&[("精确率", "#3d8bfd", g("precision")), ("召回率", "#e7a33e", g("recall")), ("F1", "#2fb67c", g("f1"))], Some(1.0), Some(&labels_x));
+            let (pr, rc) = (t!("精确率"), t!("召回率"));
+            h += &chart(&[(pr.as_str(), "#3d8bfd", g("precision")), (rc.as_str(), "#e7a33e", g("recall")), ("F1", "#2fb67c", g("f1"))], Some(1.0), Some(&labels_x));
             let per: Vec<&serde_json::Value> = th["perClass"].as_array().into_iter().flatten().filter(|c| !c["conf"].is_null()).collect();
             if !per.is_empty() {
-                h += "<h3>各类别推荐阈值</h3><table><tr><th>类别</th><th>阈值</th><th>精确率</th><th>召回率</th></tr>";
+                h += &format!("<h3>{}</h3><table>", t!("各类别推荐阈值"));
+                h += &ths(&[t!("类别"), t!("阈值"), t!("精确率"), t!("召回率")]);
                 for c in per {
                     h += &format!(
                         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -249,35 +269,46 @@ pub fn export(p: &Project, run_id: i64, out: &Path) -> AppResult<()> {
             }
         }
         if !imgs.is_empty() {
-            h += &format!("<h3>错例样图</h3><p class=\"dim\">模型判断有误（漏检、误报或类别错）的部分图片，可作为后续补充数据的方向。</p><div class=\"imgs\">{imgs}</div>");
+            h += &format!(
+                "<h3>{}</h3><p class=\"dim\">{}</p><div class=\"imgs\">{imgs}</div>",
+                t!("错例样图"),
+                t!("模型判断有误（漏检、误报或类别错）的部分图片，可作为后续补充数据的方向。")
+            );
         }
     }
 
     // ---------- 误报测试 ----------
     if let Ok(t) = fs::read_to_string(PathBuf::from(&run.dir).join("fptest.json")) {
         if let Ok(f) = serde_json::from_str::<serde_json::Value>(&t) {
-            let per = f["perClass"].as_object().map(|o| o.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join("、")).unwrap_or_default();
+            let per = f["perClass"].as_object().map(|o| o.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(t!("、").as_str())).unwrap_or_default();
             h += &format!(
-                "<h2>误报测试</h2><p>用一段不应报警的视频（{}）测试 {:.0} 分钟，阈值 {}：共报警 <b>{}</b> 次，折合每小时 <b>{}</b> 次。{}</p>",
-                esc(f["source"].as_str().unwrap_or("")),
-                f["seconds"].as_f64().unwrap_or(0.0) / 60.0,
-                num(&f["conf"], 2),
-                f["alarms"],
-                f["perHour"],
-                if per.is_empty() { String::new() } else { format!("按类别：{}。", esc(&per)) }
+                "<h2>{}</h2><p>{}{}</p>",
+                t!("误报测试"),
+                t!("用一段不应报警的视频（{source}）测试 {min} 分钟，阈值 {conf}：共报警 <b>{alarms}</b> 次，折合每小时 <b>{hour}</b> 次。",
+                    source = esc(f["source"].as_str().unwrap_or("")),
+                    min = format!("{:.0}", f["seconds"].as_f64().unwrap_or(0.0) / 60.0),
+                    conf = num(&f["conf"], 2),
+                    alarms = f["alarms"],
+                    hour = f["perHour"]
+                ),
+                if per.is_empty() { String::new() } else { t!("按类别：{list}。", list = esc(&per)) }
             );
         }
     }
 
-    h += "<p class=\"foot\">本报告由 Wulabel 生成。</p>";
+    h += &format!("<p class=\"foot\">{}</p>", t!("本报告由 Wulabel 生成。"));
+    let lang = match crate::i18n::lang().as_str() {
+        "zh" => "zh-CN".to_string(),
+        l => l.to_string(),
+    };
     let html = format!(
-        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>{} 模型交付报告</title><style>{CSS}</style></head><body>{h}</body></html>",
-        esc(&p.meta.name)
+        "<!doctype html><html lang=\"{lang}\"><head><meta charset=\"utf-8\"><title>{}</title><style>{CSS}</style></head><body>{h}</body></html>",
+        t!("{name} 模型交付报告", name = esc(&p.meta.name))
     );
     if let Some(dir) = out.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(out, html).map_err(|e| msg(format!("写报告失败：{e}")))?;
+    fs::write(out, html).map_err(|e| msg(t!("写报告失败：{e}", e = e)))?;
     Ok(())
 }
 

@@ -3,14 +3,15 @@ import { App, Empty, Modal, Spin, Table } from "antd";
 import { api, errText, RunDetail, RunInfo, Task } from "../api";
 import LineChart from "./LineChart";
 import { fmtTime, metricNames, modelName } from "../pages/Train";
+import { t } from "../i18n";
 
 const COLORS = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6", "#f472b6", "#a3e635"];
 
 const fmtDur = (s: number | null | undefined) => {
   if (s == null || !Number.isFinite(s)) return "—";
-  if (s < 60) return `${Math.round(s)} 秒`;
-  if (s < 3600) return `${Math.floor(s / 60)} 分`;
-  return `${Math.floor(s / 3600)} 时 ${Math.round((s % 3600) / 60)} 分`;
+  if (s < 60) return t("{n} 秒", { n: Math.round(s) });
+  if (s < 3600) return t("{n} 分", { n: Math.floor(s / 60) });
+  return t("{h} 时 {m} 分", { h: Math.floor(s / 3600), m: Math.round((s % 3600) / 60) });
 };
 
 /** 训练对比：参数、数据、指标曲线、各类别结果放在一起看 */
@@ -34,50 +35,50 @@ export default function RunCompare({ runs, task, open, onClose }: { runs: RunInf
   // 参数对比：一行一个参数，一列一次训练；各次不一样的参数加粗
   const rows: { key: string; name: string; values: string[] }[] = details
     ? [
-        { key: "model", name: "模型", values: details.map((d) => modelName(d.run)) },
-        { key: "data", name: "训练数据", values: details.map((d) => d.run.config?.versionName ?? "当前数据") },
-        { key: "base", name: "起点", values: details.map((d) => (d.run.config?.baseRunName ? `接着 ${d.run.config.baseRunName}` : "预训练权重")) },
+        { key: "model", name: t("模型"), values: details.map((d) => modelName(d.run)) },
+        { key: "data", name: t("训练数据"), values: details.map((d) => d.run.config?.versionName ?? t("当前数据")) },
+        { key: "base", name: t("起点"), values: details.map((d) => (d.run.config?.baseRunName ? t("接着 {name}", { name: d.run.config.baseRunName }) : t("预训练权重"))) },
         {
           key: "aug",
-          name: "数据增强",
+          name: t("数据增强"),
           values: details.map((d) => {
             const a = d.run.config?.aug;
-            if (!a) return "默认";
+            if (!a) return t("默认");
             const on = [
-              a.hflip && "左右翻转",
-              a.vflip && "上下翻转",
-              a.brightness && "亮度",
-              a.contrast && "对比度",
-              a.saturation && "饱和度",
-              a.hue && "色调",
-              a.blur && "模糊",
-              a.noise && "噪点",
-              a.scale && "多尺度",
+              a.hflip && t("左右翻转"),
+              a.vflip && t("上下翻转"),
+              a.brightness && t("亮度"),
+              a.contrast && t("对比度"),
+              a.saturation && t("饱和度"),
+              a.hue && t("色调"),
+              a.blur && t("模糊"),
+              a.noise && t("噪点"),
+              a.scale && t("多尺度"),
             ].filter(Boolean);
-            return on.length ? on.join("、") : "关闭";
+            return on.length ? on.join(t("、")) : t("关闭@@状态");
           }),
         },
         {
           key: "images",
-          name: "图片（训练 / 验证）",
+          name: t("图片（训练 / 验证）"),
           values: details.map((d) => (d.run.config?.images ? `${d.run.config.images.train} / ${d.run.config.images.val}` : "—")),
         },
-        { key: "anns", name: "标注数", values: details.map((d) => String(d.run.config?.images?.anns ?? d.run.config?.images?.boxes ?? "—")) },
-        { key: "epochs", name: "轮数", values: details.map((d) => String(d.run.config?.epochs ?? "—")) },
-        { key: "size", name: "输入尺寸", values: details.map((d) => String(d.run.config?.imgSize ?? "—")) },
-        { key: "batch", name: "批大小", values: details.map((d) => String(d.run.config?.batch ?? "—")) },
-        { key: "lr", name: "学习率", values: details.map((d) => String(d.run.config?.lr ?? "—")) },
-        { key: "best", name: `最好的${mn.m50}`, values: details.map((d) => fmt(d.run.bestMap50, task === "classify")) },
+        { key: "anns", name: t("标注数"), values: details.map((d) => String(d.run.config?.images?.anns ?? d.run.config?.images?.boxes ?? "—")) },
+        { key: "epochs", name: t("轮数"), values: details.map((d) => String(d.run.config?.epochs ?? "—")) },
+        { key: "size", name: t("输入尺寸"), values: details.map((d) => String(d.run.config?.imgSize ?? "—")) },
+        { key: "batch", name: t("批大小"), values: details.map((d) => String(d.run.config?.batch ?? "—")) },
+        { key: "lr", name: t("学习率"), values: details.map((d) => String(d.run.config?.lr ?? "—")) },
+        { key: "best", name: t("最好的{metric}", { metric: mn.m50 }), values: details.map((d) => fmt(d.run.bestMap50, task === "classify")) },
         {
           key: "bestm",
-          name: `对应的${mn.m}`,
+          name: t("对应的{metric}", { metric: mn.m }),
           values: details.map((d) => {
             const best = d.metrics.reduce<typeof d.metrics[number] | null>((a, m) => (a == null || m.map50 > a.map50 ? m : a), null);
             return fmt(best?.map);
           }),
         },
-        { key: "time", name: "用时", values: details.map((d) => fmtDur(d.metrics[d.metrics.length - 1]?.time)) },
-        { key: "at", name: "时间", values: details.map((d) => fmtTime(d.run.createdAt)) },
+        { key: "time", name: t("用时"), values: details.map((d) => fmtDur(d.metrics[d.metrics.length - 1]?.time)) },
+        { key: "at", name: t("时间"), values: details.map((d) => fmtTime(d.run.createdAt)) },
       ]
     : [];
 
@@ -94,7 +95,7 @@ export default function RunCompare({ runs, task, open, onClose }: { runs: RunInf
   const maxEpochs = details ? Math.max(1, ...details.map((d) => d.run.config?.epochs ?? d.metrics.length)) : 1;
 
   return (
-    <Modal title={`训练对比（${runs.length} 次）`} open={open} onCancel={onClose} footer={null} width={1000} destroyOnHidden>
+    <Modal title={t("训练对比（{n} 次）", { n: runs.length })} open={open} onCancel={onClose} footer={null} width={1000} destroyOnHidden>
       {!details ? (
         <div style={{ padding: 48, textAlign: "center" }}>
           <Spin />
@@ -126,11 +127,11 @@ export default function RunCompare({ runs, task, open, onClose }: { runs: RunInf
               })),
             ]}
           />
-          <div className="dim" style={{ fontSize: 12, margin: "6px 0 14px" }}>加粗的是这几次训练不一样的地方。</div>
+          <div className="dim" style={{ fontSize: 12, margin: "6px 0 14px" }}>{t("加粗的是这几次训练不一样的地方。")}</div>
 
           <div className="cards" style={{ gridTemplateColumns: "1fr 1fr", marginBottom: 14 }}>
             <div className="card">
-              <div className="muted">验证集 {mn.m50}</div>
+              <div className="muted">{t("验证集 {metric}", { metric: mn.m50 })}</div>
               <LineChart
                 xMax={maxEpochs}
                 yMin={0}
@@ -139,7 +140,7 @@ export default function RunCompare({ runs, task, open, onClose }: { runs: RunInf
               />
             </div>
             <div className="card">
-              <div className="muted">训练损失 loss</div>
+              <div className="muted">{t("训练损失 loss")}</div>
               <LineChart
                 xMax={maxEpochs}
                 yMin={0}
@@ -148,9 +149,9 @@ export default function RunCompare({ runs, task, open, onClose }: { runs: RunInf
             </div>
           </div>
 
-          <div className="muted" style={{ marginBottom: 6 }}>各类别（验证集 {task === "classify" ? "F1" : "AP50"}，每行最好的标绿）</div>
+          <div className="muted" style={{ marginBottom: 6 }}>{t("各类别（验证集 {metric}，每行最好的标绿）", { metric: task === "classify" ? "F1" : "AP50" })}</div>
           {perClass.length === 0 ? (
-            <Empty description="这几次训练还没有评估结果" />
+            <Empty description={t("这几次训练还没有评估结果")} />
           ) : (
             <Table
               size="small"
@@ -158,7 +159,7 @@ export default function RunCompare({ runs, task, open, onClose }: { runs: RunInf
               pagination={false}
               dataSource={perClass}
               columns={[
-                { title: "类别", dataIndex: "name", width: 150 },
+                { title: t("类别"), dataIndex: "name", width: 150 },
                 ...details.map((d, i) => ({
                   title: <span style={{ color: color(i) }}>{label(d.run)}</span>,
                   key: String(d.run.id),

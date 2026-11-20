@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::db;
 use crate::error::{msg, AppResult};
 use crate::project::Project;
+use crate::t;
 
 /// 发起人（管理员）的成员 id
 pub const HOST: i64 = 0;
@@ -76,14 +77,14 @@ fn hash(salt: &str, password: &str) -> String {
 
 fn check_password(pw: &str) -> AppResult<()> {
     if pw.chars().count() < 4 {
-        return Err(msg("密码至少 4 位"));
+        return Err(msg(t!("密码至少 4 位")));
     }
     Ok(())
 }
 
 fn check_role(role: &str) -> AppResult<()> {
     if !ROLES.contains(&role) {
-        return Err(msg(format!("不支持的角色：{role}")));
+        return Err(msg(t!("不支持的角色：{role}", role = role)));
     }
     Ok(())
 }
@@ -118,13 +119,13 @@ pub fn get_member(p: &Project, id: i64) -> AppResult<Member> {
     let conn = p.conn.lock();
     conn.query_row(&format!("{MEMBER_SQL} WHERE m.id = ?1"), [id], row_member)
         .optional()?
-        .ok_or_else(|| msg("成员不存在"))
+        .ok_or_else(|| msg(t!("成员不存在")))
 }
 
 pub fn add_member(p: &Project, name: &str, role: &str, password: &str) -> AppResult<Member> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 20 {
-        return Err(msg("名字不能为空，最多 20 个字"));
+        return Err(msg(t!("名字不能为空，最多 20 个字")));
     }
     check_role(role)?;
     check_password(password)?;
@@ -133,7 +134,7 @@ pub fn add_member(p: &Project, name: &str, role: &str, password: &str) -> AppRes
         let conn = p.conn.lock();
         let exists: Option<i64> = conn.query_row("SELECT id FROM members WHERE name = ?1", [name], |r| r.get(0)).optional()?;
         if exists.is_some() {
-            return Err(msg(format!("已经有叫「{name}」的成员了")));
+            return Err(msg(t!("已经有叫「{name}」的成员了", name = name)));
         }
         conn.execute(
             "INSERT INTO members (name, role, pass_hash, salt, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -161,7 +162,7 @@ pub fn update_member(p: &Project, id: i64, patch: &MemberPatch) -> AppResult<Mem
             let dup: Option<i64> =
                 conn.query_row("SELECT id FROM members WHERE name = ?1 AND id != ?2", params![name, id], |r| r.get(0)).optional()?;
             if dup.is_some() {
-                return Err(msg(format!("已经有叫「{name}」的成员了")));
+                return Err(msg(t!("已经有叫「{name}」的成员了", name = name)));
             }
             conn.execute("UPDATE members SET name = ?2 WHERE id = ?1", params![id, name])?;
         }
@@ -201,13 +202,13 @@ pub fn verify(p: &Project, name: &str, password: &str) -> AppResult<Member> {
         )
         .optional()?;
     let Some((id, pass_hash, salt, disabled)) = row else {
-        return Err(msg("名字或密码不对"));
+        return Err(msg(t!("名字或密码不对")));
     };
     if hash(&salt, password) != pass_hash {
-        return Err(msg("名字或密码不对"));
+        return Err(msg(t!("名字或密码不对")));
     }
     if disabled != 0 {
-        return Err(msg("这个账号已被停用，请联系管理员"));
+        return Err(msg(t!("这个账号已被停用，请联系管理员")));
     }
     get_member(p, id)
 }
@@ -241,13 +242,13 @@ pub fn assign(p: &Project, opts: &AssignOptions) -> AppResult<Vec<AssignResult>>
         }
     }
     if people.is_empty() {
-        return Err(msg("请选择要分配的成员"));
+        return Err(msg(t!("请选择要分配的成员")));
     }
     let cond = match opts.scope.as_str() {
         "unassigned" => "status = 'todo' AND assignee IS NULL",
         "todo" => "status = 'todo'",
         "unreviewed" => "status IN ('todo', 'labeled')",
-        _ => return Err(msg("分配范围不对")),
+        _ => return Err(msg(t!("分配范围不对"))),
     };
     let mut conn = p.conn.lock();
     // 按 id 顺序分，视频的连续帧会落在同一个人手里
@@ -257,7 +258,7 @@ pub fn assign(p: &Project, opts: &AssignOptions) -> AppResult<Vec<AssignResult>>
         v
     };
     if ids.is_empty() {
-        return Err(msg("这个范围里没有可以分配的图"));
+        return Err(msg(t!("这个范围里没有可以分配的图")));
     }
     let k = people.len();
     let total = match opts.per_person {
@@ -304,7 +305,7 @@ pub fn ensure_access(p: &Project, m: &Member, image_id: i64) -> AppResult<()> {
     if can_access(p, m, image_id)? {
         Ok(())
     } else {
-        Err(msg("这张图没有分给你"))
+        Err(msg(t!("这张图没有分给你")))
     }
 }
 
@@ -320,7 +321,7 @@ pub fn list_ids(p: &Project, m: &Member, filter: Option<&str>) -> AppResult<Vec<
         "all" => {}
         "rejected" => conds.push("reject_reason != ''".into()),
         "todo" | "labeled" | "reviewed" | "skipped" => conds.push(format!("status = '{filter}'")),
-        _ => return Err(msg("筛选条件不对")),
+        _ => return Err(msg(t!("筛选条件不对"))),
     }
     let sql = if conds.is_empty() {
         "SELECT id FROM images ORDER BY id".to_string()
@@ -373,7 +374,7 @@ pub fn review(p: &Project, reviewer: i64, image_id: i64, pass: bool, reason: &st
         .lock()
         .query_row("SELECT labeled_by FROM images WHERE id = ?1", [image_id], |r| r.get(0))
         .optional()?
-        .ok_or_else(|| msg("图片不存在"))?;
+        .ok_or_else(|| msg(t!("图片不存在")))?;
     let n = object_count(p, image_id)?;
     if pass {
         p.conn.lock().execute(
@@ -384,12 +385,12 @@ pub fn review(p: &Project, reviewer: i64, image_id: i64, pass: bool, reason: &st
         Ok("reviewed".into())
     } else {
         let reason = reason.trim();
-        let reason = if reason.is_empty() { "需要修改" } else { reason };
+        let reason = if reason.is_empty() { t!("需要修改") } else { reason.to_string() };
         p.conn.lock().execute(
             "UPDATE images SET status = 'todo', reviewed_by = ?2, reject_reason = ?3 WHERE id = ?1",
             params![image_id, reviewer, reason],
         )?;
-        log(p, reviewer, Some(image_id), "reject", labeled_by, n, reason)?;
+        log(p, reviewer, Some(image_id), "reject", labeled_by, n, &reason)?;
         Ok("todo".into())
     }
 }
@@ -419,7 +420,7 @@ pub fn image_info(p: &Project, image_id: i64, host_name: &str) -> AppResult<Imag
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })
         .optional()?
-        .ok_or_else(|| msg("图片不存在"))?;
+        .ok_or_else(|| msg(t!("图片不存在")))?;
     let n = names(p, host_name)?;
     let name = |id: Option<i64>| id.and_then(|i| n.get(&i).cloned());
     Ok(ImageTeamInfo { assignee: name(a), labeled_by: name(l), reviewed_by: name(r), reject_reason: reason })
@@ -487,11 +488,11 @@ pub fn stats(p: &Project, from: i64, to: i64, host_name: &str) -> AppResult<Vec<
 pub fn export_csv(p: &Project, from: i64, to: i64, host_name: &str, path: &Path) -> AppResult<usize> {
     let rows = stats(p, from, to, host_name)?;
     let role_name = |r: &str| match r {
-        "annotator" => "标注员",
-        "reviewer" => "审核员",
-        _ => "管理员",
+        "annotator" => t!("标注员"),
+        "reviewer" => t!("审核员"),
+        _ => t!("管理员"),
     };
-    let mut s = String::from("\u{feff}成员,角色,当前分配,提交张数,标注对象数,被通过,被打回,通过率,审核次数,工作时长(小时)\n");
+    let mut s = format!("\u{feff}{}\n", t!("成员,角色,当前分配,提交张数,标注对象数,被通过,被打回,通过率,审核次数,工作时长(小时)"));
     for r in &rows {
         let rate = if r.passed + r.rejected > 0 { format!("{:.1}%", r.passed as f64 * 100.0 / (r.passed + r.rejected) as f64) } else { "-".into() };
         s.push_str(&format!(
@@ -539,7 +540,7 @@ pub fn activity(p: &Project, limit: usize, member_id: Option<i64>, with_saves: b
             Ok(ActivityRow {
                 id: r.get(0)?,
                 time: r.get(1)?,
-                member: n.get(&mid).cloned().unwrap_or_else(|| format!("已删除成员 #{mid}")),
+                member: n.get(&mid).cloned().unwrap_or_else(|| t!("已删除成员 #{mid}", mid = mid)),
                 image_id: r.get(3)?,
                 action: r.get(4)?,
                 objects: r.get(5)?,

@@ -14,11 +14,12 @@ use crate::images;
 use crate::project::Project;
 use crate::runtime::Runtime;
 use crate::training;
+use crate::t;
 
 fn weights(p: &Project, run_id: i64) -> AppResult<PathBuf> {
     let w = PathBuf::from(training::get_run(p, run_id)?.dir).join("best.pt");
     if !w.exists() {
-        return Err(msg("这次训练没有产出模型"));
+        return Err(msg(t!("这次训练没有产出模型")));
     }
     Ok(w)
 }
@@ -44,8 +45,8 @@ pub type Sink = Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>;
 impl Live {
     fn send(&self, v: serde_json::Value) -> AppResult<()> {
         let mut g = self.proc.lock();
-        let p = g.as_mut().ok_or_else(|| msg("实时验证没有在运行"))?;
-        writeln!(p.stdin, "{v}").and_then(|_| p.stdin.flush()).map_err(|_| msg("实时验证进程已退出"))
+        let p = g.as_mut().ok_or_else(|| msg(t!("实时验证没有在运行")))?;
+        writeln!(p.stdin, "{v}").and_then(|_| p.stdin.flush()).map_err(|_| msg(t!("实时验证进程已退出")))
     }
 
     pub fn stop(&self) {
@@ -71,10 +72,10 @@ impl Live {
         self.stop();
         let source = source.trim();
         if source.is_empty() {
-            return Err(msg("请填写 RTSP 地址或选择视频文件"));
+            return Err(msg(t!("请填写 RTSP 地址或选择视频文件")));
         }
         if !source.contains("://") && !Path::new(source).is_file() {
-            return Err(msg(format!("视频文件不存在：{source}")));
+            return Err(msg(t!("视频文件不存在：{source}", source = source)));
         }
         let s2 = sink.clone();
         rt.ensure_package("cv2", "opencv-python-headless", &move |l| s2("log", serde_json::json!(l)))?;
@@ -86,7 +87,7 @@ impl Live {
         )?;
         let mut c = rt.worker(&["live"])?;
         c.arg(&cfg_path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = c.spawn().map_err(|e| msg(format!("无法启动实时验证：{e}")))?;
+        let mut child = c.spawn().map_err(|e| msg(t!("无法启动实时验证：{e}", e = e)))?;
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
@@ -114,7 +115,7 @@ impl Live {
                     Some("snapshot") => {
                         let path = PathBuf::from(ev["path"].as_str().unwrap_or(""));
                         let r = if ev.get("error").is_some() {
-                            Err(msg(ev["error"].as_str().unwrap_or("截图失败").to_string()))
+                            Err(msg(ev["error"].as_str().map(String::from).unwrap_or_else(|| t!("截图失败"))))
                         } else {
                             images::import(&p, &[path.clone()], true, &|_, _| {})
                         };
@@ -139,7 +140,7 @@ impl Live {
             if !got_end {
                 let t = tail.lock().join("\n");
                 if !t.trim().is_empty() && t.contains("Error") {
-                    sink("error", serde_json::json!({ "msg": format!("实时验证意外退出：{}", t.lines().last().unwrap_or("")), "trace": t }));
+                    sink("error", serde_json::json!({ "msg": t!("实时验证意外退出：{e}", e = t.lines().last().unwrap_or("")), "trace": t }));
                 }
             }
             sink("stopped", serde_json::json!({}));
@@ -167,7 +168,7 @@ pub struct FormatResult {
 
 fn check_out(out: &Path) -> AppResult<()> {
     if out.exists() && fs::read_dir(out)?.next().is_some() {
-        return Err(msg(format!("输出目录不为空：{}", out.display())));
+        return Err(msg(t!("输出目录不为空：{path}", path = out.display())));
     }
     fs::create_dir_all(out)?;
     Ok(())
@@ -183,7 +184,7 @@ pub fn export_formats(
     log: &(dyn Fn(String) + Sync),
 ) -> AppResult<Vec<FormatResult>> {
     if formats.is_empty() {
-        return Err(msg("至少选一种格式"));
+        return Err(msg(t!("至少选一种格式")));
     }
     if formats.iter().any(|f| f == "openvino") {
         rt.ensure_package("openvino", "openvino", log)?;
@@ -201,11 +202,11 @@ pub fn export_formats(
                 Some("log") => log(v["msg"].as_str().unwrap_or("").to_string()),
                 Some("format") => {
                     if let Ok(f) = serde_json::from_value::<FormatResult>(v.clone()) {
-                        log(format!("{}：{}", f.format, if f.ok { "完成" } else { &f.note }));
+                        log(t!("{name}：{result}", name = f.format, result = if f.ok { t!("完成") } else { f.note.clone() }));
                         results.lock().push(f);
                     }
                 }
-                Some("error") => log(format!("错误：{}", v["msg"].as_str().unwrap_or(""))),
+                Some("error") => log(t!("错误：{e}", e = v["msg"].as_str().unwrap_or(""))),
                 _ => {}
             }
         }
@@ -232,11 +233,11 @@ pub fn build_service(
     let template = rt.worker_dir.join("service");
     for f in SERVICE_FILES {
         if !template.join(f).exists() {
-            return Err(msg(format!("安装文件不完整，缺少服务模板 {f}")));
+            return Err(msg(t!("安装文件不完整，缺少服务模板 {f}", f = f)));
         }
     }
     check_out(out)?;
-    log("导出模型（ONNX）…".into());
+    log(t!("导出模型（ONNX）…"));
     let mut c = rt.worker(&["export"])?;
     c.arg(&w).arg(out.join("model.onnx"));
     crate::runtime::run_logged(c, &|line| {
@@ -249,10 +250,26 @@ pub fn build_service(
     for f in SERVICE_FILES {
         fs::copy(template.join(f), out.join(f))?;
     }
+    // 界面不是中文时，说明、启动脚本和服务提示换成对应语言（worker/service-i18n/，没有的语言用英文）
+    let lang = crate::i18n::lang();
+    if lang != "zh" {
+        let i18n = rt.worker_dir.join("service-i18n");
+        let pick = |name: &dyn Fn(&str) -> String| {
+            [lang.as_str(), "en"].iter().map(|l| i18n.join(name(l))).find(|p| p.exists())
+        };
+        for (f, stem, ext) in [("README.md", "README", "md"), ("run.bat", "run", "bat"), ("run.sh", "run", "sh")] {
+            if let Some(src) = pick(&|l| format!("{stem}.{l}.{ext}")) {
+                fs::copy(src, out.join(f))?;
+            }
+        }
+        if let Some(src) = pick(&|l| format!("{l}.json")) {
+            fs::copy(src, out.join("locale.json"))?;
+        }
+    }
     let mut cfg = config.clone();
     cfg["model"] = serde_json::json!("model.onnx");
     fs::write(out.join("config.json"), serde_json::to_string_pretty(&cfg)?)?;
-    log("服务包已生成".into());
+    log(t!("服务包已生成"));
     Ok(out.to_string_lossy().into_owned())
 }
 

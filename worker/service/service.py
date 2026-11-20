@@ -25,6 +25,17 @@ from pathlib import Path
 
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
 
+# 提示文字的语言：服务包里带 locale.json（中文原文 → 译文）时用它，没有就是中文
+try:
+    _LOCALE = json.loads((Path(__file__).with_name("locale.json")).read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    _LOCALE = {}
+
+
+def tr(zh: str) -> str:
+    return _LOCALE.get(zh) or zh
+
+
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import onnxruntime as ort  # noqa: E402
@@ -47,7 +58,7 @@ class Detector:
         self.classes: list[str] = meta["classes"]
         self.max_side = max_side
         self.lock = threading.Lock()
-        log.info("模型已加载：%s，类别 %s，推理设备 %s", model_path.name, self.classes, self.sess.get_providers()[0])
+        log.info(tr("模型已加载：%s，类别 %s，推理设备 %s"), model_path.name, self.classes, self.sess.get_providers()[0])
 
     def detect(self, bgr: np.ndarray, min_score: float = 0.05) -> list[dict]:
         h, w = bgr.shape[:2]
@@ -119,7 +130,7 @@ def mqtt_publish(cfg: dict, payload: bytes) -> None:
         s.sendall(b"\x10" + rlen(len(var) + len(body)) + var + body)
         ack = s.recv(4)
         if len(ack) < 4 or ack[0] != 0x20 or ack[3] != 0:
-            raise RuntimeError(f"MQTT 连接被拒绝：{ack!r}")
+            raise RuntimeError(tr("MQTT 连接被拒绝：") + repr(ack))
         pub = s16(cfg["topic"].encode()) + payload
         s.sendall(b"\x30" + rlen(len(pub)) + pub)
         s.sendall(b"\xe0\x00")
@@ -137,7 +148,7 @@ class Notifier(threading.Thread):
         try:
             self.q.put_nowait((alert, image))
         except queue.Full:
-            log.warning("告警推送队列已满，丢弃一条告警")
+            log.warning(tr("告警推送队列已满，丢弃一条告警"))
 
     def run(self):
         while True:
@@ -158,13 +169,13 @@ class Notifier(threading.Thread):
                     )
                     urllib.request.urlopen(req, timeout=10).read()
                 except Exception as e:
-                    log.warning("Webhook 推送失败：%s", e)
+                    log.warning(tr("Webhook 推送失败：%s"), e)
             mq = self.cfg.get("mqtt") or {}
             if mq.get("host"):
                 try:
                     mqtt_publish(mq, json.dumps(alert, ensure_ascii=False).encode("utf-8"))
                 except Exception as e:
-                    log.warning("MQTT 推送失败：%s", e)
+                    log.warning(tr("MQTT 推送失败：%s"), e)
 
 
 # ---------------- 规则 ----------------
@@ -218,11 +229,11 @@ class Stream(threading.Thread):
             if not cap.isOpened():
                 self.status["connected"] = False
                 self.status["errors"] += 1
-                log.warning("[%s] 连接失败，10 秒后重试", self.name)
+                log.warning(tr("[%s] 连接失败，10 秒后重试"), self.name)
                 time.sleep(10)
                 continue
             self.status["connected"] = True
-            log.info("[%s] 已连接", self.name)
+            log.info(tr("[%s] 已连接"), self.name)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25
             while self.running:
                 ok, frame = cap.read()
@@ -239,7 +250,7 @@ class Stream(threading.Thread):
                     time.sleep(1 / fps)
             cap.release()
             self.status["connected"] = False
-            log.warning("[%s] 断开，5 秒后重连", self.name)
+            log.warning(tr("[%s] 断开，5 秒后重连"), self.name)
             time.sleep(5)
 
     def run(self):
@@ -254,7 +265,7 @@ class Stream(threading.Thread):
                 try:
                     self.handle(frame, rules)
                 except Exception:
-                    log.exception("[%s] 检测出错", self.name)
+                    log.exception(tr("[%s] 检测出错"), self.name)
             time.sleep(max(0.05, interval - (time.time() - t0)))
 
     def handle(self, frame: np.ndarray, rules: dict):
@@ -305,7 +316,7 @@ class Stream(threading.Thread):
         # 可以直接拼在服务地址后面访问的截图地址（已转义中文）
         alert["image_url"] = "/" + urllib.parse.quote(alert["image"]) if alert["image"] else None
         self.alerts.appendleft(alert)
-        log.info("[%s] 告警：%s", self.name, "、".join(alert["labels"]))
+        log.info(tr("[%s] 告警：%s"), self.name, tr("、").join(alert["labels"]))
         self.notifier.push(alert, img)
 
 
@@ -347,24 +358,24 @@ def make_handler(det: Detector, streams: list[Stream], alerts: collections.deque
                     self.end_headers()
                     self.wfile.write(data)
                 else:
-                    self.send_json({"error": "文件不存在"}, 404)
+                    self.send_json({"error": tr("文件不存在")}, 404)
             else:
-                self.send_json({"error": "接口不存在", "接口": ["GET /health", "GET /alerts?limit=50", "POST /predict"]}, 404)
+                self.send_json({"error": tr("接口不存在"), "endpoints": ["GET /health", "GET /alerts?limit=50", "POST /predict"]}, 404)
 
         def do_POST(self):
             if self.path.split("?")[0] != "/predict":
-                self.send_json({"error": "接口不存在"}, 404)
+                self.send_json({"error": tr("接口不存在")}, 404)
                 return
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
             if self.headers.get("Content-Type", "").startswith("application/json"):
                 try:
                     body = base64.b64decode(json.loads(body)["image"])
                 except Exception:
-                    self.send_json({"error": "JSON 需要 image 字段（base64 图片）"}, 400)
+                    self.send_json({"error": tr("JSON 需要 image 字段（base64 图片）")}, 400)
                     return
             img = cv2.imdecode(np.frombuffer(body, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
-                self.send_json({"error": "图片解码失败"}, 400)
+                self.send_json({"error": tr("图片解码失败")}, 400)
                 return
             q = dict(p.split("=", 1) for p in self.path.partition("?")[2].split("&") if "=" in p)
             t0 = time.time()
@@ -392,11 +403,11 @@ def main():
         s.start()
     port = int(cfg.get("port", 8090))
     server = ThreadingHTTPServer((cfg.get("host", "0.0.0.0"), port), make_handler(det, streams, alerts))
-    log.info("推理服务已启动：%d 路视频，HTTP 接口 http://%s:%d", len(streams), cfg.get("host", "0.0.0.0"), port)
+    log.info(tr("推理服务已启动：%d 路视频，HTTP 接口 http://%s:%d"), len(streams), cfg.get("host", "0.0.0.0"), port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        log.info("已停止")
+        log.info(tr("已停止"))
 
 
 if __name__ == "__main__":

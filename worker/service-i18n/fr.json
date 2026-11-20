@@ -1,0 +1,19 @@
+{
+  "模型已加载：%s，类别 %s，推理设备 %s": "Modèle chargé : %s, classes %s, périphérique %s",
+  "MQTT 连接被拒绝：": "Connexion MQTT refusée : ",
+  "告警推送队列已满，丢弃一条告警": "File d'attente des alertes pleine, une alerte a été abandonnée",
+  "Webhook 推送失败：%s": "Échec de l'envoi au Webhook : %s",
+  "MQTT 推送失败：%s": "Échec de l'envoi MQTT : %s",
+  "[%s] 连接失败，10 秒后重试": "[%s] Échec de la connexion, nouvelle tentative dans 10 s",
+  "[%s] 已连接": "[%s] Connecté",
+  "[%s] 断开，5 秒后重连": "[%s] Déconnecté, reconnexion dans 5 s",
+  "[%s] 检测出错": "[%s] Erreur de détection",
+  "[%s] 告警：%s": "[%s] Alerte : %s",
+  "、": ", ",
+  "文件不存在": "Fichier introuvable",
+  "接口不存在": "Point d'accès introuvable",
+  "JSON 需要 image 字段（base64 图片）": "Le JSON doit contenir un champ image (image en base64)",
+  "图片解码失败": "Échec du décodage de l'image",
+  "推理服务已启动：%d 路视频，HTTP 接口 http://%s:%d": "Service d'inférence démarré : %d flux, API HTTP sur http://%s:%d",
+  "已停止": "Arrêté"
+}

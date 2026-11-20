@@ -6,13 +6,14 @@ import { api, errText, ProjectSummary, RecentProject, taskName } from "../api";
 import { useApp } from "../store";
 import NewProjectModal from "../components/NewProjectModal";
 import GuideCard from "../components/GuideCard";
+import { t } from "../i18n";
 
 function ago(ts: number) {
   const s = Date.now() / 1000 - ts;
-  if (s < 60) return "刚刚";
-  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
-  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)} 天前`;
+  if (s < 60) return t("刚刚");
+  if (s < 3600) return t("{n} 分钟前", { n: Math.floor(s / 60) });
+  if (s < 86400) return t("{n} 小时前", { n: Math.floor(s / 3600) });
+  if (s < 86400 * 30) return t("{n} 天前", { n: Math.floor(s / 86400) });
   return new Date(ts * 1000).toLocaleDateString();
 }
 
@@ -51,7 +52,7 @@ export default function Home() {
   };
 
   const pickAndOpen = async () => {
-    const dir = await open({ directory: true, title: "选择项目文件夹" });
+    const dir = await open({ directory: true, title: t("选择项目文件夹") });
     if (typeof dir === "string") openPath(dir);
   };
 
@@ -62,28 +63,28 @@ export default function Home() {
 
   return (
     <div className="page">
-      <h1>项目</h1>
-      <p className="desc">一个项目就是一个文件夹，整个拷走就能在另一台电脑上打开。</p>
+      <h1>{t("项目")}</h1>
+      <p className="desc">{t("一个项目就是一个文件夹，整个拷走就能在另一台电脑上打开。")}</p>
 
       <GuideCard hasProject={recent.length > 0} onNewProject={() => setShowNew(true)} />
 
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-        <h2 style={{ fontSize: 14, margin: 0 }}>最近项目</h2>
+        <h2 style={{ fontSize: 14, margin: 0 }}>{t("最近项目")}</h2>
         <div className="row">
           <Button icon={<FolderOpenOutlined />} onClick={pickAndOpen}>
-            打开项目…
+            {t("打开项目…")}
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowNew(true)}>
-            新建项目
+            {t("新建项目")}
           </Button>
         </div>
       </div>
 
       {recent.length === 0 ? (
         <div className="card" style={{ padding: 48 }}>
-          <Empty description="还没有项目">
+          <Empty description={t("还没有项目")}>
             <Button type="primary" onClick={() => setShowNew(true)}>
-              新建第一个项目
+              {t("新建第一个项目")}
             </Button>
           </Empty>
         </div>
@@ -106,7 +107,7 @@ export default function Home() {
               )}
               <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap" }}>
                 <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</strong>
-                <Tooltip title="从列表移除（不会删除文件）">
+                <Tooltip title={t("从列表移除（不会删除文件）")}>
                   <Button
                     size="small"
                     type="text"
@@ -120,15 +121,15 @@ export default function Home() {
               </div>
               <div style={{ margin: "4px 0 8px" }}>
                 <Tag>{taskName(r.task)}</Tag>
-                {!r.exists && <Tag color="error">找不到文件夹</Tag>}
+                {!r.exists && <Tag color="error">{t("找不到文件夹")}</Tag>}
               </div>
               {sums[r.path] && (
                 <div style={{ marginBottom: 6 }}>
                   <div className="row" style={{ justifyContent: "space-between", fontSize: 12 }}>
                     <span className="muted">
-                      {sums[r.path]!.images} 张图，已标 {sums[r.path]!.labeled} 张
+                      {t("{images} 张图，已标 {labeled} 张", { images: sums[r.path]!.images, labeled: sums[r.path]!.labeled })}
                     </span>
-                    <span className="dim">{sums[r.path]!.runs ? `训练过 ${sums[r.path]!.runs} 次` : "还没训练"}</span>
+                    <span className="dim">{sums[r.path]!.runs ? t("训练过 {n} 次", { n: sums[r.path]!.runs }) : t("还没训练")}</span>
                   </div>
                   <Progress
                     percent={sums[r.path]!.images ? Math.round((sums[r.path]!.labeled / sums[r.path]!.images) * 100) : 0}
@@ -141,7 +142,7 @@ export default function Home() {
                 {r.path}
               </div>
               <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                {ago(r.openedAt)}打开
+                {t("{time}打开", { time: ago(r.openedAt) })}
               </div>
             </div>
           ))}

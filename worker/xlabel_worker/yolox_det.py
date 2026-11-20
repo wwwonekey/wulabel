@@ -17,6 +17,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 
+from .i18n import tr
 from .protocol import log
 from .yolox import YOLOPAFPN, YOLOX, YOLOXHead, ModelEMA
 
@@ -77,11 +78,11 @@ def load_pretrained(net: YOLOX, key: str) -> bool:
             own = net.state_dict()
             keep = {k: v for k, v in state.items() if k in own and own[k].shape == v.shape}
             net.load_state_dict(keep, strict=False)
-            log(f"已加载 COCO 预训练权重（{name}，沿用 {len(keep)}/{len(own)} 组参数）")
+            log(tr("已加载 COCO 预训练权重（{name}，沿用 {keep}/{own} 组参数）", name=name, keep=len(keep), own=len(own)))
             return True
         except Exception as e:  # 多半是网络问题，换下一个地址
-            log(f"下载预训练权重失败（{url.format(name)}）：{e}")
-    log("没有可用的预训练权重，从头训练，效果会差很多")
+            log(tr("下载预训练权重失败（{url}）：{e}", url=url.format(name), e=e))
+    log(tr("没有可用的预训练权重，从头训练，效果会差很多"))
     return False
 
 
@@ -143,7 +144,7 @@ class YoloxDetector(torch.nn.Module):
 
     def forward(self, images, targets=None):
         if self.training:
-            raise RuntimeError("YOLOX 训练走 YoloxTask，不经过这个包装")
+            raise RuntimeError(tr("YOLOX 训练走 YoloxTask，不经过这个包装"))
         prepped = [self._prep(img) for img in images]
         out = self.net(torch.cat([x for x, _, _ in prepped], dim=0))
         return [self._post(out[i], r, hw) for i, (_, r, hw) in enumerate(prepped)]
@@ -251,7 +252,7 @@ class YoloxTask:
 
     def on_epoch(self, epoch: int, model: YoloxDetector):
         if self.no_aug_epochs and epoch == self.epochs - self.no_aug_epochs + 1:
-            log(f"最后 {self.no_aug_epochs} 轮：关掉 Mosaic / MixUp，加上 L1 损失")
+            log(tr("最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失", n=self.no_aug_epochs))
             if self.train_set is not None:
                 self.train_set.close()
             model.net.head.use_l1 = True

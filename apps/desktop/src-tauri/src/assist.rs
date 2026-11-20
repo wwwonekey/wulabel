@@ -11,6 +11,7 @@ use crate::error::{msg, AppResult};
 use crate::project::Project;
 use crate::runtime::Runtime;
 use crate::training::{self, PredResult, Predictor, PrelabelResult, RawPred};
+use crate::t;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +29,7 @@ static DEPS_OK: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// 确保训练环境里有 transformers（SAM、文本检测模型都靠它），没有就自动安装
 pub fn ensure_deps(rt: &Runtime, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
-    let py = rt.python().ok_or_else(|| msg("还没有训练环境，请先到「设置」里安装"))?;
+    let py = rt.python().ok_or_else(|| msg(t!("还没有训练环境，请先到「设置」里安装")))?;
     if DEPS_OK.lock().unwrap().as_ref() == Some(&py) {
         return Ok(());
     }
@@ -64,7 +65,7 @@ pub fn sam_segment(
     log: &(dyn Fn(String) + Sync),
 ) -> AppResult<SamResult> {
     if points.is_empty() && bbox.is_none() {
-        return Err(msg("请先在图上点一下目标，或者框选"));
+        return Err(msg(t!("请先在图上点一下目标，或者框选")));
     }
     ensure_deps(rt, log)?;
     let (stored, _) = crate::images::locate(p, image_id)?;
@@ -78,7 +79,7 @@ pub fn sam_segment(
             fwd(v);
         }
     })?;
-    let v = out.ok_or_else(|| msg("SAM 没有返回结果"))?;
+    let v = out.ok_or_else(|| msg(t!("SAM 没有返回结果")))?;
     Ok(SamResult { points: nums(&v["points"]), bbox: nums(&v["box"]), score: v["score"].as_f64().unwrap_or(0.0) })
 }
 
@@ -144,7 +145,7 @@ pub fn guess_prompt(name: &str) -> Option<String> {
 fn queries(p: &Project) -> AppResult<(Vec<(usize, String)>, Vec<i64>)> {
     let labels = annotations::list_labels(p)?;
     if labels.is_empty() {
-        return Err(msg("先添加要标注的类别"));
+        return Err(msg(t!("先添加要标注的类别")));
     }
     let mut qs = Vec::new();
     let mut ids = Vec::new();
@@ -168,9 +169,8 @@ fn queries(p: &Project) -> AppResult<(Vec<(usize, String)>, Vec<i64>)> {
         qs.extend(words.into_iter().map(|w| (i, w)));
     }
     if qs.is_empty() {
-        return Err(msg(format!(
-            "这些类别还没有英文提示词：{}。文本提示模型只懂英文，请在类别的编辑里填上，如 安全帽 → helmet",
-            missing.join("、")
+        return Err(msg(t!("这些类别还没有英文提示词：{names}。文本提示模型只懂英文，请在类别的编辑里填上，如 安全帽 → helmet",
+            names = missing.join(t!("、").as_str())
         )));
     }
     Ok((qs, ids))

@@ -28,6 +28,7 @@ import cv2  # noqa: E402
 import torch  # noqa: E402
 
 from . import models  # noqa: E402
+from .i18n import tr  # noqa: E402
 from .protocol import emit, log  # noqa: E402
 
 
@@ -68,7 +69,7 @@ class Grabber(threading.Thread):
                     return
                 fails += 1
                 if fails > 10:
-                    log(f"视频流读取失败，第 {fails - 10} 次重连…")
+                    log(tr("视频流读取失败，第 {n} 次重连…", n=fails - 10))
                     self.cap.release()
                     time.sleep(2)
                     self.cap = cv2.VideoCapture(self.src, cv2.CAP_FFMPEG)
@@ -97,7 +98,7 @@ def write_image(path: str, frame) -> None:
     # cv2.imwrite 不支持中文路径，先编码再写文件
     ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
     if not ok:
-        raise RuntimeError("图片编码失败")
+        raise RuntimeError(tr("图片编码失败"))
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_bytes(buf.tobytes())
 
@@ -115,7 +116,7 @@ def run(cfg: dict) -> None:
 
     g = Grabber(src)
     if not g.opened():
-        emit("error", msg=f"打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。")
+        emit("error", msg=tr("打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。", src=src))
         return
     w = int(g.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(g.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))

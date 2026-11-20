@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { notesBetween, versionGt } from "../changelog";
 import { prefs } from "../store";
 import { isRemote } from "../transport";
+import { t } from "../i18n";
 
 /** 以前用过软件（本机有任何 Wulabel 的偏好设置），用来区分「更新」和「第一次安装」 */
 function usedBefore(): boolean {
@@ -43,10 +44,10 @@ export default function WhatsNew() {
   const close = () => setNotes([]);
   return (
     <Modal
-      title={`Wulabel 已更新到 v${current}`}
+      title={t("Wulabel 已更新到 v{version}", { version: current })}
       open={notes.length > 0}
       onCancel={close}
-      footer={<Button type="primary" onClick={close}>知道了</Button>}
+      footer={<Button type="primary" onClick={close}>{t("知道了")}</Button>}
     >
       {notes.map((n) => (
         <div key={n.version} style={{ marginBottom: 12 }}>

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{msg, AppResult};
 use crate::project::Project;
+use crate::t;
 
 pub const SPLITS: [&str; 3] = ["train", "val", "test"];
 
@@ -42,7 +43,7 @@ pub fn split_summary(p: &Project) -> AppResult<SplitSummary> {
 
 fn check_ratios(r: [f64; 3]) -> AppResult<[f64; 3]> {
     if r.iter().any(|x| !x.is_finite() || *x < 0.0) || r[0] <= 0.0 {
-        return Err(msg("划分比例不对：训练集必须大于 0"));
+        return Err(msg(t!("划分比例不对：训练集必须大于 0")));
     }
     let sum: f64 = r.iter().sum();
     Ok([r[0] / sum, r[1] / sum, r[2] / sum])
@@ -203,7 +204,7 @@ pub fn collect(p: &Project, only_reviewed: bool) -> AppResult<(Vec<String>, Vec<
         }
     }
     if labels.is_empty() {
-        return Err(msg("还没有类别，先在标注页添加类别并标注"));
+        return Err(msg(t!("还没有类别，先在标注页添加类别并标注")));
     }
     let index: HashMap<i64, usize> = labels.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
     let cond = if only_reviewed { "status = 'reviewed'" } else { TRAINABLE };
@@ -232,7 +233,7 @@ pub fn collect(p: &Project, only_reviewed: bool) -> AppResult<(Vec<String>, Vec<
         }
     }
     if images.is_empty() {
-        return Err(msg(if only_reviewed { "没有已审核的图片" } else { "没有已标注的图片" }));
+        return Err(msg(if only_reviewed { t!("没有已审核的图片") } else { t!("没有已标注的图片") }));
     }
     let pos: HashMap<i64, usize> = images.iter().enumerate().map(|(i, im)| (im.id, i)).collect();
     let mut stmt = conn.prepare(
@@ -298,7 +299,7 @@ pub fn dedupe_names(images: &mut [ExportImage]) {
 /// 优先硬链接（不占额外空间），跨盘时退回复制
 fn link_or_copy(src: &Path, dst: &Path) -> AppResult<()> {
     if fs::hard_link(src, dst).is_err() {
-        fs::copy(src, dst).map_err(|e| msg(format!("复制图片失败 {}：{e}", src.display())))?;
+        fs::copy(src, dst).map_err(|e| msg(t!("复制图片失败 {path}：{e}", path = src.display(), e = e)))?;
     }
     Ok(())
 }
@@ -306,7 +307,7 @@ fn link_or_copy(src: &Path, dst: &Path) -> AppResult<()> {
 /// 放一张图到导出目录，并记下文件对应的图片 id。copy=true 时一定复制（之后要改图）
 fn put(files: &mut Vec<(PathBuf, i64)>, src: &Path, dst: PathBuf, id: i64, copy: bool) -> AppResult<()> {
     if copy {
-        fs::copy(src, &dst).map_err(|e| msg(format!("复制图片失败 {}：{e}", src.display())))?;
+        fs::copy(src, &dst).map_err(|e| msg(t!("复制图片失败 {path}：{e}", path = src.display(), e = e)))?;
     } else {
         link_or_copy(src, &dst)?;
     }
@@ -316,7 +317,7 @@ fn put(files: &mut Vec<(PathBuf, i64)>, src: &Path, dst: PathBuf, id: i64, copy:
 
 fn prepare_out(out: &Path) -> AppResult<()> {
     if out.exists() && fs::read_dir(out)?.next().is_some() {
-        return Err(msg(format!("导出目录不为空：{}", out.display())));
+        return Err(msg(t!("导出目录不为空：{path}", path = out.display())));
     }
     fs::create_dir_all(out)?;
     Ok(())
@@ -333,10 +334,10 @@ fn yaml_quote(s: &str) -> String {
 fn check_format(p: &Project, f: Format) -> AppResult<()> {
     let classify = p.meta.task == "classify";
     if classify && f != Format::Cls {
-        return Err(msg("图像分类项目请导出为「分类文件夹」格式"));
+        return Err(msg(t!("图像分类项目请导出为「分类文件夹」格式")));
     }
     if !classify && f == Format::Cls {
-        return Err(msg("「分类文件夹」格式只适合图像分类项目"));
+        return Err(msg(t!("「分类文件夹」格式只适合图像分类项目")));
     }
     Ok(())
 }
@@ -369,7 +370,7 @@ fn write(
         // 没打类别标签的图对分类没有用
         images.retain(|im| im.tag.is_some());
         if images.is_empty() {
-            return Err(msg("还没有给图片打类别标签"));
+            return Err(msg(t!("还没有给图片打类别标签")));
         }
     }
     let out = &opts.out_dir;

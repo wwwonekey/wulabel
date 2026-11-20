@@ -4,6 +4,7 @@ import { FolderOpenOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, errText, Task, TASKS } from "../api";
 import { prefs, useApp } from "../store";
+import { t } from "../i18n";
 
 interface Values {
   name: string;
@@ -18,7 +19,7 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
   const setProject = useApp((s) => s.setProject);
 
   const pickParent = async () => {
-    const dir = await open({ directory: true, title: "选择项目存放位置" });
+    const dir = await open({ directory: true, title: t("选择项目存放位置") });
     if (typeof dir === "string") form.setFieldValue("parent", dir);
   };
 
@@ -28,7 +29,7 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
     try {
       const p = await api.createProject(v.parent, v.name, v.task);
       prefs.set("lastParent", v.parent);
-      message.success(`项目「${p.name}」已创建`);
+      message.success(t("项目「{name}」已创建", { name: p.name }));
       onClose();
       form.resetFields();
       setProject(p);
@@ -41,11 +42,11 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
 
   return (
     <Modal
-      title="新建项目"
+      title={t("新建项目")}
       open={openState}
       onCancel={onClose}
       onOk={submit}
-      okText="创建"
+      okText={t("创建")}
       confirmLoading={busy}
       destroyOnHidden
       width={560}
@@ -57,25 +58,25 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
         initialValues={{ task: "detect", parent: prefs.get("lastParent", "") }}
         style={{ marginTop: 16 }}
       >
-        <Form.Item name="name" label="项目名" rules={[{ required: true, message: "请输入项目名" }]}>
-          <Input placeholder="例如：工地安全帽检测" autoFocus maxLength={60} />
+        <Form.Item name="name" label={t("项目名")} rules={[{ required: true, message: t("请输入项目名") }]}>
+          <Input placeholder={t("例如：工地安全帽检测")} autoFocus maxLength={60} />
         </Form.Item>
-        <Form.Item label="存放位置" required>
+        <Form.Item label={t("存放位置")} required>
           <Space.Compact style={{ width: "100%" }}>
-            <Form.Item name="parent" noStyle rules={[{ required: true, message: "请选择存放位置" }]}>
-              <Input placeholder="项目会建在这个文件夹下" />
+            <Form.Item name="parent" noStyle rules={[{ required: true, message: t("请选择存放位置") }]}>
+              <Input placeholder={t("项目会建在这个文件夹下")} />
             </Form.Item>
             <Button icon={<FolderOpenOutlined />} onClick={pickParent}>
-              浏览
+              {t("浏览")}
             </Button>
           </Space.Compact>
         </Form.Item>
-        <Form.Item name="task" label="任务类型" extra="创建后不能修改。">
+        <Form.Item name="task" label={t("任务类型")} extra={t("创建后不能修改。")}>
           <Radio.Group style={{ width: "100%" }}>
             <Space direction="vertical" style={{ width: "100%" }}>
-              {TASKS.map((t) => (
-                <Radio key={t.value} value={t.value}>
-                  <b>{t.name}</b> <span className="muted">· {t.desc}</span>
+              {TASKS.map((tk) => (
+                <Radio key={tk.value} value={tk.value}>
+                  <b>{tk.name}</b> <span className="muted">· {tk.desc}</span>
                 </Radio>
               ))}
             </Space>

@@ -1,0 +1,19 @@
+{
+  "模型已加载：%s，类别 %s，推理设备 %s": "Đã tải mô hình: %s, lớp %s, thiết bị suy luận %s",
+  "MQTT 连接被拒绝：": "MQTT từ chối kết nối: ",
+  "告警推送队列已满，丢弃一条告警": "Hàng đợi đẩy cảnh báo đã đầy, bỏ qua một cảnh báo",
+  "Webhook 推送失败：%s": "Đẩy Webhook thất bại: %s",
+  "MQTT 推送失败：%s": "Đẩy MQTT thất bại: %s",
+  "[%s] 连接失败，10 秒后重试": "[%s] Kết nối thất bại, thử lại sau 10 giây",
+  "[%s] 已连接": "[%s] Đã kết nối",
+  "[%s] 断开，5 秒后重连": "[%s] Mất kết nối, kết nối lại sau 5 giây",
+  "[%s] 检测出错": "[%s] Lỗi phát hiện",
+  "[%s] 告警：%s": "[%s] Cảnh báo: %s",
+  "、": ", ",
+  "文件不存在": "Tệp không tồn tại",
+  "接口不存在": "Endpoint không tồn tại",
+  "JSON 需要 image 字段（base64 图片）": "JSON cần trường image (ảnh base64)",
+  "图片解码失败": "Giải mã ảnh thất bại",
+  "推理服务已启动：%d 路视频，HTTP 接口 http://%s:%d": "Dịch vụ suy luận đã khởi động: %d luồng video, API HTTP http://%s:%d",
+  "已停止": "Đã dừng"
+}

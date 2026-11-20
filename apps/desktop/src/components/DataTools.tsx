@@ -4,12 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errText, ImportProgress, ProjectInfo, QualityReport, RunInfo, thumbUrl } from "../api";
 import { useApp } from "../store";
 import { modelName } from "../pages/Train";
+import { t } from "../i18n";
 
 const ISSUE: Record<string, { text: string; color: string }> = {
-  blur: { text: "模糊", color: "orange" },
-  dark: { text: "过暗", color: "purple" },
-  bright: { text: "过曝", color: "gold" },
-  flat: { text: "对比度低", color: "default" },
+  blur: { text: t("模糊@@图片质量"), color: "orange" },
+  dark: { text: t("过暗"), color: "purple" },
+  bright: { text: t("过曝"), color: "gold" },
+  flat: { text: t("对比度低"), color: "default" },
 };
 
 /** 图片质量筛查：找出模糊、过暗、过曝、对比度低的图，批量跳过或删除 */
@@ -51,7 +52,7 @@ export function QualityModal({ project, open, onClose, onChanged }: { project: P
   const skip = async () => {
     try {
       for (const id of ids) await api.setImageStatus(id, "skipped");
-      message.success(`已把 ${ids.length} 张设为「跳过」，不参与训练`);
+      message.success(t("已把 {n} 张设为「跳过」，不参与训练", { n: ids.length }));
       await refreshStats();
       onChanged();
       setReport((r) => (r ? { ...r, items: r.items.filter((i) => !ids.includes(i.imageId)) } : r));
@@ -62,15 +63,15 @@ export function QualityModal({ project, open, onClose, onChanged }: { project: P
 
   const remove = () =>
     modal.confirm({
-      title: `删除这 ${ids.length} 张图？`,
-      content: "图片的标注会一起删除，无法恢复。复制进项目的图片副本会删掉，你电脑上的原图不受影响。",
-      okText: "删除",
+      title: t("删除这 {n} 张图？", { n: ids.length }),
+      content: t("图片的标注会一起删除，无法恢复。复制进项目的图片副本会删掉，你电脑上的原图不受影响。"),
+      okText: t("删除"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("取消"),
       onOk: async () => {
         try {
           await api.deleteImages("ids", ids);
-          message.success(`已删除 ${ids.length} 张`);
+          message.success(t("已删除 {n} 张", { n: ids.length }));
           await refreshStats();
           onChanged();
           setReport((r) => (r ? { ...r, items: r.items.filter((i) => !ids.includes(i.imageId)) } : r));
@@ -81,16 +82,16 @@ export function QualityModal({ project, open, onClose, onChanged }: { project: P
     });
 
   return (
-    <Modal title="图片质量筛查" open={open} onCancel={onClose} footer={null} width={900} destroyOnHidden>
+    <Modal title={t("图片质量筛查")} open={open} onCancel={onClose} footer={null} width={900} destroyOnHidden>
       <p className="muted" style={{ marginTop: 0 }}>
-        找出模糊、过暗、过曝、对比度太低的图。这些图标起来费劲、训练时也容易带偏模型，可以先跳过或删掉；也可以先过一眼再决定。
+        {t("找出模糊、过暗、过曝、对比度太低的图。这些图标起来费劲、训练时也容易带偏模型，可以先跳过或删掉；也可以先过一眼再决定。")}
       </p>
       <Space style={{ marginBottom: 10 }}>
         <Checkbox checked={onlyTodo} onChange={(e) => setOnlyTodo(e.target.checked)}>
-          只看未标注的图
+          {t("只看未标注的图")}
         </Checkbox>
         <Button type="primary" onClick={run} loading={!!progress}>
-          {report ? "重新筛查" : "开始筛查"}
+          {report ? t("重新筛查") : t("开始筛查")}
         </Button>
       </Space>
       {progress && <Progress percent={progress.total ? Math.floor((progress.done / progress.total) * 100) : 0} size="small" />}
@@ -102,29 +103,31 @@ export function QualityModal({ project, open, onClose, onChanged }: { project: P
               value={kind}
               onChange={(v) => setKind(v as string)}
               options={[
-                { value: "all", label: `全部 ${report.items.length}` },
+                { value: "all", label: t("全部 {n}", { n: report.items.length }) },
                 ...Object.entries(ISSUE).map(([k, v]) => ({ value: k, label: `${v.text} ${report.items.filter((i) => i.issues.includes(k)).length}` })),
               ]}
             />
             <span className="dim" style={{ fontSize: 12 }}>
-              查了 {report.checked} 张{report.failed ? `，${report.failed} 张读不出来` : ""}
+              {report.failed
+                ? t("查了 {n} 张，{failed} 张读不出来", { n: report.checked, failed: report.failed })
+                : t("查了 {n} 张", { n: report.checked })}
             </span>
           </div>
           {shown.length === 0 ? (
-            <Empty description="没有发现质量问题" />
+            <Empty description={t("没有发现质量问题")} />
           ) : (
             <>
               <div className="row" style={{ gap: 6, marginBottom: 8 }}>
-                <span className="dim" style={{ fontSize: 12 }}>已选 {ids.length} 张（点图片取消选择）</span>
+                <span className="dim" style={{ fontSize: 12 }}>{t("已选 {n} 张（点图片取消选择）", { n: ids.length })}</span>
                 <div className="spacer" />
-                <Button size="small" onClick={() => annotateQueue(shown.map((i) => i.imageId), "质量问题")}>
-                  逐张去看
+                <Button size="small" onClick={() => annotateQueue(shown.map((i) => i.imageId), t("质量问题"))}>
+                  {t("逐张去看")}
                 </Button>
                 <Button size="small" disabled={!ids.length} onClick={skip}>
-                  设为跳过
+                  {t("设为跳过")}
                 </Button>
                 <Button size="small" danger disabled={!ids.length} onClick={remove}>
-                  删除
+                  {t("删除")}
                 </Button>
               </div>
               <div className="thumbs" style={{ maxHeight: 420, overflow: "auto" }}>
@@ -143,10 +146,15 @@ export function QualityModal({ project, open, onClose, onChanged }: { project: P
                           return n;
                         })
                       }
-                      title={`清晰度 ${it.sharpness.toFixed(0)} · 亮度 ${it.brightness.toFixed(0)} · 过曝 ${(it.overexposed * 100).toFixed(0)}% · 对比度 ${it.contrast.toFixed(0)}`}
+                      title={t("清晰度 {sharp} · 亮度 {bright} · 过曝 {over}% · 对比度 {contrast}", {
+                        sharp: it.sharpness.toFixed(0),
+                        bright: it.brightness.toFixed(0),
+                        over: (it.overexposed * 100).toFixed(0),
+                        contrast: it.contrast.toFixed(0),
+                      })}
                     >
                       <img src={thumbUrl(project.path, it.imageId)} loading="lazy" alt="" draggable={false} />
-                      <span className="nm">{it.issues.map((k) => ISSUE[k]?.text ?? k).join("、")}</span>
+                      <span className="nm">{it.issues.map((k) => ISSUE[k]?.text ?? k).join(t("、"))}</span>
                     </div>
                   );
                 })}
@@ -197,12 +205,12 @@ export function PickModal({ project, open, onClose }: { project: ProjectInfo; op
   };
 
   return (
-    <Modal title="挑选最值得标的图" open={open} onCancel={onClose} footer={null} width={900} destroyOnHidden>
+    <Modal title={t("挑选最值得标的图")} open={open} onCancel={onClose} footer={null} width={900} destroyOnHidden>
       <p className="muted" style={{ marginTop: 0 }}>
-        用训练好的模型把「未标注」的图都看一遍，挑出模型最拿不准的。先标这些图，比随便标同样多的图对模型的提升大得多。
+        {t("用训练好的模型把「未标注」的图都看一遍，挑出模型最拿不准的。先标这些图，比随便标同样多的图对模型的提升大得多。")}
       </p>
       {runs.length === 0 ? (
-        <Empty description="还没有训练好的模型，先训练一个再来挑" />
+        <Empty description={t("还没有训练好的模型，先训练一个再来挑")} />
       ) : (
         <Space style={{ marginBottom: 10 }} wrap>
           <Select
@@ -212,10 +220,10 @@ export function PickModal({ project, open, onClose }: { project: ProjectInfo; op
             options={runs.map((r) => ({ value: r.id, label: `${r.name} · ${modelName(r)}` }))}
           />
           <span>
-            挑 <InputNumber min={10} max={2000} step={50} value={limit} onChange={(v) => setLimit(Number(v ?? 100))} /> 张
+            {t("挑")} <InputNumber min={10} max={2000} step={50} value={limit} onChange={(v) => setLimit(Number(v ?? 100))} /> {t("张")}
           </span>
           <Button type="primary" onClick={run} loading={!!progress}>
-            开始挑选
+            {t("开始挑选")}
           </Button>
         </Space>
       )}
@@ -223,13 +231,13 @@ export function PickModal({ project, open, onClose }: { project: ProjectInfo; op
       {items && (
         <>
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-            <span className="dim" style={{ fontSize: 12 }}>按「拿不准」程度从高到低</span>
-            <Button type="primary" size="small" disabled={!items.length} onClick={() => annotateQueue(items.map((i) => i.imageId), "模型挑选")}>
-              按这个顺序去标注
+            <span className="dim" style={{ fontSize: 12 }}>{t("按「拿不准」程度从高到低")}</span>
+            <Button type="primary" size="small" disabled={!items.length} onClick={() => annotateQueue(items.map((i) => i.imageId), t("模型挑选"))}>
+              {t("按这个顺序去标注")}
             </Button>
           </div>
           {items.length === 0 ? (
-            <Empty description="没有未标注的图" />
+            <Empty description={t("没有未标注的图")} />
           ) : (
             <div className="thumbs" style={{ maxHeight: 420, overflow: "auto" }}>
               {items.map((it, i) => (

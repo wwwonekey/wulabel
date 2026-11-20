@@ -17,6 +17,7 @@ use crate::evaltools::worker_events;
 use crate::keypoints;
 use crate::project::Project;
 use crate::runtime::Runtime;
+use crate::t;
 
 const KINDS: [&str; 2] = ["bbox", "keypoints"];
 /// 一次最多往后跟踪多少帧
@@ -35,7 +36,7 @@ fn sequence(p: &Project, image_id: i64) -> AppResult<(Vec<(i64, String)>, usize)
     let path: String = conn
         .query_row("SELECT path FROM images WHERE id = ?1", [image_id], |r| r.get(0))
         .optional()?
-        .ok_or_else(|| msg(format!("图片不存在：{image_id}")))?;
+        .ok_or_else(|| msg(t!("图片不存在：{image_id}", image_id = image_id)))?;
     let dir = parent(&path).to_string();
     let mut stmt = conn.prepare("SELECT id, path FROM images")?;
     let mut v: Vec<(String, i64)> = stmt
@@ -45,7 +46,7 @@ fn sequence(p: &Project, image_id: i64) -> AppResult<(Vec<(i64, String)>, usize)
         .collect();
     v.sort();
     let seq: Vec<(i64, String)> = v.into_iter().map(|(pth, id)| (id, pth)).collect();
-    let pos = seq.iter().position(|(id, _)| *id == image_id).ok_or_else(|| msg("图片不存在"))?;
+    let pos = seq.iter().position(|(id, _)| *id == image_id).ok_or_else(|| msg(t!("图片不存在")))?;
     Ok((seq, pos))
 }
 
@@ -198,7 +199,7 @@ pub fn interpolate(p: &Project, image_id: i64) -> AppResult<InterpResult> {
     let cur = annotations::load(p, image_id)?;
     let b: Vec<Obj> = cur.annotations.iter().filter(|a| KINDS.contains(&a.kind.as_str())).filter_map(obj).collect();
     if b.is_empty() {
-        return Err(msg("这一帧还没有框：先标好这一帧，再从上一个关键帧插值过来"));
+        return Err(msg(t!("这一帧还没有框：先标好这一帧，再从上一个关键帧插值过来")));
     }
     let mut from = None;
     for i in (0..pos).rev() {
@@ -208,14 +209,14 @@ pub fn interpolate(p: &Project, image_id: i64) -> AppResult<InterpResult> {
             break;
         }
     }
-    let (ia, prev) = from.ok_or_else(|| msg("往前没找到关键帧：先在前面某一帧手动标好，再标这一帧，然后插值"))?;
+    let (ia, prev) = from.ok_or_else(|| msg(t!("往前没找到关键帧：先在前面某一帧手动标好，再标这一帧，然后插值")))?;
     if pos - ia < 2 {
-        return Err(msg("上一个关键帧就是前一帧，中间没有要插值的帧"));
+        return Err(msg(t!("上一个关键帧就是前一帧，中间没有要插值的帧")));
     }
     let a: Vec<Obj> = prev.annotations.iter().filter(|x| KINDS.contains(&x.kind.as_str())).filter_map(obj).collect();
     let pairs = pair(&a, &b, cur.width, cur.height);
     if pairs.is_empty() {
-        return Err(msg("两个关键帧上的目标对不上（要同一个类别、位置别差太远）"));
+        return Err(msg(t!("两个关键帧上的目标对不上（要同一个类别、位置别差太远）")));
     }
     let n = pos - ia;
     for k in ia + 1..pos {
@@ -264,7 +265,7 @@ pub fn track(
     let cur = annotations::load(p, image_id)?;
     let objs: Vec<Obj> = cur.annotations.iter().filter(|a| KINDS.contains(&a.kind.as_str())).filter_map(obj).collect();
     if objs.is_empty() {
-        return Err(msg("这一帧还没有框，先标好要跟踪的目标"));
+        return Err(msg(t!("这一帧还没有框，先标好要跟踪的目标")));
     }
     let mut frames = Vec::new();
     let mut hit_keyframe = false;
@@ -276,7 +277,7 @@ pub fn track(
         frames.push(k);
     }
     if frames.is_empty() {
-        return Err(msg(if hit_keyframe { "下一帧已经手动标过了" } else { "后面没有帧了（同一文件夹里按文件名排序）" }));
+        return Err(msg(if hit_keyframe { t!("下一帧已经手动标过了") } else { t!("后面没有帧了（同一文件夹里按文件名排序）") }));
     }
     let paths: Vec<String> = std::iter::once(pos)
         .chain(frames.iter().copied())

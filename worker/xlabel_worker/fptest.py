@@ -35,6 +35,7 @@ import torch  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from . import models  # noqa: E402
+from .i18n import tr  # noqa: E402
 from .protocol import emit, log  # noqa: E402
 
 MAX_SAVED = 60
@@ -50,7 +51,7 @@ def _detector(weights: Path, device):
         return (lambda img, conf: [d for d in det.predict(img, conf) if use is None or d[4] in use]), info.get("classes", [])
     model, ck = models.load(weights, device)
     if models.is_cls(ck["model"]):
-        raise RuntimeError("分类模型没有框，不能做误报测试")
+        raise RuntimeError(tr("分类模型没有框，不能做误报测试"))
     from torchvision.transforms import functional as F
 
     @torch.no_grad()
@@ -89,7 +90,7 @@ def run(cfg: dict) -> None:
     out.mkdir(parents=True, exist_ok=True)
     stream = "://" in src
     if stream and max_seconds <= 0:
-        raise RuntimeError("视频流没有结尾，请设置最长测试时间")
+        raise RuntimeError(tr("视频流没有结尾，请设置最长测试时间"))
 
     stop = threading.Event()
 
@@ -109,7 +110,7 @@ def run(cfg: dict) -> None:
     predict, classes = _detector(weights, device)
     cap = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
     if not cap.isOpened():
-        raise RuntimeError("打不开视频，确认路径或地址正确")
+        raise RuntimeError(tr("打不开视频，确认路径或地址正确"))
     vfps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     if not (1 <= vfps <= 240):
         vfps = 25.0
@@ -117,7 +118,7 @@ def run(cfg: dict) -> None:
     duration = 0.0 if stream else nframes / vfps
     total = max_seconds if (stream or (max_seconds and max_seconds < duration)) else duration
     emit("open", fps=vfps, duration=duration)
-    log(f"开始误报测试：每秒检测 {fps:g} 帧，阈值 {conf:.2f}")
+    log(tr("开始误报测试：每秒检测 {fps} 帧，阈值 {conf}", fps=f"{fps:g}", conf=f"{conf:.2f}"))
 
     step = max(1, round(vfps / fps))
     idx = 0
