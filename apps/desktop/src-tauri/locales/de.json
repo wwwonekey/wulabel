@@ -440,5 +440,6 @@
   "运行日志太长": "Das Protokoll ist zu lang",
   "问题描述不能为空": "Bitte beschreiben Sie das Problem",
   "问题描述太长": "Die Beschreibung ist zu lang",
-  "服务端发送邮件失败，请稍后再试": "Der Server konnte die E-Mail nicht senden. Bitte versuchen Sie es später erneut."
+  "服务端发送邮件失败，请稍后再试": "Der Server konnte die E-Mail nicht senden. Bitte versuchen Sie es später erneut.",
+  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "ffmpeg konnte nicht heruntergeladen werden: {errors}. Installieren Sie es über die Paketverwaltung (z. B. apt install ffmpeg) oder geben Sie den Pfad in den Einstellungen an."
 }
