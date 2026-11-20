@@ -5224,7 +5224,7 @@ dependencies = [
 
 [[package]]
 name = "xlabel"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "chrono",
