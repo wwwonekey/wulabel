@@ -1456,5 +1456,14 @@
   "改用 CPU": "Pakai CPU",
   "去数据页": "Ke halaman Data",
   "关键信息": "Info penting",
-  "日志开头的设备、数据量、预训练权重": "Perangkat, jumlah data, dan bobot pralatih dari awal log"
+  "日志开头的设备、数据量、预训练权重": "Perangkat, jumlah data, dan bobot pralatih dari awal log",
+  "实时验证和推理服务包支持分割、关键点、分类模型；视频流支持 RTSP、HTTP-FLV、HLS（m3u8）和 MP4。": "Verifikasi langsung dan paket layanan inferensi mendukung model segmentasi, titik kunci, dan klasifikasi; aliran video mendukung RTSP, HTTP-FLV, HLS (m3u8), dan MP4.",
+  "训练页可以看到每张图分在训练集、验证集还是测试集，能手动移动，也能按比例重新划分。": "Halaman Pelatihan menunjukkan setiap gambar ada di set pelatihan, validasi, atau uji; gambar bisa dipindahkan manual atau dibagi ulang menurut rasio.",
+  "一个人标注时不再需要审核：标了目标就算已标注，确实没有目标的图点「完成」作为负样本。团队协作时才有审核流程。": "Saat menganotasi sendiri tidak perlu peninjauan lagi: gambar yang diberi objek dihitung sudah dianotasi, dan untuk gambar yang memang tanpa objek klik \"Selesai\" agar dipakai sebagai sampel negatif. Alur peninjauan hanya dipakai saat kolaborasi tim.",
+  "训练前提示每轮和总共的步数，数据太少会先提醒；训练中指标一直是 0、没下载到预训练权重时醒目提示；常见报错直接给出解决办法。": "Sebelum pelatihan ditampilkan jumlah langkah per epoch dan total, dengan peringatan jika data terlalu sedikit. Selama pelatihan ada peringatan jelas jika metrik tetap 0 atau bobot pralatih tidak berhasil diunduh. Error umum langsung disertai cara mengatasinya.",
+  "训练完成的通知带上结果；评估页给出结论和最差的类别，推荐的报警阈值自动带到部署页。": "Notifikasi pelatihan selesai menampilkan hasilnya; halaman Evaluasi memberi kesimpulan dan menyebut kelas terburuk, dan ambang alarm yang disarankan otomatis dibawa ke halaman Deploy.",
+  "标注页：标完一批有提示，「完成」直接跳到下一张未标注；新增 X 跳过、Shift+D 下一张未标注；底部缩略图显示状态，可以输入序号跳转；批量预标注可以中途停止；删除类别时可以合并到另一个类别。": "Halaman Anotasi: ada pemberitahuan saat satu kelompok selesai, dan \"Selesai\" langsung pindah ke gambar berikutnya yang belum dianotasi; pintasan baru X (lewati) dan Shift+D (berikutnya yang belum dianotasi); thumbnail di bawah menampilkan status, dan nomor bisa diketik untuk lompat; pra-anotasi massal bisa dihentikan; saat menghapus kelas bisa digabungkan ke kelas lain.",
+  "数据页可以批量设为跳过、恢复未标注、送去标注、移到训练/验证/测试集；视频抽帧和导入图片可以中途停止；把视频拖进窗口直接抽帧。": "Halaman Data: secara massal tandai lewati, kembalikan ke belum dianotasi, kirim ke anotasi, atau pindahkan ke set pelatihan/validasi/uji; ekstraksi frame dan impor gambar bisa dihentikan di tengah jalan; seret video ke jendela untuk langsung mengekstrak frame.",
+  "体检去重时优先保留有标注的图，也可以自己选留哪张；忽略的问题可以恢复，疑似漏标可以一次全部加上。": "Pemeriksaan data: saat menghapus duplikat, gambar yang sudah dianotasi diutamakan untuk disimpan, dan Anda bisa memilih sendiri mana yang disimpan; masalah yang diabaikan bisa dipulihkan, dan dugaan anotasi terlewat bisa ditambahkan sekaligus.",
+  "新建项目时可以直接填好类别；预训练权重下载不完整时自动删掉重下。": "Saat membuat proyek kelas bisa langsung diisi; bobot pralatih yang tidak terunduh lengkap otomatis dihapus dan diunduh ulang."
 }
