@@ -61,12 +61,29 @@ export default function Home() {
     load();
   };
 
+  // 项目文件夹挪了位置：重新选一下，打开新位置并把旧的记录去掉
+  const relocate = async (old: string) => {
+    const dir = await open({ directory: true, title: t("选择挪过位置的项目文件夹") });
+    if (typeof dir !== "string") return;
+    try {
+      const p = await api.openProject(dir);
+      if (dir !== old) await api.removeRecent(old).catch(() => {});
+      setProject(p);
+    } catch (e) {
+      message.error(errText(e));
+      load();
+    }
+  };
+
+  // 新手引导用最近打开的项目判断导入、标注、训练做了没有
+  const latest = recent.find((r) => r.exists);
+
   return (
     <div className="page">
       <h1>{t("项目")}</h1>
       <p className="desc">{t("一个项目就是一个文件夹，整个拷走就能在另一台电脑上打开。")}</p>
 
-      <GuideCard hasProject={recent.length > 0} onNewProject={() => setShowNew(true)} />
+      <GuideCard hasProject={recent.length > 0} summary={latest ? sums[latest.path] : null} onNewProject={() => setShowNew(true)} />
 
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ fontSize: 14, margin: 0 }}>{t("最近项目")}</h2>
@@ -122,6 +139,18 @@ export default function Home() {
               <div style={{ margin: "4px 0 8px" }}>
                 <Tag>{taskName(r.task)}</Tag>
                 {!r.exists && <Tag color="error">{t("找不到文件夹")}</Tag>}
+                {!r.exists && (
+                  <Button
+                    size="small"
+                    type="link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      relocate(r.path);
+                    }}
+                  >
+                    {t("重新定位…")}
+                  </Button>
+                )}
               </div>
               {sums[r.path] && (
                 <div style={{ marginBottom: 6 }}>

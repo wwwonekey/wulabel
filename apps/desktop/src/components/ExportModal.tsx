@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Form, Input, InputNumber, Modal, Progress, Radio, Space } from "antd";
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -72,11 +72,19 @@ export default function ExportModal({
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [anonymize, setAnonymize] = useState<AnonymizeConfig | null>(null);
   const [stage, setStage] = useState("");
+  // 用户自己改过文件夹名，换格式时就不再覆盖
+  const nameEdited = useRef(false);
+
+  useEffect(() => {
+    if (visible) nameEdited.current = false;
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
-    const tag = version ? `${version.name}_` : "";
-    setName(`${project.name}_${tag}${format}_${stamp()}`.replace(/[\\/:*?"<>|]/g, "_"));
+    if (!nameEdited.current) {
+      const tag = version ? `${version.name}_` : "";
+      setName(`${project.name}_${tag}${format}_${stamp()}`.replace(/[\\/:*?"<>|]/g, "_"));
+    }
     api.splitSummary().then(setSummary).catch(() => {});
   }, [visible, project.name, format, version]);
 
@@ -136,6 +144,9 @@ export default function ExportModal({
             <div className="dim" style={{ wordBreak: "break-all", marginTop: 6 }}>
               {res.outDir}
             </div>
+            <Button size="small" icon={<FolderOpenOutlined />} style={{ marginTop: 8 }} onClick={() => api.revealPath(res.outDir).catch((e) => message.error(errText(e)))}>
+              {t("打开文件夹")}
+            </Button>
           </div>
         ),
       });
@@ -251,7 +262,15 @@ export default function ExportModal({
               {t("浏览")}
             </Button>
           </Space.Compact>
-          <Input style={{ marginTop: 8 }} value={name} onChange={(e) => setName(e.target.value)} addonBefore={t("文件夹名")} />
+          <Input
+            style={{ marginTop: 8 }}
+            value={name}
+            onChange={(e) => {
+              nameEdited.current = true;
+              setName(e.target.value);
+            }}
+            addonBefore={t("文件夹名")}
+          />
         </Form.Item>
         <Form.Item label={t("打码")}>
           <AnonymizeOptions task={project.task} value={anonymize} onChange={setAnonymize} />
