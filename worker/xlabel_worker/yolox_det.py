@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import random
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -66,14 +67,25 @@ def build_net(key: str, num_classes: int) -> YOLOX:
     return net
 
 
+def _load_weights(url: str, name: str):
+    return torch.hub.load_state_dict_from_url(url, map_location="cpu", progress=False, check_hash=False, file_name=name, weights_only=False)
+
+
 def load_pretrained(net: YOLOX, key: str) -> bool:
     """加载 COCO 预训练权重；类别数不同的分类输出层跳过（重新学）"""
     name = SPECS[key]["file"]
+    # 下载过的文件放在这里，已存在就不再下载。上次没下完整（断网、被代理截断）的文件会一直读不出来，得删掉重下
+    cached = Path(torch.hub.get_dir()) / "checkpoints" / name
     for url in WEIGHT_URLS:
         try:
-            ck = torch.hub.load_state_dict_from_url(
-                url.format(name), map_location="cpu", progress=False, check_hash=False, file_name=name, weights_only=False
-            )
+            try:
+                ck = _load_weights(url.format(name), name)
+            except Exception:
+                if not cached.exists():
+                    raise
+                log(tr("本地的预训练权重文件损坏（{path}），删掉重新下载", path=cached))
+                cached.unlink(missing_ok=True)
+                ck = _load_weights(url.format(name), name)
             state = ck.get("model", ck)
             own = net.state_dict()
             keep = {k: v for k, v in state.items() if k in own and own[k].shape == v.shape}
@@ -81,6 +93,7 @@ def load_pretrained(net: YOLOX, key: str) -> bool:
             log(tr("已加载 COCO 预训练权重（{name}，沿用 {keep}/{own} 组参数）", name=name, keep=len(keep), own=len(own)))
             return True
         except Exception as e:  # 多半是网络问题，换下一个地址
+            cached.unlink(missing_ok=True)
             log(tr("下载预训练权重失败（{url}）：{e}", url=url.format(name), e=e))
     log(tr("没有可用的预训练权重，从头训练，效果会差很多"))
     return False

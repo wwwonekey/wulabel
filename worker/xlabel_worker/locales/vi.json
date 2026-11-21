@@ -115,5 +115,6 @@
   "下载预训练权重失败（{url}）：{e}": "Tải trọng số tiền huấn luyện thất bại ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "Huấn luyện YOLOX đi qua YoloxTask, không qua lớp bọc này",
   "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "{n} epoch cuối: tắt Mosaic / MixUp, thêm L1 loss",
-  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Không mở được nguồn video: {src}. Với luồng video hãy kiểm tra địa chỉ, tài khoản mật khẩu và mạng; với tệp video hãy kiểm tra đường dẫn và định dạng."
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Không mở được nguồn video: {src}. Với luồng video hãy kiểm tra địa chỉ, tài khoản mật khẩu và mạng; với tệp video hãy kiểm tra đường dẫn và định dạng.",
+  "本地的预训练权重文件损坏（{path}），删掉重新下载": "Tệp trọng số huấn luyện sẵn trên máy bị hỏng ({path}); xóa và tải lại"
 }

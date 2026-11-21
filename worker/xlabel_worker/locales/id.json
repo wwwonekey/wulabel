@@ -115,5 +115,6 @@
   "下载预训练权重失败（{url}）：{e}": "Gagal mengunduh bobot pralatih ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "Pelatihan YOLOX lewat YoloxTask, tidak melalui wrapper ini",
   "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "{n} epoch terakhir: Mosaic / MixUp dimatikan, loss L1 diaktifkan",
-  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Sumber video tidak dapat dibuka: {src}. Untuk stream, periksa URL, nama pengguna/kata sandi, dan jaringan; untuk file video, periksa path dan formatnya."
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Sumber video tidak dapat dibuka: {src}. Untuk stream, periksa URL, nama pengguna/kata sandi, dan jaringan; untuk file video, periksa path dan formatnya.",
+  "本地的预训练权重文件损坏（{path}），删掉重新下载": "File bobot pralatih lokal rusak ({path}); menghapus dan mengunduh ulang"
 }

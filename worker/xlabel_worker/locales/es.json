@@ -115,5 +115,6 @@
   "下载预训练权重失败（{url}）：{e}": "No se pudieron descargar los pesos preentrenados ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "El entrenamiento de YOLOX usa YoloxTask y no pasa por este contenedor",
   "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "Últimas {n} épocas: se desactivan Mosaic / MixUp y se añade la pérdida L1",
-  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "No se puede abrir la fuente de video: {src}. Para transmisiones, comprueba la dirección, el usuario y la contraseña, y la red; para archivos de video, comprueba la ruta y el formato."
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "No se puede abrir la fuente de video: {src}. Para transmisiones, comprueba la dirección, el usuario y la contraseña, y la red; para archivos de video, comprueba la ruta y el formato.",
+  "本地的预训练权重文件损坏（{path}），删掉重新下载": "El archivo local de pesos preentrenados está dañado ({path}); se elimina y se vuelve a descargar"
 }
