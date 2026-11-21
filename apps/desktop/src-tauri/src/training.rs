@@ -1067,6 +1067,17 @@ pub struct PrelabelResult {
     pub boxes: usize,
 }
 
+/// 批量预标注的停止开关（模型、文本提示、巡瞳 AI 共用）：每批之间检查，已经标好的保留
+static PRELABEL_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn prelabel_stop(on: bool) {
+    PRELABEL_STOP.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn prelabel_stopped() -> bool {
+    PRELABEL_STOP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// 批量预标注的对象：「未标注」且没有任何标注的图（id, 图片文件）
 pub fn prelabel_targets(p: &Project) -> AppResult<Vec<(i64, PathBuf)>> {
     let conn = p.conn.lock();
@@ -1088,6 +1099,7 @@ pub fn prelabel_all(
     conf: f64,
     progress: &dyn Fn(usize, usize),
 ) -> AppResult<PrelabelResult> {
+    prelabel_stop(false);
     let w = weights_of(p, run_id)?;
     let items = prelabel_targets(p)?;
     let total = items.len();
@@ -1096,6 +1108,9 @@ pub fn prelabel_all(
     let mut done = 0;
     progress(0, total);
     for chunk in items.chunks(16) {
+        if prelabel_stopped() {
+            break;
+        }
         let mut got: Vec<(i64, RawPred)> = Vec::new();
         let classes = pr.request(rt, &w, chunk, conf, &mut |id, r| got.push((id, r)))?;
         if map.is_none() {

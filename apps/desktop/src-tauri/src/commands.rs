@@ -1046,6 +1046,32 @@ pub async fn delete_label(state: State<'_, AppState>, share: State<'_, Share>, i
     Ok(n)
 }
 
+// ---------- 标注页：缩略图状态、合并类别、停止批量预标注 ----------
+
+/// 全部图片的 (id, 状态)，缩略图条上的状态点用
+#[tauri::command]
+pub async fn image_statuses(state: State<'_, AppState>) -> AppResult<Vec<(i64, String)>> {
+    annotations::statuses(&*state.current()?)
+}
+
+/// 把类别 from 的标注合并到类别 to，再删掉 from
+#[tauri::command]
+pub async fn merge_label(state: State<'_, AppState>, share: State<'_, Share>, from: i64, to: i64) -> AppResult<usize> {
+    let project = state.current()?;
+    let n = annotations::merge_label(&project, from, to)?;
+    if let Some(h) = share.hub_for(&project) {
+        h.labels_changed(&h.host_member(), &t!("合并了两个类别"));
+    }
+    Ok(n)
+}
+
+/// 停止批量预标注，已经标好的保留
+#[tauri::command]
+pub async fn stop_prelabel() -> AppResult<()> {
+    training::prelabel_stop(true);
+    Ok(())
+}
+
 // ---------- 实时协作（主机这边） ----------
 
 fn host_name(share: &Share, p: &Project) -> String {

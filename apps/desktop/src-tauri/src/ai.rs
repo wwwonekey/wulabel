@@ -308,6 +308,7 @@ pub fn prelabel_all(
     progress: &dyn Fn(usize, usize),
     log: &(dyn Fn(String) + Sync),
 ) -> AppResult<PrelabelResult> {
+    training::prelabel_stop(false);
     let (base, key) = config(rt)?;
     // 专用模型（含自己上传的模型）走批量接口，并发发送，快很多
     if model != CLASSES && model != LLM {
@@ -319,6 +320,9 @@ pub fn prelabel_all(
     let mut result = PrelabelResult { images: 0, boxes: 0 };
     progress(0, total);
     for (n, (id, path)) in items.iter().enumerate() {
+        if training::prelabel_stopped() {
+            break;
+        }
         let r = recognize(&base, &key, path, model, conf, &rules).and_then(|found| to_pred(p, rt, pr, *id, found, log));
         let pred = match r {
             Ok(v) => v,
@@ -415,7 +419,7 @@ fn prelabel_special(
             let tx = tx.clone();
             let (chunks, next, stop) = (&chunks, &next, &stop);
             s.spawn(move || loop {
-                if stop.load(Ordering::Relaxed) {
+                if stop.load(Ordering::Relaxed) || training::prelabel_stopped() {
                     break;
                 }
                 let i = next.fetch_add(1, Ordering::Relaxed);

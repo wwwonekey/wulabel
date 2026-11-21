@@ -625,6 +625,10 @@ export const api = {
   aiDetect: (imageId: number, model: string, conf: number) => invoke<PredResult>("ai_detect", { imageId, model, conf }),
   aiPrelabelAll: (model: string, conf: number) => invoke<{ images: number; boxes: number }>("ai_prelabel_all", { model, conf }),
   deleteLabel: (id: number) => invoke<number>("delete_label", { id }),
+  /** 标注页：全部图片的 [id, 状态]、合并类别、停止批量预标注 */
+  imageStatuses: () => invoke<[number, ImageStatus][]>("image_statuses"),
+  mergeLabel: (from: number, to: number) => invoke<number>("merge_label", { from, to }),
+  stopPrelabel: () => invoke<void>("stop_prelabel"),
 
   createProject: (parent: string, name: string, task: Task) =>
     invoke<ProjectInfo>("create_project", { parent, name, task }),

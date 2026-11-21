@@ -619,6 +619,12 @@ fn call(hub: &Hub, m: &Member, cmd: &str, args: &Value) -> AppResult<Value> {
             let status: Option<String> = arg(args, "status")?;
             serde_json::to_value(team::list_ids(p, m, status.as_deref())?)?
         }
+        "image_statuses" => {
+            // 只给成员看得到的图
+            let mine: std::collections::HashSet<i64> = team::list_ids(p, m, None)?.into_iter().collect();
+            let v: Vec<(i64, String)> = annotations::statuses(p)?.into_iter().filter(|(id, _)| mine.contains(id)).collect();
+            serde_json::to_value(v)?
+        }
         "load_annotations" => {
             let id: i64 = arg(args, "imageId")?;
             team::ensure_access(p, m, id)?;
