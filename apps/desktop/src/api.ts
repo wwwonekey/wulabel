@@ -468,6 +468,10 @@ export interface RunDetail {
   /** reevaluated：用「重新评估」按当时的数据算的（evaluatedAt 是时间） */
   eval: { classes: string[]; bestEpoch: number | null; splits: Record<string, SplitEval>; reevaluated?: boolean; evaluatedAt?: number } | null;
   log: string[];
+  /** 日志开头几行（设备、数据量、预训练权重） */
+  logHead: string[];
+  /** 训练时的醒目提示。code：no_pretrained 没加载到预训练权重，zero_metric 主指标一直是 0 */
+  warnings: { code: string; msg: string }[];
   error: string | null;
 }
 

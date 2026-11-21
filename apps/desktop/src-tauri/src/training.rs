@@ -77,6 +77,10 @@ pub struct RunDetail {
     pub metrics: Vec<serde_json::Value>,
     pub eval: Option<serde_json::Value>,
     pub log: Vec<String>,
+    /// 日志开头几行（设备、数据量、预训练权重），日志长了 log 里就没有了
+    pub log_head: Vec<String>,
+    /// worker 发来的醒目提示（warn 事件：code、msg），存在 warnings.jsonl
+    pub warnings: Vec<serde_json::Value>,
     pub error: Option<String>,
 }
 
@@ -166,8 +170,28 @@ pub fn detail(p: &Project, id: i64) -> AppResult<RunDetail> {
     let log_text = fs::read_to_string(dir.join("log.txt")).unwrap_or_default();
     let lines: Vec<String> = log_text.lines().map(String::from).collect();
     let log = lines[lines.len().saturating_sub(300)..].to_vec();
+    let log_head = lines.iter().take(15).cloned().collect();
+    let warnings = read_warnings(&dir);
     let error = fs::read_to_string(dir.join("error.txt")).ok();
-    Ok(RunDetail { run, metrics, eval, log, error })
+    Ok(RunDetail { run, metrics, eval, log, log_head, warnings, error })
+}
+
+fn read_warnings(dir: &Path) -> Vec<serde_json::Value> {
+    fs::read_to_string(dir.join("warnings.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect()
+}
+
+/// 记下一条醒目提示，同一种（code）只记一次
+fn add_warning(dir: &Path, ev: &serde_json::Value) {
+    if read_warnings(dir).iter().any(|w| w["code"] == ev["code"]) {
+        return;
+    }
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(dir.join("warnings.jsonl")) {
+        let _ = writeln!(f, "{ev}");
+    }
 }
 
 pub fn delete_run(p: &Project, jobs: &Jobs, id: i64) -> AppResult<()> {
@@ -341,8 +365,11 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                 Some("log") => {
                     let _ = writeln!(log_file.lock(), "{}", ev["msg"].as_str().unwrap_or(""));
                 }
+                Some("warn") => add_warning(&dir, &ev),
                 Some("batch") => {
                     // 显存不够自动调小了批大小：训练记录里改成实际用的，原来设的另存一份
+                    // 会从头重训，上一次的提示作废（预训练权重的提示重训时会再发）
+                    let _ = fs::remove_file(dir.join("warnings.jsonl"));
                     if let Some(b) = ev["batch"].as_u64() {
                         let conn = p.conn.lock();
                         let saved: Option<String> =
