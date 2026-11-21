@@ -84,7 +84,6 @@
   "开始误报测试：每秒检测 {fps} 帧，阈值 {conf}": "Iniciando la prueba de falsos positivos: se detectan {fps} fotogramas por segundo, umbral {conf}",
   "视频流读取失败，第 {n} 次重连…": "No se pudo leer la transmisión de video; reintento de conexión n.º {n}…",
   "图片编码失败": "No se pudo codificar la imagen",
-  "打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。": "No se puede abrir la fuente de video: {src}. Para RTSP, comprueba la dirección, el usuario y la contraseña, y la red; para archivos de video, comprueba la ruta y el formato.",
   "{label}预训练权重": "pesos preentrenados de {label}",
   "骨干网络预训练权重": "pesos preentrenados de la red troncal",
   "已加载 {what}": "Se cargó {what}",
@@ -115,5 +114,6 @@
   "已加载 COCO 预训练权重（{name}，沿用 {keep}/{own} 组参数）": "Pesos preentrenados de COCO cargados ({name}, se reutilizan {keep}/{own} grupos de parámetros)",
   "下载预训练权重失败（{url}）：{e}": "No se pudieron descargar los pesos preentrenados ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "El entrenamiento de YOLOX usa YoloxTask y no pasa por este contenedor",
-  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "Últimas {n} épocas: se desactivan Mosaic / MixUp y se añade la pérdida L1"
+  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "Últimas {n} épocas: se desactivan Mosaic / MixUp y se añade la pérdida L1",
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "No se puede abrir la fuente de video: {src}. Para transmisiones, comprueba la dirección, el usuario y la contraseña, y la red; para archivos de video, comprueba la ruta y el formato."
 }

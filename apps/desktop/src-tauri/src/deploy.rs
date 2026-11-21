@@ -1,4 +1,4 @@
-//! 部署：实时验证（RTSP / 视频文件）、多格式导出、推理服务包
+//! 部署：实时验证（视频流 / 视频文件）、多格式导出、推理服务包
 
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -72,7 +72,7 @@ impl Live {
         self.stop();
         let source = source.trim();
         if source.is_empty() {
-            return Err(msg(t!("请填写 RTSP 地址或选择视频文件")));
+            return Err(msg(t!("请填写视频流地址或选择视频文件")));
         }
         if !source.contains("://") && !Path::new(source).is_file() {
             return Err(msg(t!("视频文件不存在：{source}", source = source)));
@@ -268,6 +268,10 @@ pub fn build_service(
     }
     let mut cfg = config.clone();
     cfg["model"] = serde_json::json!("model.onnx");
+    // 关键点模型：告警截图按项目的骨架连线画
+    if training::model_task(training::get_run(p, run_id)?.config["model"].as_str().unwrap_or("")) == "pose" {
+        cfg["skeleton"] = serde_json::json!(crate::keypoints::get(p)?.skeleton);
+    }
     fs::write(out.join("config.json"), serde_json::to_string_pretty(&cfg)?)?;
     log(t!("服务包已生成"));
     Ok(out.to_string_lossy().into_owned())

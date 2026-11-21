@@ -31,7 +31,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          set +e
           python -m unittest discover -s tests -v 2>&1 | tee test-output.txt
+          status=$?
+          set -e
           {
             echo '### 测试结果'
             echo '```'
@@ -41,3 +44,9 @@ jobs:
           # 运行页面上直接能看到的一行结果
           echo "::notice title=测试结果::$(grep -E '^Ran |^OK|^FAILED' test-output.txt | tr '\n' ' ') $(grep -cE '\.\.\. ok$' test-output.txt) 项通过"
           echo "::notice title=YOLOX 冒烟测试::$(grep -oE 'test_[a-z_]+ \([^)]*\) \.\.\. [a-z]+' test-output.txt | tr '\n' '；')"
+          # 失败时把出错的测试和报错写成注释，不登录也能在运行页面看到
+          if [ "$status" -ne 0 ]; then
+            grep -E '^(ERROR|FAIL):' test-output.txt | while read -r l; do echo "::error title=失败的测试::$l"; done
+            grep -A 25 -E '^(ERROR|FAIL):' test-output.txt | grep -E 'File "|Error|assert|^[A-Za-z]+:' | tail -20 | while read -r l; do echo "::error title=报错::$l"; done
+          fi
+          exit "$status"

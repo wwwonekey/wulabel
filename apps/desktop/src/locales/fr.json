@@ -31,7 +31,6 @@
   "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）": "R dessiner un polygone (cliquer point par point, double-clic ou Enter pour fermer, Retour arrière pour annuler un point)",
   "RKNN 转换包": "Package de conversion RKNN",
   "RT-DETR（Ultralytics）": "RT-DETR (Ultralytics)",
-  "RTSP 摄像头": "Caméra RTSP",
   "SAM 准备中…（首次使用要安装组件、下载模型，可能需要几分钟）": "Préparation de SAM… (la première utilisation installe des composants et télécharge le modèle, ce qui peut prendre quelques minutes)",
   "SAM 计算中…": "SAM calcule…",
   "TensorRT 转换包": "Package de conversion TensorRT",
@@ -49,9 +48,7 @@
   "images + labels + data.yaml，Ultralytics 等直接可用": "images + labels + data.yaml, utilisable directement avec Ultralytics et autres",
   "keypoints + skeleton，通用格式": "keypoints + skeleton, format courant",
   "macOS 版（Apple 芯片用 MPS 加速）": "Version macOS (accélération MPS sur puce Apple)",
-  "rtsp://admin:密码@192.168.1.64:554/Streaming/Channels/101": "rtsp://admin:motdepasse@192.168.1.64:554/Streaming/Channels/101",
   "rtsp://…  或  https://…": "rtsp://…  ou  https://…",
-  "rtsp://… 或视频文件路径": "rtsp://… ou chemin d'un fichier vidéo",
   "sk-live-…（在巡瞳 AI 控制台的「API Key」页创建）": "sk-live-… (à créer sur la page « API Key » de la console Xuntong AI)",
   "train/类别/图片.jpg，ImageNet、YOLO-cls 通用": "train/<classe>/<image>.jpg, compatible ImageNet et YOLO-cls",
   "{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键": "{draw} · S sélection intelligente · V sélectionner · 1–9 changer de classe · Del supprimer · A/D image préc./suiv. · Enter valider · P pré-annoter · Molette zoom · Espace ou clic droit glissé pour déplacer · H masquer les noms de classe · ? tous les raccourcis",
@@ -384,7 +381,6 @@
   "在线": "En ligne",
   "在线 · 巡瞳官方中转": "En ligne · Relais officiel Xuntong",
   "在线 · 自建中转": "En ligne · Relais auto-hébergé",
-  "填写 RTSP 地址或选择视频文件，点「开始」查看模型的实时检测效果": "Saisissez une adresse RTSP ou choisissez un fichier vidéo, puis cliquez sur « Démarrer » pour voir la détection en direct du modèle",
   "备注": "Note",
   "备注（可选）：这一版改了什么": "Note (facultatif) : ce qui a changé dans cette version",
   "复制上一张的标注 (Ctrl+D)": "Copier les annotations de l'image précédente (Ctrl+D)",
@@ -1319,5 +1315,8 @@
   "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "Le bouton du guide et les liens vers le site dans les notifications de mise à jour ouvrent désormais la page dans la langue de l'interface ; les messages du serveur lors de l'envoi de commentaires ou de la vérification des mises à jour suivent aussi cette langue.",
   "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI est une plateforme chinoise : ses fonctions sont masquées par défaut dans les interfaces non chinoises. Activez-les dans Paramètres → Xuntong AI si besoin.",
   "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Correction de quelques traductions maladroites ou incohérentes en vietnamien, russe, indonésien, espagnol et allemand.",
-  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Sous Linux, l'extraction d'images depuis des vidéos télécharge maintenant ffmpeg automatiquement ; plus besoin de l'installer soi-même."
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Sous Linux, l'extraction d'images depuis des vidéos télécharge maintenant ffmpeg automatiquement ; plus besoin de l'installer soi-même.",
+  "填写视频流地址或选择视频文件，点「开始」查看模型的实时效果": "Saisissez l'adresse d'un flux ou choisissez un fichier vidéo, puis cliquez sur « Démarrer » pour voir les résultats du modèle en direct",
+  "rtsp:// / http(s):// 地址或视频文件路径": "Adresse rtsp:// / http(s):// ou chemin d'un fichier vidéo",
+  "分类模型按整张画面告警：某个类别的概率达到置信度阈值就告警，不按区域过滤。": "Les modèles de classification jugent l'image entière : une alerte est levée quand la probabilité d'une classe atteint le seuil de confiance. Les zones ne sont pas utilisées."
 }

@@ -436,7 +436,7 @@ pub enum Deploy {
     Live,
 }
 
-/// 不是每种模型都支持全部部署方式，提前拦住给出清楚提示
+/// 内置模型（检测、分割、关键点、分类）都支持全部部署方式；导入的外部模型提前拦住给出清楚提示
 pub fn ensure_deployable(p: &Project, id: i64, what: Deploy) -> AppResult<()> {
     let run = get_run(p, id)?;
     if run.engine == EXTERNAL {
@@ -446,18 +446,7 @@ pub fn ensure_deployable(p: &Project, id: i64, what: Deploy) -> AppResult<()> {
             t!("导入的外部模型暂不支持实时验证和推理服务包，可以用来预标注、评估和误报测试")
         }));
     }
-    let task = model_task(run.config["model"].as_str().unwrap_or(""));
-    let err = match (task, what) {
-        ("detect", _) => None,
-        (_, Deploy::Onnx) => None,
-        ("classify", _) => Some(t!("分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型")),
-        ("segment", _) => Some(t!("分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型")),
-        _ => Some(t!("关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型")),
-    };
-    match err {
-        Some(e) => Err(msg(e)),
-        None => Ok(()),
-    }
+    Ok(())
 }
 
 pub fn export_onnx(p: &Project, rt: &Runtime, id: i64, log: &(dyn Fn(String) + Sync)) -> AppResult<String> {

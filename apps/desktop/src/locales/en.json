@@ -31,7 +31,6 @@
   "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）": "R draw polygon (click point by point, double-click or Enter to close, Backspace to undo a point)",
   "RKNN 转换包": "RKNN conversion package",
   "RT-DETR（Ultralytics）": "RT-DETR (Ultralytics)",
-  "RTSP 摄像头": "RTSP camera",
   "SAM 准备中…（首次使用要安装组件、下载模型，可能需要几分钟）": "Preparing SAM… (first use installs components and downloads the model, which may take a few minutes)",
   "SAM 计算中…": "SAM is working…",
   "TensorRT 转换包": "TensorRT conversion package",
@@ -49,9 +48,7 @@
   "images + labels + data.yaml，Ultralytics 等直接可用": "images + labels + data.yaml, ready for Ultralytics and others",
   "keypoints + skeleton，通用格式": "keypoints + skeleton, a common format",
   "macOS 版（Apple 芯片用 MPS 加速）": "macOS version (MPS acceleration on Apple silicon)",
-  "rtsp://admin:密码@192.168.1.64:554/Streaming/Channels/101": "rtsp://admin:password@192.168.1.64:554/Streaming/Channels/101",
   "rtsp://…  或  https://…": "rtsp://…  or  https://…",
-  "rtsp://… 或视频文件路径": "rtsp://… or video file path",
   "sk-live-…（在巡瞳 AI 控制台的「API Key」页创建）": "sk-live-… (create one on the \"API Key\" page of the Xuntong AI console)",
   "train/类别/图片.jpg，ImageNet、YOLO-cls 通用": "train/<class>/<image>.jpg, works with ImageNet and YOLO-cls",
   "{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键": "{draw} · S smart select · V select · 1–9 switch class · Del delete · A/D prev/next · Enter approve · P pre-label · Wheel zoom · Space or right-drag to pan · H hide class names · ? all shortcuts",
@@ -384,7 +381,6 @@
   "在线": "Online",
   "在线 · 巡瞳官方中转": "Online · Xuntong official relay",
   "在线 · 自建中转": "Online · Self-hosted relay",
-  "填写 RTSP 地址或选择视频文件，点「开始」查看模型的实时检测效果": "Enter an RTSP URL or choose a video file, then click \"Start\" to see the model's live detection results",
   "备注": "Note",
   "备注（可选）：这一版改了什么": "Note (optional): what changed in this version",
   "复制上一张的标注 (Ctrl+D)": "Copy the previous image's annotations (Ctrl+D)",
@@ -1319,5 +1315,8 @@
   "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "The \"View tutorial\" button and the website links in update notices now open the page in your interface language; messages from the server for feedback and update checks follow the interface language too.",
   "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI is a platform in China, so its features are hidden by default in non-Chinese interfaces. Turn them on in Settings → Xuntong AI if you need them.",
   "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Fixed some awkward or inconsistent translations in Vietnamese, Russian, Indonesian, Spanish and German.",
-  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "On Linux, extracting frames from videos now downloads ffmpeg automatically, so you no longer need to install it yourself."
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "On Linux, extracting frames from videos now downloads ffmpeg automatically, so you no longer need to install it yourself.",
+  "填写视频流地址或选择视频文件，点「开始」查看模型的实时效果": "Enter a stream URL or choose a video file, then click \"Start\" to see the model's live results",
+  "rtsp:// / http(s):// 地址或视频文件路径": "rtsp:// / http(s):// URL or video file path",
+  "分类模型按整张画面告警：某个类别的概率达到置信度阈值就告警，不按区域过滤。": "Classification models alert on the whole frame: an alert fires when a class's probability reaches the confidence threshold. Regions are not used."
 }

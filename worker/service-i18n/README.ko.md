@@ -42,7 +42,7 @@ NVIDIA 그래픽카드로 GPU 추론을 하려면: `requirements.txt`의 `onnxru
 }
 ```
 
-- 영상 소스에 로컬 동영상 파일 경로를 넣어 테스트할 수도 있습니다(기본적으로 반복 재생).
+- 영상 소스는 RTSP, HTTP-FLV, HLS(m3u8), http의 MP4를 지원하며, 로컬 동영상 파일 경로를 넣어 테스트할 수도 있습니다(로컬 파일과 http 주문형 영상은 기본적으로 반복 재생).
 - 검출 영역은 박스의 **아래쪽 변 중점**(사람이나 차량이 서 있는 위치)을 기준으로 판단합니다.
 
 ## 경보 내용
@@ -62,6 +62,17 @@ Webhook(POST JSON)과 MQTT로 전송되는 메시지:
 ```
 
 Webhook에서 `with_image`를 켜면 `image_base64` 필드(박스를 그린 JPEG)가 추가됩니다.
+
+## 모델별 결과
+
+`detections` 각 항목의 필드는 모델에 따라 다릅니다. `GET /health`와 `POST /predict`가 반환하는 `task`로 모델 종류를 알 수 있습니다:
+
+| 모델 | task | 각 항목의 필드 |
+|---|---|---|
+| 객체 검출 | `detect` | `label`, `score`, `box` [x, y, w, h] |
+| 인스턴스 분할 | `segment` | 위와 같고 `polygon` [x1, y1, x2, y2, …]가 추가됨(대상 윤곽, 원본 이미지 픽셀) |
+| 키포인트 | `pose` | 위와 같고 `keypoints` [x, y, v, …]가 추가됨(v가 2면 찾음, 0이면 못 찾음). 경보 캡처는 `config.json`의 `skeleton`으로 골격을 그림 |
+| 이미지 분류 | `classify` | `label`, `score`, `box` 없음: 확률이 `min_score` 이상인 클래스마다 한 항목(최대 5개). 분류는 화면 전체로 판단하며 `region`으로 거르지 않음 |
 
 ## HTTP API
 

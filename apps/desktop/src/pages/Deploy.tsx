@@ -79,9 +79,19 @@ interface FrameEv {
   w: number;
   h: number;
   boxes: [number, number, number, number, number, number][];
+  /** 分割：和 boxes 一一对应的多边形 [x1, y1, ...]（拿不到轮廓时为空） */
+  polys?: number[][];
+  /** 关键点：和 boxes 一一对应的 [x, y, v, ...] */
+  kpts?: number[][];
+  /** 分类：前几名 [类别序号, 概率] */
+  tags?: [number, number][];
   ms: number;
   fps: number;
 }
+
+/** 模型对应的任务（和后端 training::model_task 一致） */
+const taskOf = (model?: string) =>
+  model?.startsWith("maskrcnn") ? "segment" : model?.startsWith("keypointrcnn") ? "pose" : model?.startsWith("cls_") ? "classify" : "detect";
 
 function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
   const { message } = App.useApp();
@@ -100,6 +110,8 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
   const busy = useRef(false);
   const classesRef = useRef<string[]>([]);
   classesRef.current = classes;
+  const confRef = useRef(conf);
+  confRef.current = conf;
 
   const colorOf = useCallback(
     (name: string) => labels.find((l) => l.name === name)?.color ?? "#ffd43b",
@@ -107,6 +119,10 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
   );
   const colorRef = useRef(colorOf);
   colorRef.current = colorOf;
+  const skeleton = useRef<[number, number][]>([]);
+  useEffect(() => {
+    if (taskOf(run.config?.model) === "pose") api.keypointTemplate().then((tp) => (skeleton.current = tp.skeleton)).catch(() => {});
+  }, [run]);
 
   const drawFrame = (f: FrameEv) => {
     const cv = canvas.current;
@@ -129,13 +145,48 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
       const k = (W * dpr) / f.w;
       ctx.lineWidth = 2 * dpr;
       ctx.font = `${12 * dpr}px "Microsoft YaHei UI", sans-serif`;
-      for (const [x, y, w, h, c, sc] of f.boxes) {
+      f.boxes.forEach(([x, y, w, h, c, sc], i) => {
         const name = classesRef.current[c] ?? String(c);
         const color = colorRef.current(name);
         ctx.strokeStyle = color;
         ctx.fillStyle = rgba(color, 0.12);
-        ctx.fillRect(x * k, y * k, w * k, h * k);
-        ctx.strokeRect(x * k, y * k, w * k, h * k);
+        const poly = f.polys?.[i];
+        if (poly && poly.length >= 6) {
+          // 分割：画轮廓，框只描细线
+          ctx.beginPath();
+          for (let j = 0; j < poly.length; j += 2) ctx.lineTo(poly[j] * k, poly[j + 1] * k);
+          ctx.closePath();
+          ctx.fillStyle = rgba(color, 0.3);
+          ctx.fill();
+          ctx.stroke();
+          ctx.lineWidth = 1 * dpr;
+          ctx.strokeRect(x * k, y * k, w * k, h * k);
+          ctx.lineWidth = 2 * dpr;
+        } else {
+          ctx.fillRect(x * k, y * k, w * k, h * k);
+          ctx.strokeRect(x * k, y * k, w * k, h * k);
+        }
+        const kp = f.kpts?.[i];
+        if (kp) {
+          const at = (j: number) => (kp[j * 3 + 2] > 0 ? [kp[j * 3] * k, kp[j * 3 + 1] * k] : null);
+          for (const [a, b] of skeleton.current) {
+            const pa = at(a);
+            const pb = at(b);
+            if (!pa || !pb) continue;
+            ctx.beginPath();
+            ctx.moveTo(pa[0], pa[1]);
+            ctx.lineTo(pb[0], pb[1]);
+            ctx.stroke();
+          }
+          ctx.fillStyle = "#fff";
+          for (let j = 0; j * 3 < kp.length; j++) {
+            const pt = at(j);
+            if (!pt) continue;
+            ctx.beginPath();
+            ctx.arc(pt[0], pt[1], 3 * dpr, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
         const text = `${name} ${sc.toFixed(2)}`;
         const tw = ctx.measureText(text).width + 8 * dpr;
         const ty = y * k > 18 * dpr ? y * k - 18 * dpr : y * k;
@@ -143,7 +194,19 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
         ctx.fillRect(x * k, ty, tw, 18 * dpr);
         ctx.fillStyle = "#fff";
         ctx.fillText(text, x * k + 4 * dpr, ty + 13 * dpr);
-      }
+      });
+      // 分类：整张画面的前几名写在左上角
+      ctx.font = `${15 * dpr}px "Microsoft YaHei UI", sans-serif`;
+      (f.tags ?? []).forEach(([c, p], i) => {
+        const name = classesRef.current[c] ?? String(c);
+        const text = `${name} ${p.toFixed(2)}`;
+        const tw = ctx.measureText(text).width + 12 * dpr;
+        const ty = (8 + i * 28) * dpr;
+        ctx.fillStyle = i === 0 ? colorRef.current(name) : "rgba(0,0,0,0.55)";
+        ctx.fillRect(8 * dpr, ty, tw, 24 * dpr);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(text, 14 * dpr, ty + 17 * dpr);
+      });
     };
     img.onerror = () => (busy.current = false);
     img.src = `data:image/jpeg;base64,${f.jpg}`;
@@ -165,6 +228,9 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
           const n = classesRef.current[b[4]] ?? String(b[4]);
           counts[n] = (counts[n] ?? 0) + 1;
         }
+        // 分类：只显示概率最高的类别
+        const top = f.tags?.[0];
+        if (top && top[1] >= confRef.current) counts[classesRef.current[top[0]] ?? String(top[0])] = 1;
         setStat({ w: f.w, h: f.h, fps: f.fps, ms: f.ms, counts });
       } else if (k === "log") {
         setStatus(String(data));
@@ -216,7 +282,7 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
           value={kind}
           onChange={(v) => setKind(v as string)}
           options={[
-            { value: "rtsp", label: t("RTSP 摄像头") },
+            { value: "rtsp", label: t("视频流") },
             { value: "file", label: t("本地视频") },
           ]}
         />
@@ -225,7 +291,7 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
             style={{ flex: 1, minWidth: 320 }}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder={t("rtsp://admin:密码@192.168.1.64:554/Streaming/Channels/101")}
+            placeholder={t("rtsp://…  或  https://…")}
           />
         ) : (
           <Space.Compact style={{ flex: 1, minWidth: 320 }}>
@@ -274,7 +340,7 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
       {error && <Alert type="error" showIcon style={{ marginBottom: 12 }} message={error} closable onClose={() => setError(null)} />}
       <div className="live-box">
         <canvas ref={canvas} style={{ display: stat ? "block" : "none" }} />
-        {!stat && <div className="dim">{status || t("填写 RTSP 地址或选择视频文件，点「开始」查看模型的实时检测效果")}</div>}
+        {!stat && <div className="dim">{status || t("填写视频流地址或选择视频文件，点「开始」查看模型的实时效果")}</div>}
         {stat && (
           <div className="live-stat">
             <span>{status}</span>
@@ -288,6 +354,8 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
         )}
       </div>
       <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+        {t("支持 RTSP 摄像头 / 直播流,以及 http(s) 的回放、点播地址(mp4、m3u8、flv)。")}
+        <br />
         {t("海康：rtsp://用户名:密码@IP:554/Streaming/Channels/101（主码流）或 102（子码流）；大华：rtsp://用户名:密码@IP:554/cam/realmonitor?channel=1&subtype=0")}
       </div>
     </div>
@@ -518,7 +586,7 @@ function ServiceTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
           {f.streams.map((s, i) => (
             <div key={i} className="row" style={{ marginBottom: 8, flexWrap: "nowrap" }}>
               <Input style={{ width: 110 }} value={s.name} placeholder={t("名称")} onChange={(e) => setStream(i, { name: e.target.value })} />
-              <Input value={s.url} placeholder={t("rtsp://… 或视频文件路径")} onChange={(e) => setStream(i, { url: e.target.value })} />
+              <Input value={s.url} placeholder={t("rtsp:// / http(s):// 地址或视频文件路径")} onChange={(e) => setStream(i, { url: e.target.value })} />
               <Button icon={<DeleteOutlined />} disabled={f.streams.length === 1} onClick={() => set({ streams: f.streams.filter((_, j) => j !== i) })} />
             </div>
           ))}
@@ -550,6 +618,11 @@ function ServiceTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
           <Checkbox checked={f.saveImage} onChange={(e) => set({ saveImage: e.target.checked })}>
             {t("保存告警截图（带框）")}
           </Checkbox>
+          {taskOf(run.config?.model) === "classify" && (
+            <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+              {t("分类模型按整张画面告警：某个类别的概率达到置信度阈值就告警，不按区域过滤。")}
+            </div>
+          )}
         </div>
 
         <div className="card">

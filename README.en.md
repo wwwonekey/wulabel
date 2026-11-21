@@ -59,7 +59,7 @@ Updates: the app checks for new versions on startup; click "Update now" and it d
 - **Dataset versions**: snapshot annotations, compare, export, train on a version, restore
 - **Training**: detection — YOLOX, Faster R-CNN, RetinaNet, FCOS, SSDLite; segmentation — Mask R-CNN; keypoints — Keypoint R-CNN; classification — MobileNetV3, EfficientNet, ResNet50. Augmentation, resume training, run comparison; batch size is reduced automatically when GPU memory runs out; import external ONNX models (YOLOv5 / v8 / v11, YOLOX, RT-DETR…) for pre-labeling and evaluation
 - **Evaluation**: mAP, precision, recall (accuracy and F1 for classification); per-class metrics, confusion matrix, error browser; threshold suggestions; false-positive test; delivery report export
-- **Deployment**: live test on a camera; export ONNX, OpenVINO, TensorRT / RKNN conversion packages; generate an inference service package (multi-stream, alert rules, Webhook / MQTT)
+- **Deployment**: live test on a camera or video stream; export ONNX, OpenVINO, TensorRT / RKNN conversion packages; generate an inference service package (multi-stream, alert rules, Webhook / MQTT). Live test and service packages support detection, segmentation, keypoint and classification models
 - **Collaboration**: your computer hosts, members log in from a browser over LAN or online; roles, assignment, per-image locks, review, workload stats, watermark. Or split into offline packages and merge them back
 
 ## Development

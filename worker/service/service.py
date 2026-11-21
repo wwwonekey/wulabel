@@ -1,4 +1,6 @@
-"""xlabel 推理服务：多路视频流检测 + 告警推送 + HTTP 接口。
+"""xlabel 推理服务：多路视频流推理（检测、分割、关键点、分类）+ 告警推送 + HTTP 接口。
+
+视频流支持 RTSP、HTTP-FLV、HLS（m3u8）、http 上的 MP4，也可以是本地视频文件。
 
 只依赖 onnxruntime、opencv-python-headless、numpy，配置见 config.json，说明见 README.md。
 运行：python service.py [config.json]
@@ -44,51 +46,116 @@ HERE = Path(__file__).resolve().parent
 log = logging.getLogger("xlabel")
 
 
-# ---------------- 检测 ----------------
+# ---------------- 推理 ----------------
+
+
+def mask_to_poly(mask: np.ndarray, scale: float) -> list[float]:
+    """一个目标的掩膜概率图转成多边形 [x1, y1, x2, y2, ...]（原图像素），取面积最大的一块"""
+    m = (mask > 0.5).astype(np.uint8)
+    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return []
+    c = max(cnts, key=cv2.contourArea)
+    if cv2.contourArea(c) < 10:
+        return []
+    pts = cv2.approxPolyDP(c, 0.004 * cv2.arcLength(c, True), True).reshape(-1, 2)
+    if len(pts) < 3:
+        return []
+    return [round(float(v) / scale, 1) for p in pts for v in p]
 
 
 class Detector:
+    """按导出的输出自动区分任务：probs → 分类；masks → 实例分割；keypoints → 关键点；否则目标检测"""
+
     def __init__(self, model_path: Path, use_gpu: bool, max_side: int):
         providers = ["CPUExecutionProvider"]
         if use_gpu and "CUDAExecutionProvider" in ort.get_available_providers():
             providers.insert(0, "CUDAExecutionProvider")
         self.sess = ort.InferenceSession(str(model_path), providers=providers)
-        self.input = self.sess.get_inputs()[0].name
+        inp = self.sess.get_inputs()[0]
+        self.input = inp.name
+        self.outputs = [o.name for o in self.sess.get_outputs()]
+        self.task = (
+            "classify" if "probs" in self.outputs
+            else "segment" if "masks" in self.outputs
+            else "pose" if "keypoints" in self.outputs
+            else "detect"
+        )
+        # 分类模型输入固定尺寸 [N, 3, S, S]
+        self.size = inp.shape[-1] if isinstance(inp.shape[-1], int) else 224
         meta = json.loads(model_path.with_name("model.json").read_text(encoding="utf-8"))
         self.classes: list[str] = meta["classes"]
         self.max_side = max_side
         self.lock = threading.Lock()
         log.info(tr("模型已加载：%s，类别 %s，推理设备 %s"), model_path.name, self.classes, self.sess.get_providers()[0])
 
+    def name_of(self, i: int) -> str:
+        return self.classes[i] if 0 <= i < len(self.classes) else str(i)
+
     def detect(self, bgr: np.ndarray, min_score: float = 0.05) -> list[dict]:
+        """检测、分割、关键点：每个目标一项，带 box [x, y, w, h]（分割多 polygon，关键点多 keypoints [x, y, v, ...]）。
+        分类：概率不低于 min_score 的类别各一项（按概率从高到低，最多 5 个），没有 box"""
+        if self.task == "classify":
+            rgb = cv2.cvtColor(cv2.resize(bgr, (self.size, self.size), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
+            x = (rgb.astype(np.float32) / 255.0).transpose(2, 0, 1)[None]
+            with self.lock:
+                probs = self.sess.run(None, {self.input: x})[0][0]
+            order = np.argsort(-probs)[:5]
+            return [{"label": self.name_of(int(i)), "score": round(float(probs[i]), 4)} for i in order if probs[i] >= min_score]
         h, w = bgr.shape[:2]
         scale = min(1.0, self.max_side / max(h, w))
         img = cv2.resize(bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else bgr
         x = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32).transpose(2, 0, 1) / 255.0
         with self.lock:
-            boxes, labels, scores = self.sess.run(None, {self.input: x})
+            res = dict(zip(self.outputs, self.sess.run(None, {self.input: x})))
         out = []
-        for b, l, s in zip(boxes, labels, scores):
+        for i, (b, l, s) in enumerate(zip(res["boxes"], res["labels"], res["scores"])):
             if s < min_score:
                 continue
             x0, y0, x1, y1 = (b / scale).tolist()
-            cls = int(l) - 1
-            out.append(
-                {
-                    "label": self.classes[cls] if 0 <= cls < len(self.classes) else str(cls),
-                    "score": round(float(s), 4),
-                    "box": [round(x0, 1), round(y0, 1), round(x1 - x0, 1), round(y1 - y0, 1)],
-                }
-            )
+            d = {
+                "label": self.name_of(int(l) - 1),
+                "score": round(float(s), 4),
+                "box": [round(x0, 1), round(y0, 1), round(x1 - x0, 1), round(y1 - y0, 1)],
+            }
+            if self.task == "segment":
+                d["polygon"] = mask_to_poly(res["masks"][i, 0], scale)
+            elif self.task == "pose":
+                ks = res.get("keypoints_scores")
+                flat = []
+                for j, (kx, ky, _) in enumerate(res["keypoints"][i]):
+                    # 关键点分数 > 0 当成找到了（可见性记 2），否则记 0
+                    found = ks is None or ks[i, j] > 0
+                    flat += [round(float(kx) / scale, 1), round(float(ky) / scale, 1), 2] if found else [0, 0, 0]
+                d["keypoints"] = flat
+            out.append(d)
         return out
 
 
-def draw(bgr: np.ndarray, dets: list[dict]) -> np.ndarray:
+def draw(bgr: np.ndarray, dets: list[dict], skeleton: list | None = None) -> np.ndarray:
     img = bgr.copy()
-    for d in dets:
+    red = (0, 0, 255)
+    for k, d in enumerate(dets):
+        if "box" not in d:
+            # 分类：整张图的类别写在左上角
+            cv2.putText(img, f"{d['label']} {d['score']:.2f}", (10, 30 + 28 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.8, red, 2)
+            continue
         x, y, w, h = map(int, d["box"])
-        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        cv2.putText(img, f"{d['label']} {d['score']:.2f}", (x, max(y - 6, 14)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        poly = d.get("polygon")
+        if poly:
+            cv2.polylines(img, [np.array(poly, dtype=np.int32).reshape(-1, 2)], True, red, 2)
+        else:
+            cv2.rectangle(img, (x, y), (x + w, y + h), red, 2)
+        kp = d.get("keypoints")
+        if kp:
+            pts = [(int(kp[i]), int(kp[i + 1])) if kp[i + 2] > 0 else None for i in range(0, len(kp), 3)]
+            for a, b in skeleton or []:
+                if 0 <= a < len(pts) and 0 <= b < len(pts) and pts[a] and pts[b]:
+                    cv2.line(img, pts[a], pts[b], (0, 200, 255), 2)
+            for p in pts:
+                if p:
+                    cv2.circle(img, p, 4, (0, 255, 0), -1)
+        cv2.putText(img, f"{d['label']} {d['score']:.2f}", (x, max(y - 6, 14)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, red, 2)
     return img
 
 
@@ -193,9 +260,9 @@ def in_hours(spec: str, now: dt.datetime) -> bool:
     return a <= t <= b if a <= b else (t >= a or t <= b)
 
 
-def in_region(box: list[float], region: list[list[float]] | None, w: int, h: int) -> bool:
-    """区域是归一化坐标（0~1）的多边形；判断框的底边中点（人、车站立的位置）"""
-    if not region or len(region) < 3:
+def in_region(box: list[float] | None, region: list[list[float]] | None, w: int, h: int) -> bool:
+    """区域是归一化坐标（0~1）的多边形；判断框的底边中点（人、车站立的位置）。分类结果没有框，不按区域过滤"""
+    if not region or len(region) < 3 or box is None:
         return True
     poly = np.array([[p[0] * w, p[1] * h] for p in region], dtype=np.float32)
     x, y, bw, bh = box
@@ -223,7 +290,6 @@ class Stream(threading.Thread):
 
     def reader(self):
         url = self.s["url"]
-        is_file = "://" not in url
         while self.running:
             cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
             if not cap.isOpened():
@@ -232,6 +298,10 @@ class Stream(threading.Thread):
                 log.warning(tr("[%s] 连接失败，10 秒后重试"), self.name)
                 time.sleep(10)
                 continue
+            # 本地视频文件和 http(s) 点播（MP4、点播 m3u8，有总帧数）按原速循环播放；直播流有多少读多少
+            is_file = "://" not in url or (
+                url.lower().startswith(("http://", "https://")) and (cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0) > 0
+            )
             self.status["connected"] = True
             log.info(tr("[%s] 已连接"), self.name)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25
@@ -278,7 +348,7 @@ class Stream(threading.Thread):
         region = self.s.get("region")
         hits = [
             d for d in dets
-            if d["score"] >= min_score and (not labels or d["label"] in labels) and in_region(d["box"], region, w, h)
+            if d["score"] >= min_score and (not labels or d["label"] in labels) and in_region(d.get("box"), region, w, h)
         ]
         # 现场回流：拿不准的画面存下来，回到 xlabel 里标注
         rf = self.cfg.get("reflux", {})
@@ -299,7 +369,7 @@ class Stream(threading.Thread):
             return
         for d in fresh:
             self.cooldown[d["label"]] = time.time()
-        img = draw(frame, hits)
+        img = draw(frame, hits, self.cfg.get("skeleton"))
         snap = None
         if rules.get("save_image", True):
             snap = HERE / "alerts" / now.strftime("%Y%m%d") / f"{safe(self.name)}_{now:%H%M%S}.jpg"
@@ -344,7 +414,7 @@ def make_handler(det: Detector, streams: list[Stream], alerts: collections.deque
             # 路径里可能有中文（截图文件名带视频流名称）
             path = urllib.parse.unquote(self.path.split("?")[0])
             if path == "/health":
-                self.send_json({"ok": True, "classes": det.classes, "streams": [s.status for s in streams]})
+                self.send_json({"ok": True, "task": det.task, "classes": det.classes, "streams": [s.status for s in streams]})
             elif path == "/alerts":
                 q = dict(p.split("=", 1) for p in self.path.partition("?")[2].split("&") if "=" in p)
                 self.send_json(list(alerts)[: int(q.get("limit", 50))])
@@ -380,7 +450,9 @@ def make_handler(det: Detector, streams: list[Stream], alerts: collections.deque
             q = dict(p.split("=", 1) for p in self.path.partition("?")[2].split("&") if "=" in p)
             t0 = time.time()
             dets = det.detect(img, float(q.get("conf", 0.4)))
-            self.send_json({"width": img.shape[1], "height": img.shape[0], "detections": dets, "ms": round((time.time() - t0) * 1000, 1)})
+            self.send_json(
+                {"task": det.task, "width": img.shape[1], "height": img.shape[0], "detections": dets, "ms": round((time.time() - t0) * 1000, 1)}
+            )
 
     return Handler
 

@@ -84,7 +84,6 @@
   "开始误报测试：每秒检测 {fps} 帧，阈值 {conf}": "Bắt đầu kiểm thử báo nhầm: phát hiện {fps} khung hình mỗi giây, ngưỡng {conf}",
   "视频流读取失败，第 {n} 次重连…": "Đọc luồng video thất bại, kết nối lại lần {n}…",
   "图片编码失败": "Mã hóa ảnh thất bại",
-  "打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Không mở được nguồn video: {src}. Với RTSP hãy kiểm tra địa chỉ, tài khoản mật khẩu và mạng; với tệp video hãy kiểm tra đường dẫn và định dạng.",
   "{label}预训练权重": "trọng số {label}tiền huấn luyện",
   "骨干网络预训练权重": "trọng số tiền huấn luyện của mạng xương sống (backbone)",
   "已加载 {what}": "Đã tải {what}",
@@ -115,5 +114,6 @@
   "已加载 COCO 预训练权重（{name}，沿用 {keep}/{own} 组参数）": "Đã tải trọng số tiền huấn luyện COCO ({name}, dùng lại {keep}/{own} nhóm tham số)",
   "下载预训练权重失败（{url}）：{e}": "Tải trọng số tiền huấn luyện thất bại ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "Huấn luyện YOLOX đi qua YoloxTask, không qua lớp bọc này",
-  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "{n} epoch cuối: tắt Mosaic / MixUp, thêm L1 loss"
+  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "{n} epoch cuối: tắt Mosaic / MixUp, thêm L1 loss",
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Không mở được nguồn video: {src}. Với luồng video hãy kiểm tra địa chỉ, tài khoản mật khẩu và mạng; với tệp video hãy kiểm tra đường dẫn và định dạng."
 }

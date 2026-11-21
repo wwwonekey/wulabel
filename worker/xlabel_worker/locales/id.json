@@ -84,7 +84,6 @@
   "开始误报测试：每秒检测 {fps} 帧，阈值 {conf}": "Memulai uji positif palsu: mendeteksi {fps} frame per detik, ambang {conf}",
   "视频流读取失败，第 {n} 次重连…": "Gagal membaca stream video, percobaan menyambung ulang ke-{n}…",
   "图片编码失败": "Gagal meng-encode gambar",
-  "打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Sumber video tidak dapat dibuka: {src}. Untuk RTSP, periksa URL, nama pengguna/kata sandi, dan jaringan; untuk file video, periksa path dan formatnya.",
   "{label}预训练权重": "bobot pralatih {label}",
   "骨干网络预训练权重": "bobot pralatih backbone",
   "已加载 {what}": "{what} dimuat",
@@ -115,5 +114,6 @@
   "已加载 COCO 预训练权重（{name}，沿用 {keep}/{own} 组参数）": "Bobot pralatih COCO dimuat ({name}, memakai ulang {keep}/{own} grup parameter)",
   "下载预训练权重失败（{url}）：{e}": "Gagal mengunduh bobot pralatih ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "Pelatihan YOLOX lewat YoloxTask, tidak melalui wrapper ini",
-  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "{n} epoch terakhir: Mosaic / MixUp dimatikan, loss L1 diaktifkan"
+  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "{n} epoch terakhir: Mosaic / MixUp dimatikan, loss L1 diaktifkan",
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Sumber video tidak dapat dibuka: {src}. Untuk stream, periksa URL, nama pengguna/kata sandi, dan jaringan; untuk file video, periksa path dan formatnya."
 }
