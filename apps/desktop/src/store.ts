@@ -29,12 +29,17 @@ interface AppStore {
   highlight: Highlight | null;
   /** 指定顺序的一批图去标注（比如模型挑出来最值得标的），标注页会多一个筛选项 */
   queue: { ids: number[]; name: string } | null;
+  /** 训练、评估、部署页打开时要选中的训练记录（比如训练页点「看评估」） */
+  focusRunId: number | null;
   setProject: (p: ProjectInfo | null) => void;
   setPage: (p: PageKey) => void;
   annotateImage: (id: number, highlight?: Highlight) => void;
   annotateQueue: (ids: number[], name: string) => void;
   clearQueue: () => void;
   takeFocusImage: () => number | null;
+  /** 带着训练记录去训练 / 评估 / 部署页 */
+  openRun: (id: number, page: PageKey) => void;
+  takeFocusRun: () => number | null;
   refreshStats: () => Promise<void>;
   team: TeamState;
   setTeam: (t: Partial<TeamState>) => void;
@@ -46,6 +51,7 @@ export const useApp = create<AppStore>((set, get) => ({
   focusImageId: null,
   highlight: null,
   queue: null,
+  focusRunId: null,
   annotateImage: (id, highlight) => set({ focusImageId: id, page: "annotate", highlight: highlight ?? null }),
   annotateQueue: (ids, name) => set({ queue: { ids, name }, focusImageId: null, highlight: null, page: "annotate" }),
   clearQueue: () => set({ queue: null }),
@@ -54,7 +60,13 @@ export const useApp = create<AppStore>((set, get) => ({
     set({ focusImageId: null });
     return id;
   },
-  setProject: (project) => set({ project, page: project ? "data" : "home", queue: null }),
+  openRun: (id, page) => set({ focusRunId: id, page }),
+  takeFocusRun: () => {
+    const id = get().focusRunId;
+    set({ focusRunId: null });
+    return id;
+  },
+  setProject: (project) => set({ project, page: project ? "data" : "home", queue: null, focusRunId: null }),
   setPage: (page) => set({ page }),
   team: {
     remote: isRemote,

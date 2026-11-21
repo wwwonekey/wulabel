@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Button, Empty, Segmented, Select, Table, Tooltip } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, App, Button, Empty, Segmented, Select, Space, Table, Tooltip } from "antd";
 import { FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { api, ClassEval, errText, ProjectInfo, RunDetail, RunInfo, thumbUrl } from "../api";
 import { useApp } from "../store";
-import { fmtTime, metricNames, modelName } from "./Train";
+import { fmtTime, metricNames, modelName, rateMetric } from "./Train";
 import { FpTestPanel, ThresholdPanel } from "../components/EvalTools";
 import { t } from "../i18n";
 
@@ -16,6 +16,10 @@ export default function Eval({ project }: { project: ProjectInfo }) {
   const isCls = project.task === "classify";
   const mn = metricNames(project.task);
   const annotateImage = useApp((s) => s.annotateImage);
+  const annotateQueue = useApp((s) => s.annotateQueue);
+  const setPage = useApp((s) => s.setPage);
+  const openRun = useApp((s) => s.openRun);
+  const errBox = useRef<HTMLDivElement>(null);
   const [runs, setRuns] = useState<RunInfo[]>([]);
   const [sel, setSel] = useState<number | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -23,12 +27,16 @@ export default function Eval({ project }: { project: ProjectInfo }) {
   const [errKind, setErrKind] = useState<"all" | "missed" | "extra" | "wrong">("all");
 
   useEffect(() => {
+    // 训练页点「看评估」带过来的那次训练优先；训练中的还没训完，不默认选
+    const focus = useApp.getState().focusRunId;
     api
       .listRuns()
       .then((rs) => {
         const ok = rs.filter((r) => r.hasWeights);
         setRuns(ok);
-        setSel(ok[0]?.id ?? null);
+        const ready = ok.filter((r) => r.status !== "running");
+        setSel(ready.find((r) => r.id === focus)?.id ?? ready[0]?.id ?? null);
+        useApp.getState().takeFocusRun();
       })
       .catch((e) => message.error(errText(e)));
   }, [message]);
@@ -103,7 +111,8 @@ export default function Eval({ project }: { project: ProjectInfo }) {
     [ev, errKind],
   );
 
-  if (runs.length === 0) {
+  // 只有正在训练的记录时也当成还没有模型
+  if (!runs.some((r) => r.status !== "running")) {
     return (
       <div className="empty-page">
         <Empty description={t("还没有训练好的模型，先去「训练」页训练一个")} />
@@ -114,6 +123,15 @@ export default function Eval({ project }: { project: ProjectInfo }) {
   const cmMax = Math.max(1, ...(ev?.confusion ?? []).flat());
   // 分类的混淆矩阵没有「背景」行列
   const names = isCls ? classes : [...classes, t("背景")];
+  // 一句话结论：按主指标打分，点出最差的类别
+  const rate = ev ? rateMetric(project.task, ev.map50) : null;
+  const worst = ev && ev.perClass.length > 1
+    ? [...ev.perClass].filter((c) => c.gt > 0 && c.ap50 != null).sort((a, b) => (a.ap50 ?? 0) - (b.ap50 ?? 0))[0]
+    : undefined;
+  const showErrors = (kind: typeof errKind) => {
+    setErrKind(kind);
+    errBox.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const descVars = {
     time: detail?.eval?.evaluatedAt ? fmtTime(detail.eval.evaluatedAt) : "",
     epoch: detail?.eval?.bestEpoch ?? "—",
@@ -157,7 +175,8 @@ export default function Eval({ project }: { project: ProjectInfo }) {
             onChange={setSel}
             options={runs.map((r) => ({
               value: r.id,
-              label: `${fmtTime(r.createdAt)} · ${modelName(r)} · ${mn.m50} ${r.bestMap50?.toFixed(3) ?? "—"}`,
+              disabled: r.status === "running",
+              label: `${fmtTime(r.createdAt)} · ${modelName(r)} · ${r.status === "running" ? t("训练中") : `${mn.m50} ${r.bestMap50?.toFixed(3) ?? "—"}`}`,
             }))}
           />
         </div>
@@ -176,6 +195,45 @@ export default function Eval({ project }: { project: ProjectInfo }) {
         </div>
       ) : (
         <>
+          {rate && (
+            <Alert
+              type={rate.level === "good" ? "success" : rate.level === "fair" ? "info" : "warning"}
+              showIcon
+              style={{ marginBottom: 12 }}
+              message={
+                <span>
+                  {t("结论：{rate}（{metric} {v}）", { rate: rate.word, metric: mn.m50, v: isCls ? pct(ev.map50) : ev.map50.toFixed(3) })}
+                  {ev.images < 10 && ` · ${split === "val" ? t("验证集太少，指标波动大") : t("测试集太少，指标波动大")}`}
+                  {worst && worst.ap50 != null && ` · ${t("最差的类别「{name}」（{metric} {v}）", { name: worst.name, metric: isCls ? "F1" : "AP50", v: worst.ap50.toFixed(3) })}`}
+                </span>
+              }
+              action={
+                <Space size={6} wrap>
+                  {ev.errors.length > 0 && (
+                    <Button size="small" onClick={() => showErrors(!isCls && ev.errors.some((e) => e.missed > 0) ? "missed" : "all")}>
+                      {isCls ? t("看分错的图") : ev.errors.some((e) => e.missed > 0) ? t("看漏检的错例") : t("看错例")}
+                    </Button>
+                  )}
+                  {ev.errors.length > 0 && (
+                    <Button size="small" onClick={() => annotateQueue(ev.errors.map((e) => e.imageId), t("评估错例"))}>
+                      {t("把错例拿去标注")}
+                    </Button>
+                  )}
+                  {rate.level !== "good" ? (
+                    <Button size="small" onClick={() => setPage("train")}>
+                      {t("补数据后再训 / 换大模型")}
+                    </Button>
+                  ) : (
+                    sel != null && (
+                      <Button size="small" type="primary" onClick={() => openRun(sel, "deploy")}>
+                        {t("去部署")}
+                      </Button>
+                    )
+                  )}
+                </Space>
+              }
+            />
+          )}
           <div className="cards" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 12 }}>
             <Tooltip title={isCls ? t("分对的图片占全部图片的比例") : t("IoU 0.5 时各类别平均精度的均值，最常用的检测指标")}>
               <div className="card">
@@ -259,7 +317,7 @@ export default function Eval({ project }: { project: ProjectInfo }) {
             </div>
           </div>
 
-          <div className="card">
+          <div className="card" ref={errBox}>
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
               <div className="muted">{t("错例")} <span className="dim">· {t("点图片去标注页检查和修改")}</span></div>
               {isCls ? (

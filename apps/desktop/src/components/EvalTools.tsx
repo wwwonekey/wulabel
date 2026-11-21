@@ -104,6 +104,9 @@ export function ThresholdPanel({ th, isCls }: { th: Thresholds; isCls: boolean }
   );
 }
 
+/** 误报测试界面上最多留几张报警截图 */
+const MAX_ALARMS = 60;
+
 interface AlarmEv {
   t: number;
   labels: string[];
@@ -142,7 +145,7 @@ export function FpTestPanel({ run, defaultConf }: { run: RunInfo; defaultConf: n
     const un = await listen<{ type: string } & Record<string, unknown>>("fptest", (e) => {
       const v = e.payload;
       if (v.type === "progress") setProg({ seconds: Number(v.seconds), total: Number(v.total), alarms: Number(v.alarms) });
-      else if (v.type === "alarm") setAlarms((a) => [...a, v as unknown as AlarmEv].slice(-60));
+      else if (v.type === "alarm") setAlarms((a) => [...a, v as unknown as AlarmEv].slice(-MAX_ALARMS));
     });
     try {
       const isStream = source.includes("://");
@@ -228,7 +231,7 @@ export function FpTestPanel({ run, defaultConf }: { run: RunInfo; defaultConf: n
       )}
       {summary && (
         <div className="cards" style={{ gridTemplateColumns: "repeat(4, 1fr)", margin: "8px 0" }}>
-          <div className="card"><div className="muted">{t("测了")}</div><div className="kpi">{t("{n} 分钟", { n: Math.round(summary.seconds / 60) })}</div></div>
+          <div className="card"><div className="muted">{t("测了")}</div><div className="kpi">{summary.seconds < 60 ? t("{n} 秒", { n: Math.round(summary.seconds) }) : t("{n} 分钟", { n: Math.round(summary.seconds / 60) })}</div></div>
           <div className="card"><div className="muted">{t("报警")}</div><div className="kpi">{t("{n} 次", { n: summary.alarms })}</div></div>
           <div className="card"><div className="muted">{t("折合每小时")}</div><div className="kpi" style={{ color: summary.perHour > 1 ? "var(--bad)" : undefined }}>{summary.perHour}</div></div>
           <div className="card">
@@ -242,7 +245,10 @@ export function FpTestPanel({ run, defaultConf }: { run: RunInfo; defaultConf: n
       {alarms.length > 0 && (
         <>
           <div className="row" style={{ justifyContent: "space-between", margin: "8px 0 6px" }}>
-            <span className="dim" style={{ fontSize: 12 }}>{t("误报的画面（红框是模型报的）")}</span>
+            <span className="dim" style={{ fontSize: 12 }}>
+              {t("误报的画面（红框是模型报的）")}
+              {(summary?.alarms ?? prog?.alarms ?? 0) > MAX_ALARMS && ` · ${t("只保留最近 {n} 张报警截图", { n: MAX_ALARMS })}`}
+            </span>
             {!running && (
               <Button size="small" onClick={addNegatives} disabled={!alarms.some((a) => a.path)}>
                 {t("把这些帧加进数据集当负样本")}
