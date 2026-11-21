@@ -366,6 +366,8 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                     let _ = writeln!(log_file.lock(), "{}", ev["msg"].as_str().unwrap_or(""));
                 }
                 Some("warn") => add_warning(&dir, &ev),
+                // 下载预训练权重的进度：右下角进度条
+                Some("download") => crate::dlprogress::forward(&ev),
                 Some("batch") => {
                     // 显存不够自动调小了批大小：训练记录里改成实际用的，原来设的另存一份
                     // 会从头重训，上一次的提示作废（预训练权重的提示重训时会再发）
@@ -654,6 +656,8 @@ impl Predictor {
             match v["type"].as_str() {
                 Some("done") => return Ok(v),
                 Some("error") => return Err(msg(v["msg"].as_str().map(String::from).unwrap_or_else(|| t!("推理失败")))),
+                // 第一次用 SAM、文本提示时下载模型的进度
+                Some("download") => crate::dlprogress::forward(&v),
                 _ => on_event(&v),
             }
         }

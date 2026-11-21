@@ -6,6 +6,7 @@ mod commands;
 mod dataset;
 mod dataset_import;
 mod deploy;
+mod dlprogress;
 mod db;
 mod error;
 mod evaltools;
@@ -67,6 +68,7 @@ pub fn run() {
             // 训练环境有好几 GB，放本机目录（Local），不放会漫游同步的 Roaming
             let rt = runtime::Runtime::new(app.path().app_config_dir()?, app.path().app_local_data_dir()?, worker_dir(app));
             app.manage(rt);
+            dlprogress::init(app.handle().clone());
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("xl", protocol::handle)

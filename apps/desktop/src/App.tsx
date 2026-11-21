@@ -28,6 +28,7 @@ import Team from "./pages/Team";
 import FeedbackModal from "./components/FeedbackModal";
 import UpdateModal from "./components/UpdateModal";
 import WhatsNew from "./components/WhatsNew";
+import DownloadProgress from "./components/DownloadProgress";
 import html2canvas from "html2canvas";
 import { t } from "./i18n";
 
@@ -315,6 +316,7 @@ export default function App() {
       <FeedbackModal open={fbOpen} shot={fbShot} onClose={() => setFbOpen(false)} />
       <UpdateModal info={upd} open={!!upd} onClose={() => setUpd(null)} />
       <WhatsNew />
+      <DownloadProgress />
     </div>
   );
 }

@@ -1465,5 +1465,9 @@
   "标注页：标完一批有提示，「完成」直接跳到下一张未标注；新增 X 跳过、Shift+D 下一张未标注；底部缩略图显示状态，可以输入序号跳转；批量预标注可以中途停止；删除类别时可以合并到另一个类别。": "Página Anotar: aviso ao terminar um lote, e \"Concluir\" vai direto para a próxima imagem sem anotação; novos atalhos X (ignorar) e Shift+D (próxima sem anotação); as miniaturas embaixo mostram o status e dá para digitar um número para pular; a pré-anotação em lote pode ser interrompida; ao excluir uma classe é possível mesclá-la em outra.",
   "数据页可以批量设为跳过、恢复未标注、送去标注、移到训练/验证/测试集；视频抽帧和导入图片可以中途停止；把视频拖进窗口直接抽帧。": "Página Dados: em lote, marcar como ignoradas, voltar para sem anotação, enviar para anotar ou mover para o conjunto de treino/validação/teste; a extração de quadros e a importação de imagens podem ser interrompidas; arraste um vídeo para a janela para extrair quadros direto.",
   "体检去重时优先保留有标注的图，也可以自己选留哪张；忽略的问题可以恢复，疑似漏标可以一次全部加上。": "Verificação de saúde: ao remover duplicadas, as imagens anotadas são mantidas primeiro, e você pode escolher qual manter; problemas ignorados podem ser restaurados e possíveis anotações faltantes podem ser adicionadas todas de uma vez.",
-  "新建项目时可以直接填好类别；预训练权重下载不完整时自动删掉重下。": "Ao criar um projeto já dá para informar as classes; pesos pré-treinados baixados de forma incompleta são apagados e baixados de novo automaticamente."
+  "新建项目时可以直接填好类别；预训练权重下载不完整时自动删掉重下。": "Ao criar um projeto já dá para informar as classes; pesos pré-treinados baixados de forma incompleta são apagados e baixados de novo automaticamente.",
+  "正在下载模型（只需下载一次）": "Baixando modelos (só uma vez)",
+  "下载失败": "Falha no download",
+  "已下载": "Baixado",
+  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Baixando pesos pré-treinados {name}: {progress} (só uma vez; se cair, continua de onde parou)"
 }

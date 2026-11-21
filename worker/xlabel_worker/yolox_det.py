@@ -18,6 +18,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 
+from .download import patch_torch_hub
 from .i18n import tr
 from .protocol import log, warn
 from .yolox import YOLOPAFPN, YOLOX, YOLOXHead, ModelEMA
@@ -68,6 +69,7 @@ def build_net(key: str, num_classes: int) -> YOLOX:
 
 
 def _load_weights(url: str, name: str):
+    patch_torch_hub()  # 下载显示进度、断了接着下
     return torch.hub.load_state_dict_from_url(url, map_location="cpu", progress=False, check_hash=False, file_name=name, weights_only=False)
 
 
