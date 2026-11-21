@@ -447,7 +447,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
         <div>
           <h1>{t("数据")}</h1>
           <p className="desc" style={{ margin: 0 }}>
-            {t("{total} 张图片 · 已标注 {labeled} · 已审核 {reviewed}", { total: s.total, labeled: s.labeled + s.reviewed, reviewed: s.reviewed })}
+            {t("{total} 张图片 · 可训练 {n}（已标注 {labeled} + 已审核 {reviewed}）", { total: s.total, n: s.labeled + s.reviewed, labeled: s.labeled, reviewed: s.reviewed })}
           </p>
         </div>
         <div className="row">

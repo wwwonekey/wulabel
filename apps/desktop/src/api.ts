@@ -595,6 +595,9 @@ export const api = {
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   splitSummary: () => invoke<SplitSummary>("split_summary"),
   assignSplits: (ratios: [number, number, number], all: boolean) => invoke<SplitSummary>("assign_splits", { ratios, all }),
+  /** split："train" / "val" / "test" / "unset"（只列已标注、已审核的图） */
+  listSplitImages: (split: string, offset: number, limit: number) => invoke<ImagePage>("list_split_images", { split, offset, limit }),
+  setSplit: (ids: number[], split: "train" | "val" | "test") => invoke<SplitSummary>("set_split", { ids, split }),
   exportDataset: (
     options: { format: DatasetFormat; outDir: string; onlyReviewed: boolean; ratios: [number, number, number] },
     anonymize: AnonymizeConfig | null = null,

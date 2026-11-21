@@ -127,6 +127,8 @@ pub fn run() {
             commands::delete_label,
             commands::split_summary,
             commands::assign_splits,
+            commands::list_split_images,
+            commands::set_split,
             commands::export_dataset,
             commands::interpolate_frames,
             commands::track_frames,

@@ -80,6 +80,49 @@ pub fn assign_splits(p: &Project, ratios: [f64; 3], all: bool) -> AppResult<Spli
     split_summary(p)
 }
 
+/// 某个划分里的可训练图（训练页「查看和调整」用）。split 为 "unset" 时列出还没划分的
+pub fn list_split(p: &Project, split: &str, offset: u32, limit: u32) -> AppResult<crate::images::ImagePage> {
+    let cond = if split == "unset" {
+        format!("{TRAINABLE} AND split NOT IN ('train', 'val', 'test')")
+    } else if SPLITS.contains(&split) {
+        format!("{TRAINABLE} AND split = '{split}'")
+    } else {
+        return Err(msg(t!("不认识的划分：{s}", s = split)));
+    };
+    let conn = p.conn.lock();
+    let total: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM images WHERE {cond}"), [], |r| r.get(0))?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT id, path, width, height, status, split FROM images WHERE {cond} ORDER BY id LIMIT ?1 OFFSET ?2"
+    ))?;
+    let items = stmt
+        .query_map(params![limit.min(1000), offset], |r| {
+            let path: String = r.get(1)?;
+            let name = Path::new(&path).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or(path.clone());
+            Ok(crate::images::ImageItem { id: r.get(0)?, name, width: r.get(2)?, height: r.get(3)?, status: r.get(4)?, split: r.get(5)? })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(crate::images::ImagePage { total, items })
+}
+
+/// 手动把一些图移到训练/验证/测试集（只改可训练的图）
+pub fn set_split(p: &Project, ids: &[i64], split: &str) -> AppResult<SplitSummary> {
+    if !SPLITS.contains(&split) {
+        return Err(msg(t!("不认识的划分：{s}", s = split)));
+    }
+    {
+        let mut conn = p.conn.lock();
+        let tx = conn.transaction()?;
+        {
+            let mut up = tx.prepare(&format!("UPDATE images SET split = ?2 WHERE id = ?1 AND {TRAINABLE}"))?;
+            for id in ids {
+                up.execute(params![id, split])?;
+            }
+        }
+        tx.commit()?;
+    }
+    split_summary(p)
+}
+
 // ---------- 导出 ----------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -679,6 +722,29 @@ pub mod tests {
         let after: Vec<String> = (1..=8).map(|i| split_of_id(&p, i)).collect();
         assert_eq!(before, after);
         assert!(assign_splits(&p, [0.0, 1.0, 0.0], true).is_err());
+        drop(p);
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn list_and_move_split() {
+        let base = temp("move");
+        let p = sample(&base);
+        // 没划分时 8 张已标注的都在「未划分」，没标注的 2 张不列出
+        let un = list_split(&p, "unset", 0, 100).unwrap();
+        assert_eq!(un.total, 8);
+        assert!(un.items.iter().all(|i| i.id <= 8));
+        assign_splits(&p, [0.75, 0.25, 0.0], false).unwrap();
+        let val = list_split(&p, "val", 0, 100).unwrap();
+        assert_eq!(val.total, 2);
+        // 验证集的图移到测试集；没标注的图（9、10）不会被移动
+        let mut ids: Vec<i64> = val.items.iter().map(|i| i.id).collect();
+        ids.extend([9, 10]);
+        let s = set_split(&p, &ids, "test").unwrap();
+        assert_eq!((s.train, s.val, s.test, s.unset), (6, 0, 2, 0));
+        assert_eq!(split_of_id(&p, 9), "unset");
+        assert!(set_split(&p, &ids, "nope").is_err());
+        assert!(list_split(&p, "x' OR 1=1 --", 0, 10).is_err());
         drop(p);
         let _ = fs::remove_dir_all(base);
     }

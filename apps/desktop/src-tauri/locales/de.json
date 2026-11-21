@@ -437,5 +437,7 @@
   "问题描述太长": "Die Beschreibung ist zu lang",
   "服务端发送邮件失败，请稍后再试": "Der Server konnte die E-Mail nicht senden. Bitte versuchen Sie es später erneut.",
   "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "ffmpeg konnte nicht heruntergeladen werden: {errors}. Installieren Sie es über die Paketverwaltung (z. B. apt install ffmpeg) oder geben Sie den Pfad in den Einstellungen an.",
-  "请填写视频流地址或选择视频文件": "Geben Sie eine Stream-Adresse ein oder wählen Sie eine Videodatei"
+  "请填写视频流地址或选择视频文件": "Geben Sie eine Stream-Adresse ein oder wählen Sie eine Videodatei",
+  "不认识的划分：{s}": "Unbekannte Aufteilung: {s}",
+  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Das Trainingsset ist leer. Verschiebe auf der Trainingsseite unter „Ansehen und anpassen“ einige Bilder ins Trainingsset"
 }

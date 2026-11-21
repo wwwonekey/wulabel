@@ -844,6 +844,16 @@ pub async fn assign_splits(state: State<'_, AppState>, ratios: [f64; 3], all: bo
     dataset::assign_splits(&*state.current()?, ratios, all)
 }
 
+#[tauri::command]
+pub async fn list_split_images(state: State<'_, AppState>, split: String, offset: u32, limit: u32) -> AppResult<ImagePage> {
+    dataset::list_split(&*state.current()?, &split, offset, limit)
+}
+
+#[tauri::command]
+pub async fn set_split(state: State<'_, AppState>, ids: Vec<i64>, split: String) -> AppResult<SplitSummary> {
+    dataset::set_split(&*state.current()?, &ids, &split)
+}
+
 fn progress_emitter(app: AppHandle, event: &'static str) -> impl Fn(usize, usize) + Sync {
     let last = std::sync::atomic::AtomicUsize::new(0);
     move |done, total| {

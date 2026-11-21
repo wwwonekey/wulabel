@@ -251,6 +251,11 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
             _ => t!("没有任何标注，先标注一些图片再训练"),
         }));
     }
+    // 手动把图都移出了训练集
+    if res.train == 0 {
+        let _ = fs::remove_dir_all(&dir);
+        return Err(msg(t!("训练集是空的：在训练页「查看和调整」里把一些图移到训练集")));
+    }
     let mut worker_cfg = serde_json::json!({
         "dataset": ds, "out": dir, "model": cfg.model, "classes": res.classes, "task": p.meta.task,
         "epochs": cfg.epochs, "img_size": cfg.img_size, "batch": cfg.batch, "lr": cfg.lr, "device": cfg.device,

@@ -15,6 +15,7 @@ import LineChart from "../components/LineChart";
 import RunCompare from "../components/RunCompare";
 import ImportModelModal from "../components/ImportModelModal";
 import AugPanel from "../components/AugPanel";
+import SplitModal from "../components/SplitModal";
 
 /** 内置模型，和 worker/xlabel_worker/models.py 的 MODELS 对应。oneStage：单阶段检测，部署到 TensorRT / NPU 更顺；
  *  yolox：YOLOX 系列（官方数据增强，增强设置里只有翻转生效）；defaultSize：选中时默认的输入尺寸 */
@@ -125,6 +126,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [comparing, setComparing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const selRef = useRef<number | null>(null);
   selRef.current = sel;
   const logBox = useRef<HTMLDivElement>(null);
@@ -332,12 +334,24 @@ export default function Train({ project }: { project: ProjectInfo }) {
             />
           )}
           <div className="card" style={{ marginBottom: 12 }}>
-            <div className="muted">{t("可训练图片")}</div>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span className="muted">{t("可训练图片")}</span>
+              {trainable > 0 && (
+                <Button size="small" onClick={() => setSplitOpen(true)}>
+                  {t("查看和调整")}
+                </Button>
+              )}
+            </div>
             <div className="kpi">{trainable}</div>
             {split && (
               <div className="dim" style={{ fontSize: 12 }}>
                 {t("训练 {train} · 验证 {val} · 测试 {test}", { train: split.train, val: split.val, test: split.test })}
                 {split.unset > 0 && ` · ${t("未划分 {n}（开始训练时按比例分配）", { n: split.unset })}`}
+              </div>
+            )}
+            {cfg.onlyReviewed && !useVersion && (
+              <div style={{ color: "var(--warn)", fontSize: 12, marginTop: 4 }}>
+                {t("高级设置里勾了「只用已审核的图片」，只标注、没审核的图这次不参与训练")}
               </div>
             )}
             {trainable > 0 && trainable < 50 && (
@@ -597,6 +611,14 @@ export default function Train({ project }: { project: ProjectInfo }) {
           </div>
         </div>
       </div>
+      <SplitModal
+        project={project}
+        open={splitOpen}
+        ratios={cfg.ratios}
+        onRatios={(ratios) => update({ ratios })}
+        onClose={() => setSplitOpen(false)}
+        onChanged={setSplit}
+      />
       <ImportModelModal
         open={importing}
         onClose={() => setImporting(false)}
