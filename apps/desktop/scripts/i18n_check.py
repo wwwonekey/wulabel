@@ -166,7 +166,8 @@ def main() -> int:
                 pack = read_pack(n, lang)
                 kept = {k: v for k, v in pack.items() if k in keys}
                 p = ROOT / LAYERS[n]["locales"] / f"{lang}.json"
-                p.write_text(json.dumps(kept, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                # 统一写 LF（Windows 上 write_text 默认会写成 CRLF）
+                p.write_text(json.dumps(kept, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
         print("已删掉不用的词条")
         return 0
 

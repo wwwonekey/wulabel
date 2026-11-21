@@ -439,5 +439,7 @@
   "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Gagal mengunduh ffmpeg: {errors}. Anda bisa memasangnya dengan pengelola paket sistem (mis. apt install ffmpeg) atau menentukan jalurnya di Pengaturan.",
   "请填写视频流地址或选择视频文件": "Isi alamat stream atau pilih file video",
   "不认识的划分：{s}": "Pembagian tidak dikenal: {s}",
-  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Set pelatihan kosong. Di halaman Pelatihan, gunakan \"Lihat dan atur\" untuk memindahkan beberapa gambar ke set pelatihan"
+  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Set pelatihan kosong. Di halaman Pelatihan, gunakan \"Lihat dan atur\" untuk memindahkan beberapa gambar ke set pelatihan",
+  "不能合并到同一个类别": "Tidak bisa menggabungkan kelas ke dirinya sendiri",
+  "合并了两个类别": "Menggabungkan dua kelas"
 }

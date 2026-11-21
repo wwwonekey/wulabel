@@ -439,5 +439,7 @@
   "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Failed to download ffmpeg: {errors}. You can install it with your system's package manager (e.g. apt install ffmpeg) or set its path in Settings.",
   "请填写视频流地址或选择视频文件": "Enter a stream URL or choose a video file",
   "不认识的划分：{s}": "Unknown split: {s}",
-  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "The training set is empty. On the Train page, use \"View and adjust\" to move some images to the training set"
+  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "The training set is empty. On the Train page, use \"View and adjust\" to move some images to the training set",
+  "不能合并到同一个类别": "Can't merge a class into itself",
+  "合并了两个类别": "Merged two classes"
 }

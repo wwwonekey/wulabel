@@ -404,14 +404,13 @@ def run_once(cfg: dict) -> None:
             else:
                 log(tr("第 {epoch} 轮 mAP50 {map50}、mAP50-95 {map}，保存为最好的模型", epoch=epoch, map50=f"{r.map50:.3f}", map=f"{r.map:.3f}"))
         if zero.update(r.map50):
-            warn(
-                "zero_metric",
-                tr(
-                    "连续 {n} 轮{metric}都是 0，模型基本没学到东西。常见原因：图太少或训练步数太少；标注或类别有问题；没加载到预训练权重（看日志开头）",
-                    n=zero.n,
-                    metric=tr("准确率") if cls else " mAP50 ",
-                ),
+            text = tr(
+                "连续 {n} 轮{metric}都是 0，模型基本没学到东西。常见原因：图太少或训练步数太少；标注或类别有问题；没加载到预训练权重（看日志开头）",
+                n=zero.n,
+                metric=tr("准确率") if cls else " mAP50 ",
             )
+            # 中文里 mAP50 两边要空格，别的语言会多出空格，合并掉
+            warn("zero_metric", " ".join(text.split()))
     metrics_file.close()
 
     if not (out / "best.pt").exists():

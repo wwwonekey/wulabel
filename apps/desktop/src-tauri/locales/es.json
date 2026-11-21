@@ -439,5 +439,7 @@
   "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "No se pudo descargar ffmpeg: {errors}. Puedes instalarlo con el gestor de paquetes del sistema (p. ej. apt install ffmpeg) o indicar su ruta en Ajustes.",
   "请填写视频流地址或选择视频文件": "Introduce la dirección de una transmisión o elige un archivo de video",
   "不认识的划分：{s}": "División desconocida: {s}",
-  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "El conjunto de entrenamiento está vacío. En la página Entrenar, usa «Ver y ajustar» para mover algunas imágenes al conjunto de entrenamiento"
+  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "El conjunto de entrenamiento está vacío. En la página Entrenar, usa «Ver y ajustar» para mover algunas imágenes al conjunto de entrenamiento",
+  "不能合并到同一个类别": "No se puede fusionar una clase consigo misma",
+  "合并了两个类别": "Se fusionaron dos clases"
 }
