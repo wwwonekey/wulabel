@@ -186,8 +186,19 @@ pub fn export_formats(
     if formats.is_empty() {
         return Err(msg(t!("至少选一种格式")));
     }
+    // OpenVINO 要另外装组件；装不上（离线、网络差）时只跳过它，别的格式照常导出
+    let mut skipped = Vec::new();
+    let mut formats: Vec<String> = formats.to_vec();
     if formats.iter().any(|f| f == "openvino") {
-        rt.ensure_package("openvino", "openvino", log)?;
+        if let Err(e) = rt.ensure_package("openvino", "openvino", log) {
+            let note = t!("OpenVINO 组件没装上，这次没导出：{e}", e = e);
+            log(note.clone());
+            formats.retain(|f| f != "openvino");
+            skipped.push(FormatResult { format: "openvino".into(), path: String::new(), ok: false, note });
+            if formats.is_empty() {
+                return Err(msg(skipped.remove(0).note));
+            }
+        }
     }
     let w = weights(p, run_id)?;
     check_out(out)?;
@@ -213,7 +224,9 @@ pub fn export_formats(
     });
     let _ = fs::remove_file(&cfg);
     r?;
-    Ok(results.into_inner())
+    let mut res = results.into_inner();
+    res.extend(skipped);
+    Ok(res)
 }
 
 // ---------- 推理服务包 ----------

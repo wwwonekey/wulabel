@@ -356,6 +356,8 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
     }
     std::thread::spawn(move || {
         let mut final_status = None;
+        // 还没下完的文件：训练进程被停掉、崩了时，告诉界面下载结束了（不然右下角的进度条一直挂着）
+        let mut downloading: std::collections::HashSet<String> = std::collections::HashSet::new();
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let Ok(ev) = serde_json::from_str::<serde_json::Value>(&line) else {
                 let _ = writeln!(log_file.lock(), "{line}");
@@ -367,7 +369,15 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                 }
                 Some("warn") => add_warning(&dir, &ev),
                 // 下载预训练权重的进度：右下角进度条
-                Some("download") => crate::dlprogress::forward(&ev),
+                Some("download") => {
+                    let name = ev["name"].as_str().unwrap_or("").to_string();
+                    if ev["finished"] == true || ev["failed"] == true {
+                        downloading.remove(&name);
+                    } else {
+                        downloading.insert(name);
+                    }
+                    crate::dlprogress::forward(&ev);
+                }
                 Some("batch") => {
                     // 显存不够自动调小了批大小：训练记录里改成实际用的，原来设的另存一份
                     // 会从头重训，上一次的提示作废（预训练权重的提示重训时会再发）
@@ -412,6 +422,9 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                 _ => {}
             }
             sink(id, ev);
+        }
+        for name in downloading {
+            crate::dlprogress::forward(&serde_json::json!({ "type": "download", "name": name, "done": 0, "total": 0, "speed": 0, "failed": true }));
         }
         let code = child.lock().wait().ok();
         let status = final_status.unwrap_or_else(|| {
@@ -1150,10 +1163,9 @@ pub fn prelabel_all(
         let m = map.as_ref().unwrap();
         for (id, raw) in got {
             let anns = task_annotations(p, &to_result(raw, m), conf, "model")?;
-            if !anns.is_empty() {
+            if !anns.is_empty() && annotations::save_predictions(p, id, &anns)? {
                 result.boxes += anns.len();
                 result.images += 1;
-                annotations::save_predictions(p, id, &anns)?;
             }
         }
         done += chunk.len();

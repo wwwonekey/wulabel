@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Progress } from "antd";
+import { Button, Progress } from "antd";
+import { CloseOutlined } from "@ant-design/icons";
 import { listen } from "../transport";
 import { t } from "../i18n";
 
@@ -56,7 +57,11 @@ export default function DownloadProgress() {
   if (!list.length) return null;
   return (
     <div className="dl-float">
-      <div className="muted" style={{ marginBottom: 4 }}>{t("正在下载模型（只需下载一次）")}</div>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+        <span className="muted">{t("正在下载模型（只需下载一次）")}</span>
+        {/* 只是收起这个提示，下载照常在后台进行 */}
+        <Button size="small" type="text" icon={<CloseOutlined />} title={t("关闭")} onClick={() => setItems({})} />
+      </div>
       {list.map((d) => (
         <div key={d.name} style={{ marginTop: 6 }}>
           <div className="row" style={{ justifyContent: "space-between", gap: 8, fontSize: 12 }}>

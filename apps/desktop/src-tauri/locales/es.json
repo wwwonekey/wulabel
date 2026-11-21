@@ -441,5 +441,6 @@
   "不认识的划分：{s}": "División desconocida: {s}",
   "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "El conjunto de entrenamiento está vacío. En la página Entrenar, usa «Ver y ajustar» para mover algunas imágenes al conjunto de entrenamiento",
   "不能合并到同一个类别": "No se puede fusionar una clase consigo misma",
-  "合并了两个类别": "Se fusionaron dos clases"
+  "合并了两个类别": "Se fusionaron dos clases",
+  "OpenVINO 组件没装上，这次没导出：{e}": "No se pudo instalar el componente de OpenVINO, así que esta vez no se exportó: {e}"
 }

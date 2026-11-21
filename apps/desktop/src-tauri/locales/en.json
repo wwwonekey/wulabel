@@ -441,5 +441,6 @@
   "不认识的划分：{s}": "Unknown split: {s}",
   "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "The training set is empty. On the Train page, use \"View and adjust\" to move some images to the training set",
   "不能合并到同一个类别": "Can't merge a class into itself",
-  "合并了两个类别": "Merged two classes"
+  "合并了两个类别": "Merged two classes",
+  "OpenVINO 组件没装上，这次没导出：{e}": "The OpenVINO component couldn't be installed, so OpenVINO wasn't exported this time: {e}"
 }

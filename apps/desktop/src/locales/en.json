@@ -1469,5 +1469,8 @@
   "正在下载模型（只需下载一次）": "Downloading models (one-time only)",
   "下载失败": "Download failed",
   "已下载": "Downloaded",
-  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Downloading pretrained weights {name}: {progress} (one-time only; resumes if interrupted)"
+  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Downloading pretrained weights {name}: {progress} (one-time only; resumes if interrupted)",
+  "先选一个类别，或按 X 跳过这张": "Pick a class first, or press X to skip this image",
+  "选了类别的图自动算已标注，不用审核；模糊、无关的图点「跳过」，不参与训练。": "Images with a class count as labeled automatically, no review needed; for blurry or irrelevant images, click \"Skip\" and they won't be used for training.",
+  "「{name}」这一批标完了": "This batch \"{name}\" is done"
 }

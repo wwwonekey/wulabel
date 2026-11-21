@@ -441,5 +441,6 @@
   "不认识的划分：{s}": "Không rõ cách phân chia: {s}",
   "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Tập huấn luyện đang trống. Trên trang Huấn luyện, dùng \"Xem và điều chỉnh\" để chuyển một số ảnh sang tập huấn luyện",
   "不能合并到同一个类别": "Không thể gộp một lớp vào chính nó",
-  "合并了两个类别": "Đã gộp hai lớp"
+  "合并了两个类别": "Đã gộp hai lớp",
+  "OpenVINO 组件没装上，这次没导出：{e}": "Không cài được thành phần OpenVINO nên lần này không xuất OpenVINO: {e}"
 }

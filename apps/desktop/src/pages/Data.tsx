@@ -186,9 +186,13 @@ export default function Data({ project }: { project: ProjectInfo }) {
     setSelected(next);
   };
 
-  // 换了筛选或翻页就清空选择，免得删掉看不见的图
+  // 换了筛选就清空选择，免得删掉看不见的图；翻页保留（「选中全部 N 张」后可以翻页确认），
+  // 删除等操作的确认框里会写明一共多少张
   useEffect(() => {
     setSelected(new Set());
+  }, [filter]);
+  // Shift 连选只在同一页里
+  useEffect(() => {
     anchor.current = null;
   }, [filter, page]);
 

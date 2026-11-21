@@ -1469,5 +1469,8 @@
   "正在下载模型（只需下载一次）": "Modelle werden heruntergeladen (nur einmal nötig)",
   "下载失败": "Download fehlgeschlagen",
   "已下载": "Heruntergeladen",
-  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Vortrainierte Gewichte {name} werden geladen: {progress} (nur einmal nötig; bei Abbruch wird fortgesetzt)"
+  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Vortrainierte Gewichte {name} werden geladen: {progress} (nur einmal nötig; bei Abbruch wird fortgesetzt)",
+  "先选一个类别，或按 X 跳过这张": "Zuerst eine Klasse wählen oder mit X dieses Bild überspringen",
+  "选了类别的图自动算已标注，不用审核；模糊、无关的图点「跳过」，不参与训练。": "Bilder mit Klasse gelten automatisch als annotiert, eine Prüfung ist nicht nötig; unscharfe oder irrelevante Bilder mit „Überspringen“ markieren – sie werden nicht trainiert.",
+  "「{name}」这一批标完了": "Stapel „{name}“ ist fertig"
 }
