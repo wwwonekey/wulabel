@@ -52,7 +52,7 @@ Updates: the app checks for new versions on startup; click "Update now" and it d
 
 ## Features
 
-- **Data**: import images and folders with de-duplication and auto-rotation; extract frames from videos and RTSP / live streams; import YOLO / COCO / VOC / class-folder datasets (format detected automatically); train / val / test split; image quality screening; pick the most valuable images to label first; anonymize faces and license plates on export
+- **Data**: import images and folders with de-duplication and auto-rotation; extract frames from videos and from live or playback streams (RTSP, HTTP-FLV, HLS/m3u8, MP4); import YOLO / COCO / VOC / class-folder datasets (format detected automatically); train / val / test split; image quality screening; pick the most valuable images to label first; anonymize faces and license plates on export
 - **Annotation**: boxes, polygons, classification, keypoints; switch classes with 1–9; undo / redo, copy from previous image; keyframe interpolation and tracking for video frames
 - **AI assistance**: SAM click-to-outline; text-prompt detection; pre-label with your own trained model (single image or batch)
 - **Health check**: rule checks (tiny boxes, duplicate boxes and images, class imbalance) and model checks (likely missed labels, wrong classes, loose boxes, extra boxes)
