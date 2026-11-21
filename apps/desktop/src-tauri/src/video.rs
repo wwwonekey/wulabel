@@ -5,7 +5,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -55,6 +55,8 @@ pub struct ExtractResult {
     pub failed: Vec<String>,
     /// 视频流采集的帧保存在哪个文件夹（绝对路径）；本地视频抽帧为 None
     pub dir: Option<String>,
+    /// 本地视频抽帧被中途停止
+    pub stopped: bool,
 }
 
 /// 进度回调：阶段（download / extract / import）、已完成、总数、速度（字节/秒，仅下载阶段）、说明
@@ -66,9 +68,12 @@ fn video_name(p: &Path) -> String {
 
 /// 抽帧并导入。every：每隔多少秒抽 1 帧；max_frames：每个视频最多抽多少帧，0 不限。
 /// 抽出的帧一律复制进项目（临时文件导入后删除，不能只引用）。
+/// 可被 Extractor::stop 中途停止：后面的视频不再抽，已抽的帧照常导入。
+#[allow(clippy::too_many_arguments)]
 pub fn extract(
     project: &Project,
     rt: &Runtime,
+    extractor: &Extractor,
     paths: &[PathBuf],
     every: f64,
     max_frames: u64,
@@ -79,6 +84,7 @@ pub fn extract(
     if videos.is_empty() {
         return Err(msg(t!("没有找到视频（支持 mp4、mov、mkv、avi、webm 等）")));
     }
+    extractor.stopped.store(false, Ordering::Relaxed);
     let fps = if every > 0.0 { 1.0 / every } else { 1.0 };
 
     // 1. 准备 ffmpeg（没有就下载，带进度）
@@ -102,9 +108,12 @@ pub fn extract(
 
     let base = AtomicU64::new(0);
     for (i, v) in videos.iter().enumerate() {
+        if extractor.is_stopped() {
+            break;
+        }
         let label = format!("{}（{}/{}）", video_name(v), i + 1, videos.len());
         progress("extract", base.load(Ordering::Relaxed), total_est, 0, &label);
-        let produced = extract_one(&ffmpeg, v, &frame_dir, i, fps, max_frames, &|frames| {
+        let produced = extract_one(&ffmpeg, v, &frame_dir, i, fps, max_frames, extractor, &|frames| {
             progress("extract", base.load(Ordering::Relaxed) + frames, total_est, 0, &label);
         });
         match produced {
@@ -119,10 +128,22 @@ pub fn extract(
     }
 
     // 3. 把抽出的帧当图片导入（内容去重、生成缩略图、写库）
+    let stopped = extractor.is_stopped();
     let frames = images::collect(&[frame_dir.clone()]);
     let frame_count = frames.len();
     if frames.is_empty() {
         let _ = fs::remove_dir_all(&frame_dir);
+        if stopped {
+            return Ok(ExtractResult {
+                videos: videos.len(),
+                frames: 0,
+                added: 0,
+                duplicated: 0,
+                failed: Vec::new(),
+                dir: None,
+                stopped: true,
+            });
+        }
         return Err(msg(t!("没有抽到任何帧，请确认视频能正常播放")));
     }
     let imp = images::import(project, &frames, true, &|done, total| {
@@ -138,6 +159,7 @@ pub fn extract(
         duplicated: imp.duplicated,
         failed: imp.failed,
         dir: None,
+        stopped,
     })
 }
 
@@ -149,6 +171,7 @@ fn now_nanos() -> u128 {
 }
 
 /// 抽一个视频：输出到 out_dir/v{idx}_%06d.jpg，边抽边回调当前帧数，返回实际产出帧数
+#[allow(clippy::too_many_arguments)]
 fn extract_one(
     ffmpeg: &Path,
     video: &Path,
@@ -156,6 +179,7 @@ fn extract_one(
     idx: usize,
     fps: f64,
     max_frames: u64,
+    extractor: &Extractor,
     on_frame: &(dyn Fn(u64) + Sync),
 ) -> AppResult<u64> {
     let prefix = format!("v{idx}_");
@@ -172,6 +196,12 @@ fn extract_one(
     let mut child = c.spawn().map_err(|e| msg(t!("无法启动 ffmpeg：{e}", e = e)))?;
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
+    // 登记到 Extractor，点停止时能杀掉
+    let child = Arc::new(Mutex::new(child));
+    extractor.set(Some(child.clone()));
+    if extractor.is_stopped() {
+        let _ = child.lock().unwrap().kill();
+    }
     let err_buf = std::sync::Mutex::new(String::new());
     // 另开线程排空 stderr，避免 stderr 写满管道时 ffmpeg 阻塞
     std::thread::scope(|s| {
@@ -189,7 +219,22 @@ fn extract_one(
             }
         }
     });
-    let status = child.wait()?;
+    let status = child.lock().unwrap().wait();
+    extractor.set(None);
+    let status = status?;
+    if extractor.is_stopped() {
+        // 中途停止：最后一张可能没写完，删掉，其余的照常导入
+        let mut names: Vec<PathBuf> = fs::read_dir(out_dir)?
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+            .map(|e| e.path())
+            .collect();
+        names.sort();
+        if let Some(last) = names.pop() {
+            let _ = fs::remove_file(last);
+        }
+        return Ok(names.len() as u64);
+    }
     if !status.success() {
         let err = err_buf.lock().unwrap();
         let tail: Vec<&str> = err.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -219,15 +264,18 @@ pub struct StreamInfo {
     pub codec: String,
 }
 
-/// 正在进行的流抽帧任务，用来支持中途停止（停止后已抽的帧照常保留）
+/// 正在进行的抽帧任务（视频流、本地视频），用来支持中途停止（停止后已抽的帧照常保留）
 #[derive(Default)]
 pub struct Extractor {
     child: Mutex<Option<Arc<Mutex<Child>>>>,
+    /// 本地视频抽帧：点了停止，后面的视频不再抽
+    stopped: AtomicBool,
 }
 
 impl Extractor {
     /// 停止当前采集：杀掉 ffmpeg，已落盘的帧会在随后照常导入
     pub fn stop(&self) {
+        self.stopped.store(true, Ordering::Relaxed);
         if let Some(c) = self.child.lock().unwrap().take() {
             let _ = c.lock().unwrap().kill();
         }
@@ -235,6 +283,10 @@ impl Extractor {
 
     fn set(&self, c: Option<Arc<Mutex<Child>>>) {
         *self.child.lock().unwrap() = c;
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
     }
 }
 
@@ -521,6 +573,7 @@ pub fn extract_stream(
         duplicated: 0,
         failed: Vec::new(),
         dir: Some(dir_str.clone()),
+        stopped: false,
     };
     let mut done_upto = 0usize; // 按文件名排序，前 done_upto 张已经处理过
     // 把已经写完的帧导入项目（ffmpeg 正在写的最后一张先不碰），新入库的图通知前端。

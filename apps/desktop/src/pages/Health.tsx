@@ -1,24 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, App, Button, Empty, Progress, Select, Space, Tooltip } from "antd";
+import { Alert, App, Button, Empty, Progress, Select, Space, Tag, Tooltip } from "antd";
 import { CheckOutlined, EyeInvisibleOutlined, FormOutlined, HeartOutlined, PlusOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
-import { api, errText, HealthReport, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
-import { useApp } from "../store";
+import { api, errText, HealthReport, ImageStatus, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
+import { useApp, useReview } from "../store";
 import { fmtTime } from "./Train";
 import { t } from "../i18n";
 
 type Filter = IssueKind | "dup_image";
 
-const KINDS: { key: Filter; name: string; color: string; tip: string; model?: boolean }[] = [
+/** cls：分类项目也有的检查（其余都是框相关的，分类项目不显示） */
+const KINDS: { key: Filter; name: string; color: string; tip: string; model?: boolean; cls?: boolean }[] = [
   { key: "missing", name: t("疑似漏标"), color: "#e5534b", tip: t("模型很确定这里有目标，但没有标注"), model: true },
-  { key: "wrong_class", name: t("疑似类别错"), color: "#e5534b", tip: t("框的位置对上了，但标注的类别和模型判断的不一样"), model: true },
+  { key: "wrong_class", name: t("疑似类别错"), color: "#e5534b", tip: t("框的位置对上了，但标注的类别和模型判断的不一样"), model: true, cls: true },
   { key: "loose_box", name: t("框不准"), color: "#e7a33e", tip: t("类别一致，但框和模型预测的重合度低，可能画偏或大小不对"), model: true },
   { key: "extra_box", name: t("疑似多余框"), color: "#e7a33e", tip: t("标了框，但模型在这个位置什么都没看到"), model: true },
   { key: "tiny_box", name: t("极小框"), color: "#9b7bf2", tip: t("短边小于 8 像素，模型几乎学不到") },
   { key: "dup_box", name: t("重复框"), color: "#9b7bf2", tip: t("同一张图里同类别的两个框几乎完全重叠") },
-  { key: "dup_image", name: t("重复图片"), color: "#3d8bfd", tip: t("画面几乎一样的图片，会让评估结果虚高") },
+  { key: "dup_image", name: t("重复图片"), color: "#3d8bfd", tip: t("画面几乎一样的图片，会让评估结果虚高"), cls: true },
   { key: "no_label", name: t("无类别"), color: "#9aa1ab", tip: t("框没有类别，不会参与训练") },
 ];
+
+const STATUS: Record<ImageStatus, { text: string; color?: string }> = {
+  todo: { text: t("未标注") },
+  labeled: { text: t("已标注"), color: "processing" },
+  reviewed: { text: t("已审核"), color: "success" },
+  skipped: { text: t("已跳过") },
+};
 
 const PAGE = 48;
 
@@ -57,6 +65,13 @@ export default function Health({ project }: { project: ProjectInfo }) {
   const [running, setRunning] = useState<{ done: number; total: number } | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
   const [limit, setLimit] = useState(PAGE);
+  // 每组重复图片保留哪张（key 是组里 id 连起来），没选的用排在第一张的（后端按标注完整程度排好了）
+  const [keep, setKeep] = useState<Record<string, number>>({});
+  const [showChanged, setShowChanged] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const review = useReview();
+  const cls = project.task === "classify";
+  const kinds = useMemo(() => (cls ? KINDS.filter((k) => k.cls) : KINDS), [cls]);
 
   useEffect(() => {
     api.healthLoad().then((r) => {
@@ -75,19 +90,22 @@ export default function Health({ project }: { project: ProjectInfo }) {
     return (id: number | null) => (id != null && m.get(id)) || t("未分类");
   }, [report]);
 
+  // 体检后标注改过的图上的问题：不算数，默认收起
+  const changed = useMemo(() => new Set(report?.changed ?? []), [report]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const i of report?.issues ?? []) c[i.kind] = (c[i.kind] ?? 0) + 1;
+    for (const i of report?.issues ?? []) if (!changed.has(i.key)) c[i.kind] = (c[i.kind] ?? 0) + 1;
     c.dup_image = report?.dupGroups.length ?? 0;
     return c;
-  }, [report]);
+  }, [report, changed]);
 
   // 默认选中第一个有问题的类型
   useEffect(() => {
-    if (report && (filter == null || !counts[filter])) {
-      setFilter((KINDS.find((k) => counts[k.key]) ?? KINDS[0]).key);
+    if (report && filter == null) {
+      setFilter((kinds.find((k) => counts[k.key]) ?? kinds[0]).key);
     }
-  }, [report, counts, filter]);
+  }, [report, counts, filter, kinds]);
 
   const start = async () => {
     setRunning({ done: 0, total: 0 });
@@ -97,6 +115,8 @@ export default function Health({ project }: { project: ProjectInfo }) {
       setReport(r);
       setFilter(null);
       setLimit(PAGE);
+      setKeep({});
+      setShowChanged(false);
       message.success(t("体检完成，发现 {n} 处问题", { n: r.issues.length + r.dupGroups.length }));
     } catch (e) {
       modal.error({ title: t("体检没有完成"), content: errText(e) });
@@ -109,20 +129,32 @@ export default function Health({ project }: { project: ProjectInfo }) {
   const drop = (keys: string[]) =>
     setReport((r) => (r ? { ...r, issues: r.issues.filter((i) => !keys.includes(i.key)) } : r));
 
-  const ignore = async (i: Issue) => {
+  const ignoreKeys = async (keys: string[]) => {
     try {
-      await api.healthIgnore([i.key]);
-      drop([i.key]);
+      await api.healthIgnore(keys);
+      setReport((r) => (r ? { ...r, issues: r.issues.filter((i) => !keys.includes(i.key)), ignored: (r.ignored ?? 0) + keys.length } : r));
     } catch (e) {
       message.error(errText(e));
     }
   };
 
+  const unignore = async () => {
+    try {
+      await api.healthUnignore();
+      setReport(await api.healthLoad());
+    } catch (e) {
+      message.error(errText(e));
+    }
+  };
+
+  const addBox = (i: Issue) =>
+    api.appendAnnotation(i.imageId, { labelId: i.predLabelId, type: "bbox", data: i.bbox!, score: null, source: "manual" });
+
+  // 加上后这张图的标注变了，下次打开体检页会算「已修改」，不用再记忽略
   const accept = async (i: Issue) => {
     if (!i.bbox || i.predLabelId == null) return;
     try {
-      await api.appendAnnotation(i.imageId, { labelId: i.predLabelId, type: "bbox", data: i.bbox, score: null, source: "manual" });
-      await api.healthIgnore([i.key]);
+      await addBox(i);
       drop([i.key]);
       refreshStats();
       message.success(t("已加为「{name}」", { name: labelName(i.predLabelId) }));
@@ -131,54 +163,94 @@ export default function Health({ project }: { project: ProjectInfo }) {
     }
   };
 
+  const acceptAll = (items: Issue[]) => {
+    const todo = items.filter((i) => i.bbox && i.predLabelId != null);
+    modal.confirm({
+      title: t("把这 {n} 处疑似漏标都加为标注？", { n: todo.length }),
+      content: t("按模型预测的框和类别直接加上，之后可以在标注页修改。"),
+      okText: t("全部加上"),
+      cancelText: t("取消"),
+      onOk: async () => {
+        setBusy(true);
+        const done: string[] = [];
+        try {
+          for (const i of todo) {
+            await addBox(i);
+            done.push(i.key);
+          }
+        } catch (e) {
+          message.error(errText(e));
+        } finally {
+          drop(done);
+          setBusy(false);
+          refreshStats();
+          if (done.length) message.success(t("已加上 {n} 个标注", { n: done.length }));
+        }
+      },
+    });
+  };
+
+  const ignoreAll = (items: Issue[], name: string) => {
+    modal.confirm({
+      title: t("忽略这 {n} 处「{name}」？", { n: items.length, name }),
+      content: t("以后体检不再提示，可以随时恢复。"),
+      okText: t("全部忽略"),
+      cancelText: t("取消"),
+      onOk: () => ignoreKeys(items.map((i) => i.key)),
+    });
+  };
+
   const go = (i: Issue) => {
     const k = KINDS.find((x) => x.key === i.kind);
     annotateImage(i.imageId, i.bbox ? { imageId: i.imageId, bbox: i.bbox, text: k?.name ?? "" } : undefined);
   };
 
+  const keepOf = (g: number[]) => {
+    const k = keep[g.join(",")];
+    return k != null && g.includes(k) ? k : g[0];
+  };
+
+  const removeDups = async (extra: number[], left: (g: number[]) => boolean) => {
+    try {
+      const n = await api.deleteImages("ids", extra);
+      setReport((r) => (r ? { ...r, dupGroups: r.dupGroups.filter(left) } : r));
+      refreshStats();
+      message.success(t("删掉了 {n} 张重复图片", { n }));
+    } catch (e) {
+      message.error(errText(e));
+    }
+  };
+
   const dedupe = (group: number[]) => {
-    const extra = group.slice(1);
+    const extra = group.filter((id) => id !== keepOf(group));
     modal.confirm({
       title: t("删除这组里的 {n} 张重复图片？", { n: extra.length }),
-      content: t("保留第一张。图片的标注会一起删除，你电脑上的原图不受影响。"),
+      content: t("保留绿框那张。图片的标注会一起删除，你电脑上的原图不受影响。"),
       okText: t("删除"),
       okButtonProps: { danger: true },
       cancelText: t("取消"),
-      onOk: async () => {
-        try {
-          await api.deleteImages("ids", extra);
-          setReport((r) => (r ? { ...r, dupGroups: r.dupGroups.filter((g) => g !== group) } : r));
-          refreshStats();
-        } catch (e) {
-          message.error(errText(e));
-        }
-      },
+      onOk: () => removeDups(extra, (g) => g !== group),
     });
   };
 
   const dedupeAll = () => {
     if (!report) return;
-    const extra = report.dupGroups.flatMap((g) => g.slice(1));
+    const extra = report.dupGroups.flatMap((g) => g.filter((id) => id !== keepOf(g)));
     modal.confirm({
       title: t("每组只保留一张，共删除 {n} 张重复图片？", { n: extra.length }),
-      content: t("图片的标注会一起删除，你电脑上的原图不受影响。"),
+      content: t("每组保留绿框那张（默认留标注最完整的）。图片的标注会一起删除，你电脑上的原图不受影响。"),
       okText: t("删除"),
       okButtonProps: { danger: true },
       cancelText: t("取消"),
-      onOk: async () => {
-        try {
-          await api.deleteImages("ids", extra);
-          setReport((r) => (r ? { ...r, dupGroups: [] } : r));
-          refreshStats();
-        } catch (e) {
-          message.error(errText(e));
-        }
-      },
+      onOk: () => removeDups(extra, () => false),
     });
   };
 
-  const kind = KINDS.find((k) => k.key === filter);
-  const list = (report?.issues ?? []).filter((i) => i.kind === filter);
+  const kind = kinds.find((k) => k.key === filter);
+  const all = (report?.issues ?? []).filter((i) => i.kind === filter);
+  const open = all.filter((i) => !changed.has(i.key));
+  const nChanged = all.length - open.length;
+  const list = showChanged ? [...open, ...all.filter((i) => changed.has(i.key))] : open;
   const maxBoxes = Math.max(1, ...(report?.classes ?? []).map((c) => c.boxes));
   const maxSize = Math.max(1, ...(report?.sizes ?? []).map((s) => s[1]));
 
@@ -250,8 +322,8 @@ export default function Health({ project }: { project: ProjectInfo }) {
         )
       ) : (
         <>
-          <div className="cards" style={{ gridTemplateColumns: "repeat(8, 1fr)", marginBottom: 12 }}>
-            {KINDS.map((k) => {
+          <div className="cards" style={{ gridTemplateColumns: `repeat(${kinds.length}, 1fr)`, marginBottom: 12 }}>
+            {kinds.map((k) => {
               const n = counts[k.key] ?? 0;
               const off = k.model && !report.runId;
               return (
@@ -276,28 +348,71 @@ export default function Health({ project }: { project: ProjectInfo }) {
             <div className="card">
               <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
                 <h2 style={{ fontSize: 14, margin: 0 }}>
-                  {kind?.name} <span className="dim">· {filter === "dup_image" ? t("{n} 组", { n: report.dupGroups.length }) : t("{n} 处", { n: list.length })}</span>
+                  {kind?.name} <span className="dim">· {filter === "dup_image" ? t("{n} 组", { n: report.dupGroups.length }) : t("{n} 处", { n: open.length })}</span>
                 </h2>
-                <span className="dim" style={{ fontSize: 12 }}>{kind?.tip}</span>
+                <span className="dim" style={{ fontSize: 12 }}>
+                  {kind?.tip}
+                  {!!report.ignored && (
+                    <>
+                      {" · "}
+                      {t("已忽略 {n} 条", { n: report.ignored })} <a onClick={unignore}>{t("恢复")}</a>
+                    </>
+                  )}
+                </span>
               </div>
+
+              {filter !== "dup_image" && open.length > 0 && (
+                <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+                  {filter === "missing" && (
+                    <Button size="small" icon={<PlusOutlined />} loading={busy} onClick={() => acceptAll(open)}>
+                      {t("全部加为标注（{n} 处）", { n: open.length })}
+                    </Button>
+                  )}
+                  <Button size="small" icon={<EyeInvisibleOutlined />} disabled={busy} onClick={() => ignoreAll(open, kind?.name ?? "")}>
+                    {t("全部忽略（{n} 处）", { n: open.length })}
+                  </Button>
+                </div>
+              )}
 
               {filter === "dup_image" ? (
                 report.dupGroups.length === 0 ? (
                   <Empty description={t("没有重复图片")} image={<CheckOutlined style={{ fontSize: 40, color: "var(--ok)" }} />} />
                 ) : (
                   <>
-                    <Button size="small" danger style={{ marginBottom: 10 }} onClick={dedupeAll}>
-                      {t("每组只保留一张（删除 {n} 张）", { n: report.dupGroups.reduce((s, g) => s + g.length - 1, 0) })}
-                    </Button>
+                    <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+                      <Button size="small" danger onClick={dedupeAll}>
+                        {t("每组只保留一张（删除 {n} 张）", { n: report.dupGroups.reduce((s, g) => s + g.length - 1, 0) })}
+                      </Button>
+                      <span className="dim" style={{ fontSize: 12 }}>
+                        {t("绿框是要保留的图，默认留标注最完整的那张；点别的图可以换，双击去标注页看。")}
+                      </span>
+                    </div>
                     {report.dupGroups.slice(0, limit).map((g) => (
                       <div key={g.join(",")} className="row" style={{ marginBottom: 10, flexWrap: "nowrap", alignItems: "stretch" }}>
                         <div className="thumbs" style={{ flex: 1, gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
-                          {g.map((id, i) => (
-                            <div key={id} className="thumb" onClick={() => annotateImage(id)} style={{ outline: i === 0 ? "2px solid var(--ok)" : undefined }}>
-                              <img src={thumbUrl(project.path, id)} loading="lazy" alt="" draggable={false} />
-                              <span className="nm">{i === 0 ? t("保留") : `#${id}`}</span>
-                            </div>
-                          ))}
+                          {g.map((id) => {
+                            const kept = keepOf(g) === id;
+                            const info = report.imgInfo?.[String(id)];
+                            const st = info ? STATUS[!review && info[0] === "reviewed" ? "labeled" : info[0]] : null;
+                            return (
+                              <div
+                                key={id}
+                                className="thumb"
+                                title={info ? t("#{id} · {n} 个标注", { id, n: info[1] }) : `#${id}`}
+                                onClick={() => setKeep((m) => ({ ...m, [g.join(",")]: id }))}
+                                onDoubleClick={() => annotateImage(id)}
+                                style={{ outline: kept ? "2px solid var(--ok)" : undefined }}
+                              >
+                                <img src={thumbUrl(project.path, id)} loading="lazy" alt="" draggable={false} />
+                                {st && (
+                                  <Tag className="st" color={st.color}>
+                                    {st.text}
+                                  </Tag>
+                                )}
+                                <span className="nm">{kept ? t("保留") : `#${id}`}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                         <Button size="small" style={{ alignSelf: "center" }} onClick={() => dedupe(g)}>
                           {t("删除其余 {n} 张", { n: g.length - 1 })}
@@ -313,27 +428,39 @@ export default function Health({ project }: { project: ProjectInfo }) {
                 />
               ) : (
                 <div className="issue-grid">
-                  {list.slice(0, limit).map((i) => (
-                    <div key={i.key} className="issue">
-                      <IssueThumb path={project.path} issue={i} dims={report.dims[String(i.imageId)]} color={kind?.color ?? "#fff"} />
-                      <div className="issue-text">{i.detail}</div>
-                      <div className="row" style={{ gap: 4 }}>
-                        <Button size="small" icon={<FormOutlined />} onClick={() => go(i)}>
-                          {t("去修改")}
-                        </Button>
-                        {i.kind === "missing" && (
-                          <Tooltip title={t("直接加一个「{name}」框", { name: labelName(i.predLabelId) })}>
-                            <Button size="small" icon={<PlusOutlined />} onClick={() => accept(i)}>
-                              {t("加为标注")}
-                            </Button>
+                  {list.slice(0, limit).map((i) => {
+                    const done = changed.has(i.key);
+                    return (
+                      <div key={i.key} className="issue" style={done ? { opacity: 0.55 } : undefined}>
+                        <IssueThumb path={project.path} issue={i} dims={report.dims[String(i.imageId)]} color={kind?.color ?? "#fff"} />
+                        <div className="issue-text">
+                          {done && <Tag style={{ marginRight: 4 }}>{t("已修改")}</Tag>}
+                          {i.detail}
+                        </div>
+                        <div className="row" style={{ gap: 4 }}>
+                          <Button size="small" icon={<FormOutlined />} onClick={() => go(i)}>
+                            {t("去修改")}
+                          </Button>
+                          {i.kind === "missing" && !done && (
+                            <Tooltip title={t("直接加一个「{name}」框", { name: labelName(i.predLabelId) })}>
+                              <Button size="small" icon={<PlusOutlined />} onClick={() => accept(i)}>
+                                {t("加为标注")}
+                              </Button>
+                            </Tooltip>
+                          )}
+                          <Tooltip title={t("不是问题，以后体检不再提示")}>
+                            <Button size="small" type="text" icon={<EyeInvisibleOutlined />} onClick={() => ignoreKeys([i.key])} />
                           </Tooltip>
-                        )}
-                        <Tooltip title={t("不是问题，以后体检不再提示")}>
-                          <Button size="small" type="text" icon={<EyeInvisibleOutlined />} onClick={() => ignore(i)} />
-                        </Tooltip>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+              )}
+              {filter !== "dup_image" && nChanged > 0 && (
+                <div className="dim" style={{ fontSize: 12, marginTop: 10 }}>
+                  {t("另有 {n} 处所在的图体检后改过标注，可能已经改好了", { n: nChanged })}{" "}
+                  <a onClick={() => setShowChanged(!showChanged)}>{showChanged ? t("收起") : t("显示")}</a>
                 </div>
               )}
               {((filter === "dup_image" ? report.dupGroups.length : list.length) > limit) && (
@@ -355,14 +482,16 @@ export default function Health({ project }: { project: ProjectInfo }) {
                 )}
               </div>
               <div className="card" style={{ marginBottom: 12 }}>
-                <h2 style={{ fontSize: 14, marginTop: 0 }}>{t("类别分布")} <span className="dim" style={{ fontWeight: 400 }}>{t("（框数 · 图片数）")}</span></h2>
+                <h2 style={{ fontSize: 14, marginTop: 0 }}>
+                  {t("类别分布")} <span className="dim" style={{ fontWeight: 400 }}>{cls ? t("（图片数）") : t("（框数 · 图片数）")}</span>
+                </h2>
                 {report.classes.length === 0 && <div className="dim">{t("还没有类别")}</div>}
                 {report.classes.map((c) => (
                   <div key={c.labelId} style={{ marginBottom: 8 }}>
                     <div className="row" style={{ justifyContent: "space-between" }}>
                       <span>{c.name}</span>
                       <span className="muted" style={{ color: c.boxes * 5 < maxBoxes ? "var(--warn)" : undefined }}>
-                        {c.boxes} · {c.images}
+                        {cls ? c.images : `${c.boxes} · ${c.images}`}
                       </span>
                     </div>
                     <div style={{ height: 6, background: "var(--panel2)", borderRadius: 3, overflow: "hidden" }}>
@@ -371,19 +500,21 @@ export default function Health({ project }: { project: ProjectInfo }) {
                   </div>
                 ))}
               </div>
-              <div className="card">
-                <h2 style={{ fontSize: 14, marginTop: 0 }}>{t("框大小分布")} <span className="dim" style={{ fontWeight: 400 }}>{t("（短边像素）")}</span></h2>
-                <div className="sizes">
-                  {report.sizes.map(([name, n], i) => (
-                    <Tooltip key={name} title={t("{range} 像素：{n} 个框", { range: name, n })}>
-                      <div className="size-col">
-                        <div className="size-bar" style={{ height: `${(n / maxSize) * 100}%`, background: i === 0 ? "var(--warn)" : "var(--accent)" }} />
-                        <span>{name}</span>
-                      </div>
-                    </Tooltip>
-                  ))}
+              {!cls && (
+                <div className="card">
+                  <h2 style={{ fontSize: 14, marginTop: 0 }}>{t("框大小分布")} <span className="dim" style={{ fontWeight: 400 }}>{t("（短边像素）")}</span></h2>
+                  <div className="sizes">
+                    {report.sizes.map(([name, n], i) => (
+                      <Tooltip key={name} title={t("{range} 像素：{n} 个框", { range: name, n })}>
+                        <div className="size-col">
+                          <div className="size-bar" style={{ height: `${(n / maxSize) * 100}%`, background: i === 0 ? "var(--warn)" : "var(--accent)" }} />
+                          <span>{name}</span>
+                        </div>
+                      </Tooltip>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </>

@@ -79,6 +79,18 @@ pub struct HealthReport {
     /// 有问题的图片的宽高，前端在缩略图上画框用
     #[serde(default)]
     pub dims: HashMap<i64, (u32, u32)>,
+    /// 体检时每张有问题的图的标注指纹，之后改过标注的图能认出来
+    #[serde(default)]
+    pub sigs: HashMap<i64, String>,
+    /// 读取时填充：体检后标注改过的图上的问题（key）
+    #[serde(default)]
+    pub changed: Vec<String>,
+    /// 读取时填充：这份报告里被忽略的问题数
+    #[serde(default)]
+    pub ignored: usize,
+    /// 读取时填充：重复图片的（状态, 标注数），缩略图上显示
+    #[serde(default)]
+    pub img_info: HashMap<i64, (String, i64)>,
 }
 
 pub struct Gt {
@@ -450,36 +462,112 @@ fn load_ignored(p: &Project) -> HashSet<String> {
     fs::read_to_string(ignore_path(p)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
-pub fn ignore(p: &Project, keys: &[String]) -> AppResult<()> {
-    let mut set = load_ignored(p);
-    set.extend(keys.iter().cloned());
+fn save_ignored(p: &Project, set: HashSet<String>) -> AppResult<()> {
     let mut v: Vec<_> = set.into_iter().collect();
     v.sort();
     fs::write(ignore_path(p), serde_json::to_string_pretty(&v)?)?;
     Ok(())
 }
 
-/// 读上次体检结果，去掉已忽略的和已删除图片的问题
+pub fn ignore(p: &Project, keys: &[String]) -> AppResult<()> {
+    let mut set = load_ignored(p);
+    set.extend(keys.iter().cloned());
+    save_ignored(p, set)
+}
+
+/// 恢复上次体检里忽略掉的问题（只动这份报告里的，没有报告就全部清掉）
+pub fn unignore(p: &Project) -> AppResult<()> {
+    let mut set = load_ignored(p);
+    let keys: Vec<String> = fs::read_to_string(report_path(p))
+        .ok()
+        .and_then(|s| serde_json::from_str::<HealthReport>(&s).ok())
+        .map(|r| r.issues.iter().map(|i| i.key()).collect())
+        .unwrap_or_default();
+    if keys.is_empty() {
+        set.clear();
+    } else {
+        for k in &keys {
+            set.remove(k);
+        }
+    }
+    save_ignored(p, set)
+}
+
+/// 每张图的标注指纹（类别 + 类型 + 数据），体检后有没有改过标注用它比
+fn ann_sigs(conn: &rusqlite::Connection, ids: &HashSet<i64>) -> AppResult<HashMap<i64, String>> {
+    let mut stmt = conn.prepare("SELECT COALESCE(label_id, 0), type, data_json FROM annotations WHERE image_id = ?1 ORDER BY id")?;
+    let mut out = HashMap::new();
+    for &id in ids {
+        let mut h = blake3::Hasher::new();
+        let rows = stmt.query_map([id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?;
+        for row in rows {
+            let (label, kind, data) = row?;
+            h.update(format!("{label}|{kind}|{data};").as_bytes());
+        }
+        out.insert(id, h.finalize().to_hex()[..16].to_string());
+    }
+    Ok(out)
+}
+
+/// 重复图片里先留哪张：已审核 > 已标注 > 标注多的 > 未标注，一样时留 id 小的
+fn keep_order(id: i64, info: Option<&(String, i64)>) -> (u8, std::cmp::Reverse<i64>, i64) {
+    let (status, n) = info.map(|(s, n)| (s.as_str(), *n)).unwrap_or(("todo", 0));
+    let rank = match status {
+        "reviewed" => 0,
+        "labeled" => 1,
+        _ => 2,
+    };
+    (rank, std::cmp::Reverse(n), id)
+}
+
+/// 读上次体检结果，去掉已忽略的和已删除图片的问题；重复图片每组把最该留的排在第一张
 pub fn load(p: &Project) -> AppResult<Option<HealthReport>> {
     let Ok(text) = fs::read_to_string(report_path(p)) else { return Ok(None) };
     let Ok(mut r) = serde_json::from_str::<HealthReport>(&text) else { return Ok(None) };
     let ignored = load_ignored(p);
-    let alive: HashSet<i64> = {
+    // 现存图片的状态和标注数
+    let info: HashMap<i64, (String, i64)> = {
         let conn = p.conn.lock();
-        let mut stmt = conn.prepare("SELECT id FROM images")?;
-        let v = stmt.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
+        let mut stmt =
+            conn.prepare("SELECT i.id, i.status, (SELECT COUNT(*) FROM annotations a WHERE a.image_id = i.id) FROM images i")?;
+        let v = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, (row.get::<_, String>(1)?, row.get::<_, i64>(2)?))))?
+            .collect::<Result<_, _>>()?;
         v
     };
-    r.issues.retain(|i| alive.contains(&i.image_id) && !ignored.contains(&i.key()));
+    r.issues.retain(|i| info.contains_key(&i.image_id));
+    let alive = r.issues.len();
+    r.issues.retain(|i| !ignored.contains(&i.key()));
+    r.ignored = alive - r.issues.len();
     for i in &mut r.issues {
         i.key = i.key();
     }
+    // 体检后标注改过的图：问题可能已经改好了，标成「已修改」
+    let ids: HashSet<i64> = r.issues.iter().map(|i| i.image_id).filter(|id| r.sigs.contains_key(id)).collect();
+    let now = {
+        let conn = p.conn.lock();
+        ann_sigs(&conn, &ids)?
+    };
+    let changed: Vec<String> = r
+        .issues
+        .iter()
+        .filter(|i| matches!((r.sigs.get(&i.image_id), now.get(&i.image_id)), (Some(a), Some(b)) if a != b))
+        .map(|i| i.key.clone())
+        .collect();
+    r.changed = changed;
     r.dup_groups = r
         .dup_groups
         .into_iter()
-        .map(|g| g.into_iter().filter(|id| alive.contains(id)).collect::<Vec<_>>())
+        .map(|g| {
+            let mut g: Vec<i64> = g.into_iter().filter(|id| info.contains_key(id)).collect();
+            g.sort_by_key(|id| keep_order(*id, info.get(id)));
+            g
+        })
         .filter(|g| g.len() > 1)
         .collect();
+    let img_info: HashMap<i64, (String, i64)> =
+        r.dup_groups.iter().flatten().filter_map(|id| info.get(id).map(|v| (*id, v.clone()))).collect();
+    r.img_info = img_info;
     Ok(Some(r))
 }
 
@@ -512,16 +600,22 @@ pub fn run(
         dup_groups,
         suggestions: Vec::new(),
         dims: HashMap::new(),
+        sigs: HashMap::new(),
+        changed: Vec::new(),
+        ignored: 0,
+        img_info: HashMap::new(),
     };
     r.suggestions = suggestions(&r);
     {
         let conn = p.conn.lock();
+        let ids: HashSet<i64> = r.issues.iter().map(|i| i.image_id).collect();
         let mut stmt = conn.prepare("SELECT width, height FROM images WHERE id = ?1")?;
-        for id in r.issues.iter().map(|i| i.image_id).collect::<HashSet<_>>() {
+        for &id in &ids {
             if let Ok(d) = stmt.query_row([id], |row| Ok((row.get(0)?, row.get(1)?))) {
                 r.dims.insert(id, d);
             }
         }
+        r.sigs = ann_sigs(&conn, &ids)?;
     }
     fs::create_dir_all(p.root.join(".cache"))?;
     fs::write(report_path(p), serde_json::to_string(&r)?)?;

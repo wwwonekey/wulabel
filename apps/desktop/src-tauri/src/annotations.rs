@@ -191,6 +191,33 @@ pub fn set_status(p: &Project, image_id: i64, status: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// 数据页批量改状态，一个事务里改完。改成 todo（恢复未标注）时，有人工标注的图恢复成已标注，
+/// 没有标注或只有模型预标注的才是未标注。返回改到的图和它们的新状态
+pub fn set_status_many(p: &Project, ids: &[i64], status: &str) -> AppResult<Vec<(i64, String)>> {
+    if !STATUSES.contains(&status) {
+        return Err(msg(t!("不支持的状态：{status}", status = status)));
+    }
+    let mut conn = p.conn.lock();
+    let tx = conn.transaction()?;
+    let mut out = Vec::new();
+    {
+        let mut up = tx.prepare(
+            "UPDATE images SET status = CASE
+                WHEN ?2 = 'todo' AND EXISTS (SELECT 1 FROM annotations a WHERE a.image_id = images.id AND a.source != 'model')
+                THEN 'labeled' ELSE ?2 END
+             WHERE id = ?1",
+        )?;
+        let mut get = tx.prepare("SELECT status FROM images WHERE id = ?1")?;
+        for &id in ids {
+            if up.execute(params![id, status])? > 0 {
+                out.push((id, get.query_row([id], |r| r.get::<_, String>(0))?));
+            }
+        }
+    }
+    tx.commit()?;
+    Ok(out)
+}
+
 /// 标注页翻图用：按筛选条件返回全部图片 id
 pub fn list_ids(p: &Project, status: Option<&str>) -> AppResult<Vec<i64>> {
     let status = status.filter(|s| !s.is_empty() && *s != "all");
