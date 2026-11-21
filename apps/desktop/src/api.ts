@@ -65,6 +65,8 @@ export interface ImportResult {
   added: number;
   duplicated: number;
   failed: string[];
+  /** 中途停止时没导入的张数 */
+  stopped?: number;
 }
 
 export interface ImportProgress {
@@ -80,6 +82,8 @@ export interface ExtractResult {
   failed: string[];
   /** 视频流采集的帧保存在哪个文件夹（绝对路径）；本地视频抽帧为 null */
   dir: string | null;
+  /** 本地视频抽帧被中途停止 */
+  stopped?: boolean;
 }
 
 /** 视频流边采边入库：这一批新入库的图片 id 和保存文件夹 */
@@ -536,6 +540,12 @@ export interface HealthReport {
   dupGroups: number[][];
   suggestions: string[];
   dims: Record<string, [number, number]>;
+  /** 体检后标注改过的图上的问题（key） */
+  changed?: string[];
+  /** 这份报告里被忽略的问题数 */
+  ignored?: number;
+  /** 重复图片的（状态, 标注数） */
+  imgInfo?: Record<string, [ImageStatus, number]>;
 }
 
 export interface FormatResult {
@@ -582,6 +592,7 @@ export const api = {
   healthLoad: () => invoke<HealthReport | null>("health_load"),
   healthRun: (runId: number | null) => invoke<HealthReport>("health_run", { runId }),
   healthIgnore: (keys: string[]) => invoke<void>("health_ignore", { keys }),
+  healthUnignore: () => invoke<void>("health_unignore"),
   appendAnnotation: (imageId: number, annotation: Annotation) => invoke<ImageStatus>("append_annotation", { imageId, annotation }),
   envStatus: (refresh: boolean) => invoke<EnvStatus>("env_status", { refresh }),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
@@ -614,6 +625,8 @@ export const api = {
   saveAnnotations: (imageId: number, annotations: Annotation[]) =>
     invoke<ImageStatus>("save_annotations", { imageId, annotations }),
   setImageStatus: (imageId: number, status: ImageStatus) => invoke<void>("set_image_status", { imageId, status }),
+  /** 批量改状态，返回改了几张；改成 todo 时有人工标注的图会变成已标注 */
+  setStatusMany: (ids: number[], status: ImageStatus) => invoke<number>("set_status_many", { ids, status }),
   listLabels: () => invoke<Label[]>("list_labels"),
   interpolateFrames: (imageId: number) => invoke<InterpResult>("interpolate_frames", { imageId }),
   trackFrames: (imageId: number, count: number) => invoke<TrackResult>("track_frames", { imageId, count }),
@@ -643,6 +656,7 @@ export const api = {
   projectSummary: (path: string) => invoke<ProjectSummary | null>("project_summary", { path }),
   removeRecent: (path: string) => invoke<void>("remove_recent", { path }),
   importImages: (paths: string[], copy: boolean) => invoke<ImportResult>("import_images", { paths, copy }),
+  stopImport: () => invoke<void>("stop_import"),
   extractVideo: (paths: string[], every: number, maxFrames: number) =>
     invoke<ExtractResult>("extract_video", { paths, every, maxFrames }),
   probeStream: (url: string) => invoke<StreamInfo>("probe_stream", { url }),

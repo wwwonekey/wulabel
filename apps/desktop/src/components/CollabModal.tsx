@@ -4,7 +4,7 @@ import { FolderOpenOutlined } from "@ant-design/icons";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { AnonymizeConfig, api, errText, ImportProgress, MergeResult, PackageInfo, ProjectInfo } from "../api";
-import { prefs, useApp } from "../store";
+import { prefs, useApp, useReview } from "../store";
 import AnonymizeOptions from "./AnonymizeOptions";
 import { t } from "../i18n";
 
@@ -30,6 +30,7 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
   const [outDir, setOutDir] = useState(prefs.get("packageDir", ""));
   const [people, setPeople] = useState("");
   const [scope, setScope] = useState<"todo" | "unreviewed" | "all">("todo");
+  const review = useReview();
   const [withAnns, setWithAnns] = useState(true);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [anonymize, setAnonymize] = useState<AnonymizeConfig | null>(null);
@@ -63,7 +64,13 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
     const un = await listen<ImportProgress>("export-progress", (e) => setProgress(e.payload));
     const unLog = await listen<string>("export-log", (e) => setStage(e.payload));
     try {
-      const ps = await api.splitPackages({ outDir, assignees: names, scope, withAnnotations: withAnns, anonymize });
+      const ps = await api.splitPackages({
+        outDir,
+        assignees: names,
+        scope: !review && scope === "unreviewed" ? "todo" : scope,
+        withAnnotations: withAnns,
+        anonymize,
+      });
       message.success(
         t("已分成 {n} 个包：{list}", {
           n: ps.length,
@@ -130,7 +137,8 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
                   />
                   <Radio.Group value={scope} onChange={(e) => setScope(e.target.value)}>
                     <Radio value="todo">{t("只分未标注的图")}</Radio>
-                    <Radio value="unreviewed">{t("未审核的（未标注 + 已标注待复核）")}</Radio>
+                    {/* 一个人标注时没有审核，这一项（未标注 + 已标注但没审核）没意义，不显示 */}
+                    {review && <Radio value="unreviewed">{t("未审核的（未标注 + 已标注待复核）")}</Radio>}
                     <Radio value="all">{t("全部（跳过的除外）")}</Radio>
                   </Radio.Group>
                   <Checkbox checked={withAnns} onChange={(e) => setWithAnns(e.target.checked)}>

@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { App, Button, Form, Input, Modal, Radio, Space } from "antd";
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
+import { documentDir, join } from "@tauri-apps/api/path";
 import { api, errText, Task, TASKS } from "../api";
 import { prefs, useApp } from "../store";
 import { t } from "../i18n";
+
+const PALETTE = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6", "#f472b6", "#a3e635", "#f97316", "#60a5fa"];
 
 interface Values {
   name: string;
   parent: string;
   task: Task;
+  labels?: string;
 }
 
 export default function NewProjectModal({ openState, onClose }: { openState: boolean; onClose: () => void }) {
@@ -17,6 +21,17 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
   const [busy, setBusy] = useState(false);
   const { message } = App.useApp();
   const setProject = useApp((s) => s.setProject);
+
+  // 没选过存放位置时默认放在「文档/Wulabel」下（建项目时会自动建出这个文件夹）
+  useEffect(() => {
+    if (!openState || form.getFieldValue("parent")) return;
+    documentDir()
+      .then((d) => join(d, "Wulabel"))
+      .then((p) => {
+        if (!form.getFieldValue("parent")) form.setFieldValue("parent", p);
+      })
+      .catch(() => {});
+  }, [openState, form]);
 
   const pickParent = async () => {
     const dir = await open({ directory: true, title: t("选择项目存放位置") });
@@ -29,6 +44,17 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
     try {
       const p = await api.createProject(v.parent, v.name, v.task);
       prefs.set("lastParent", v.parent);
+      // 填了类别就顺手建好（重名的跳过）
+      const names = [...new Set((v.labels ?? "").split(/[\n,，、]/).map((s) => s.trim()).filter(Boolean))];
+      let failed = 0;
+      for (let i = 0; i < names.length; i++) {
+        try {
+          await api.addLabel(names[i], PALETTE[i % PALETTE.length]);
+        } catch {
+          failed++;
+        }
+      }
+      if (failed) message.warning(t("有 {n} 个类别没建成功，可以在标注页再加", { n: failed }));
       message.success(t("项目「{name}」已创建", { name: p.name }));
       onClose();
       form.resetFields();
@@ -81,6 +107,9 @@ export default function NewProjectModal({ openState, onClose }: { openState: boo
               ))}
             </Space>
           </Radio.Group>
+        </Form.Item>
+        <Form.Item name="labels" label={t("类别（用逗号或换行分隔）")} extra={t("可以不填，之后在标注页随时加。")}>
+          <Input.TextArea rows={2} placeholder={t("例如：安全帽, 人, 反光衣")} />
         </Form.Item>
       </Form>
     </Modal>

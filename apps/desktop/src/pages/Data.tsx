@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { App, Button, Checkbox, Dropdown, Empty, Input, InputNumber, Modal, Pagination, Progress, Segmented, Tag, Tooltip } from "antd";
+import { Alert, App, Button, Checkbox, Dropdown, Empty, Input, InputNumber, Modal, Pagination, Progress, Segmented, Tag, Tooltip } from "antd";
 import {
   AimOutlined,
   CheckSquareOutlined,
@@ -60,6 +60,7 @@ const FILTERS = [
   { label: t("未标注"), value: "todo" },
   { label: t("已标注"), value: "labeled" },
   { label: t("已审核"), value: "reviewed" },
+  { label: t("已跳过"), value: "skipped" },
 ];
 
 /** 一个人标注（不用审核）时：已审核算进已标注 */
@@ -67,13 +68,26 @@ const SOLO_FILTERS = [
   { label: t("全部"), value: "all" },
   { label: t("未标注"), value: "todo" },
   { label: t("已标注"), value: "done" },
+  { label: t("已跳过"), value: "skipped" },
 ];
+
+type SplitTo = "train" | "val" | "test";
+const SPLIT_NAMES: Record<SplitTo, string> = { train: t("训练集"), val: t("验证集"), test: t("测试集") };
+
+/** 按扩展名认视频（拖进窗口时分流：视频去抽帧，图片和文件夹走普通导入） */
+const isVideo = (p: string) => {
+  const name = p.split(/[\\/]/).pop() ?? "";
+  const i = name.lastIndexOf(".");
+  return i > 0 && VIDEO_EXTS.includes(name.slice(i + 1).toLowerCase());
+};
 
 export default function Data({ project }: { project: ProjectInfo }) {
   const review = useReview();
   const { message, modal } = App.useApp();
   const refreshStats = useApp((s) => s.refreshStats);
   const annotateImage = useApp((s) => s.annotateImage);
+  const annotateQueue = useApp((s) => s.annotateQueue);
+  const setAppPage = useApp((s) => s.setPage);
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<ImageItem[]>([]);
@@ -81,10 +95,15 @@ export default function Data({ project }: { project: ProjectInfo }) {
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [copyMode, setCopyMode] = useState(prefs.get("copyMode", "copy"));
   const [progress, setProgress] = useState<ImportProgress | null>(null);
+  // 导入图片时可以停止：off 不能停 / on 能停 / stopping 已点停止
+  const [importStop, setImportStop] = useState<"off" | "on" | "stopping">("off");
   const [dragging, setDragging] = useState(false);
   const importing = useRef(false);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Shift 连选的起点
+  const anchor = useRef<number | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [last, setLast] = useState<LastImport | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
@@ -154,11 +173,71 @@ export default function Data({ project }: { project: ProjectInfo }) {
     });
   };
 
-  const toggle = (id: number) => {
+  /** 点一下选 / 取消；按住 Shift 点，把上次点的到这张之间的都选上 */
+  const toggle = (id: number, shift: boolean) => {
     const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
+    const from = anchor.current == null ? -1 : items.findIndex((x) => x.id === anchor.current);
+    const to = items.findIndex((x) => x.id === id);
+    if (shift && from >= 0 && to >= 0) {
+      for (let k = Math.min(from, to); k <= Math.max(from, to); k++) next.add(items[k].id);
+    } else if (next.has(id)) next.delete(id);
     else next.add(id);
+    anchor.current = id;
     setSelected(next);
+  };
+
+  // 换了筛选或翻页就清空选择，免得删掉看不见的图
+  useEffect(() => {
+    setSelected(new Set());
+    anchor.current = null;
+  }, [filter, page]);
+
+  /** 选中当前筛选下的全部图（包括其他页） */
+  const selectAll = async () => {
+    try {
+      setSelected(new Set(await api.listImageIds(filter === "all" ? null : filter)));
+    } catch (e) {
+      message.error(errText(e));
+    }
+  };
+
+  /** 批量操作做完：清空选择、刷新 */
+  const afterBatch = async () => {
+    setSelected(new Set());
+    anchor.current = null;
+    await load();
+    await refreshStats();
+  };
+
+  const batchStatus = async (status: ImageStatus) => {
+    setBatchBusy(true);
+    try {
+      const n = await api.setStatusMany([...selected], status);
+      message.success(status === "skipped" ? t("已把 {n} 张设为跳过", { n }) : t("已恢复 {n} 张（有标注的算已标注）", { n }));
+      await afterBatch();
+    } catch (e) {
+      message.error(errText(e));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  const batchSplit = async (split: SplitTo) => {
+    setBatchBusy(true);
+    try {
+      await api.setSplit([...selected], split);
+      message.success(t("已移到{name}，没标注的图不参与划分", { name: SPLIT_NAMES[split] }));
+      await afterBatch();
+    } catch (e) {
+      message.error(errText(e));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  const switchFilter = (v: string) => {
+    setFilter(v);
+    setPage(1);
   };
 
   useEffect(() => {
@@ -167,11 +246,26 @@ export default function Data({ project }: { project: ProjectInfo }) {
 
   const showResult = useCallback(
     (r: ImportResult) => {
-      const text = r.duplicated
+      const base = r.duplicated
         ? t("新增 {added} 张，跳过重复 {dup} 张", { added: r.added, dup: r.duplicated })
         : t("新增 {added} 张", { added: r.added });
+      const text = r.stopped ? t("已停止，{text}，还有 {n} 张没导入", { text: base, n: r.stopped }) : base;
       if (r.failed.length === 0) {
-        message.success(text);
+        // 导入了新图，顺手给个去标注的入口
+        message.success({
+          duration: r.added > 0 ? 6 : 3,
+          content: (
+            <span>
+              {text}
+              {r.added > 0 && (
+                <>
+                  {" "}
+                  <a onClick={() => setAppPage("annotate")}>{t("开始标注")}</a>
+                </>
+              )}
+            </span>
+          ),
+        });
         return;
       }
       modal.warning({
@@ -186,7 +280,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
         ),
       });
     },
-    [message, modal],
+    [message, modal, setAppPage],
   );
 
   const runImport = useCallback(
@@ -194,6 +288,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
       if (paths.length === 0 || importing.current) return;
       importing.current = true;
       setProgress({ done: 0, total: 0 });
+      setImportStop("on");
       const unlisten = await listen<ImportProgress>("import-progress", (e) => setProgress(e.payload));
       try {
         const r = await api.importImages(paths, prefs.get("copyMode", "copy") === "copy");
@@ -205,10 +300,28 @@ export default function Data({ project }: { project: ProjectInfo }) {
       } finally {
         unlisten();
         setProgress(null);
+        setImportStop("off");
         importing.current = false;
       }
     },
     [load, refreshStats, showResult, message],
+  );
+
+  const stopImport = () => {
+    setImportStop("stopping");
+    api.stopImport().catch((e) => message.error(errText(e)));
+  };
+
+  // 拖进来的东西分流：视频去抽帧设置，图片和文件夹走普通导入；混在一起时先导图片再弹抽帧
+  const handleDrop = useCallback(
+    async (paths: string[]) => {
+      if (importing.current) return;
+      const videos = paths.filter(isVideo);
+      const rest = paths.filter((p) => !isVideo(p));
+      if (rest.length) await runImport(rest);
+      if (videos.length) setVideoPaths(videos);
+    },
+    [runImport],
   );
 
   // 从资源管理器拖文件或文件夹进来导入
@@ -219,13 +332,13 @@ export default function Data({ project }: { project: ProjectInfo }) {
       else if (ty === "leave") setDragging(false);
       else if (ty === "drop") {
         setDragging(false);
-        runImport(e.payload.paths);
+        handleDrop(e.payload.paths);
       }
     });
     return () => {
       p.then((un) => un());
     };
-  }, [runImport]);
+  }, [handleDrop]);
 
   const pickDataset = async () => {
     const dir = await open({
@@ -308,7 +421,9 @@ export default function Data({ project }: { project: ProjectInfo }) {
       const r = await api.extractVideo(paths, every, max);
       await load();
       await refreshStats();
-      const text = r.duplicated
+      const text = r.stopped
+        ? t("已停止，抽了 {frames} 帧：新增 {added} 张", { frames: r.frames, added: r.added })
+        : r.duplicated
         ? t("从 {videos} 个视频抽出 {frames} 帧：新增 {added} 张，跳过重复 {dup} 张", {
             videos: r.videos,
             frames: r.frames,
@@ -509,9 +624,11 @@ export default function Data({ project }: { project: ProjectInfo }) {
               {t("更多导入")} <DownOutlined />
             </Button>
           </Dropdown>
-          <Button icon={<ExportOutlined />} disabled={s.labeled + s.reviewed === 0} onClick={() => setShowExport(true)}>
-            {t("导出数据集")}
-          </Button>
+          <Tooltip title={s.labeled + s.reviewed === 0 ? t("还没有已标注的图片") : undefined}>
+            <Button icon={<ExportOutlined />} disabled={s.labeled + s.reviewed === 0} onClick={() => setShowExport(true)}>
+              {t("导出数据集")}
+            </Button>
+          </Tooltip>
           <Dropdown
             trigger={["click"]}
             disabled={s.total === 0}
@@ -527,7 +644,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
                 { key: "quality", icon: <EyeInvisibleOutlined />, label: t("图片质量筛查（模糊、过暗、过曝）") },
                 { key: "pick", icon: <AimOutlined />, label: t("挑选最值得标的图（用模型）") },
                 { key: "collab", icon: <TeamOutlined />, label: t("多人协作（分包、合并回来）") },
-                { key: "select", icon: <CheckSquareOutlined />, label: t("选择图片删除") },
+                { key: "select", icon: <CheckSquareOutlined />, label: t("批量选择") },
                 { type: "divider" },
                 { key: "all", icon: <ClearOutlined />, label: t("清空全部图片（{n} 张）", { n: s.total }), danger: true },
               ],
@@ -540,6 +657,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
                 if (key === "select") {
                   setSelecting(true);
                   setSelected(new Set());
+                  anchor.current = null;
                 }
                 if (key === "all") confirmDelete(t("清空项目里全部 {n} 张图片？", { n: s.total }), "all");
               },
@@ -552,51 +670,90 @@ export default function Data({ project }: { project: ProjectInfo }) {
         </div>
       </div>
 
+      {s.total > 0 && s.labeled + s.reviewed === 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={t("下一步：去标注")}
+          action={
+            <Button size="small" type="primary" onClick={() => setAppPage("annotate")}>
+              {t("开始标注")}
+            </Button>
+          }
+        />
+      )}
+
       <div className="cards" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 14 }}>
         <div className="card">
           <div className="muted">{t("标注进度")}</div>
           <div className="kpi">{pct}%</div>
           <Progress percent={pct} showInfo={false} size="small" />
         </div>
-        <div className="card">
-          <div className="muted">{t("未标注")}</div>
-          <div className="kpi">{s.todo}</div>
-        </div>
-        <div className="card">
-          <div className="muted">{t("已标注")}</div>
-          <div className="kpi">{review ? s.labeled : s.labeled + s.reviewed}</div>
-        </div>
-        {review ? (
-          <div className="card">
-            <div className="muted">{t("已审核")}</div>
-            <div className="kpi">{s.reviewed}</div>
+        {/* 点统计卡片切换到对应的筛选，再点一下回到全部 */}
+        {[
+          { label: t("未标注"), n: s.todo, f: "todo" },
+          { label: t("已标注"), n: review ? s.labeled : s.labeled + s.reviewed, f: review ? "labeled" : "done" },
+          review ? { label: t("已审核"), n: s.reviewed, f: "reviewed" } : { label: t("已跳过"), n: s.skipped, f: "skipped" },
+        ].map((c) => (
+          <div
+            key={c.f}
+            className="card click"
+            style={{ borderColor: filter === c.f ? "var(--accent)" : undefined }}
+            onClick={() => switchFilter(filter === c.f ? "all" : c.f)}
+          >
+            <div className="muted">{c.label}</div>
+            <div className="kpi">{c.n}</div>
           </div>
-        ) : (
-          <div className="card">
-            <div className="muted">{t("已跳过")}</div>
-            <div className="kpi">{s.skipped}</div>
-          </div>
-        )}
+        ))}
       </div>
 
       <div className="row" style={{ marginBottom: 12, justifyContent: "space-between" }}>
-        <Segmented
-          value={filter}
-          options={review ? FILTERS : SOLO_FILTERS}
-          onChange={(v) => {
-            setFilter(v as string);
-            setPage(1);
-          }}
-        />
+        <Segmented value={filter} options={review ? FILTERS : SOLO_FILTERS} onChange={(v) => switchFilter(v as string)} />
         {selecting ? (
           <div className="row" style={{ gap: 8 }}>
             <span>{t("已选 {n} 张", { n: selected.size })}</span>
             <Button size="small" onClick={() => setSelected(new Set([...selected, ...items.map((i) => i.id)]))}>
               {t("全选本页")}
             </Button>
+            {total > items.length && (
+              <Button size="small" onClick={selectAll}>
+                {t("选中全部 {n} 张", { n: total })}
+              </Button>
+            )}
             <Button size="small" onClick={() => setSelected(new Set())}>
               {t("清除选择")}
             </Button>
+            <Button size="small" disabled={selected.size === 0 || batchBusy} onClick={() => batchStatus("skipped")}>
+              {t("设为跳过")}
+            </Button>
+            <Tooltip title={t("已有标注的图会恢复成已标注")}>
+              <Button size="small" disabled={selected.size === 0 || batchBusy} onClick={() => batchStatus("todo")}>
+                {t("恢复未标注")}
+              </Button>
+            </Tooltip>
+            <Button
+              size="small"
+              disabled={selected.size === 0}
+              onClick={() => annotateQueue([...selected].sort((a, b) => a - b), t("选中的图"))}
+            >
+              {t("去标注")}
+            </Button>
+            <Dropdown
+              trigger={["click"]}
+              disabled={selected.size === 0 || batchBusy}
+              menu={{
+                items: (Object.keys(SPLIT_NAMES) as SplitTo[]).map((k) => ({
+                  key: k,
+                  label: { train: t("移到训练集"), val: t("移到验证集"), test: t("移到测试集") }[k],
+                })),
+                onClick: ({ key }) => batchSplit(key as SplitTo),
+              }}
+            >
+              <Button size="small">
+                {t("划分")} <DownOutlined />
+              </Button>
+            </Dropdown>
             <Button
               size="small"
               danger
@@ -614,6 +771,11 @@ export default function Data({ project }: { project: ProjectInfo }) {
           <span className="dim">{t("也可以直接把图片或文件夹拖进窗口")}</span>
         )}
       </div>
+      {selecting && (
+        <div className="dim" style={{ fontSize: 12, marginTop: -6, marginBottom: 10 }}>
+          {t("按住 Shift 点可以连着选一段")}
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="card" style={{ padding: 48 }}>
@@ -632,7 +794,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
               <div
                 key={it.id}
                 className={selecting && selected.has(it.id) ? "thumb picked" : "thumb"}
-                onClick={() => (selecting ? toggle(it.id) : setViewIndex(i))}
+                onClick={(e) => (selecting ? toggle(it.id, e.shiftKey) : setViewIndex(i))}
                 title={`${it.name}  ${it.width}×${it.height}`}
               >
                 <img src={thumbUrl(project.path, it.id)} loading="lazy" alt={it.name} draggable={false} />
@@ -691,7 +853,19 @@ export default function Data({ project }: { project: ProjectInfo }) {
         }}
       />
 
-      <Modal open={!!progress} closable={false} footer={null} maskClosable={false} title={t("正在导入")}>
+      <Modal
+        open={!!progress}
+        closable={false}
+        maskClosable={false}
+        title={t("正在导入")}
+        footer={
+          importStop === "off" ? null : (
+            <Button danger loading={importStop === "stopping"} onClick={stopImport}>
+              {t("停止")}
+            </Button>
+          )
+        }
+      >
         <Progress percent={progress && progress.total ? Math.floor((progress.done / progress.total) * 100) : 0} />
         <div className="muted">
           {progress && progress.total
@@ -797,6 +971,11 @@ export default function Data({ project }: { project: ProjectInfo }) {
                 {t("停止采集")}
               </Button>
             </div>
+          ) : videoProgress?.stage === "extract" ? (
+            // 本地视频抽帧：停止后已抽的帧照常导入
+            <Button danger onClick={stopStream}>
+              {t("停止")}
+            </Button>
           ) : null
         }
       >
@@ -904,7 +1083,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
       {dragging && (
         <div className="drop-mask">
           <div>
-            {t("松开鼠标导入图片")}
+            {t("松开鼠标导入图片或视频")}
             <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
               {t("支持文件夹，会自动查找子文件夹里的图片")}
             </div>
