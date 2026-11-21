@@ -93,6 +93,7 @@ class DeployTasksTest(unittest.TestCase):
         det.classes = ["甲", "乙"]
         det.max_side = 320
         det.size = 224
+        det.input = "image"
         det.lock = threading.Lock()
 
         mask = np.zeros((1, 1, 240, 320), dtype=np.float32)
