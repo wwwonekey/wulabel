@@ -244,10 +244,9 @@ pub fn text_prelabel_all(
         })?;
         for (id, raw) in got {
             let anns = training::task_annotations(p, &training::to_result(raw, &ids), conf, "text")?;
-            if !anns.is_empty() {
+            if !anns.is_empty() && annotations::save_predictions(p, id, &anns)? {
                 result.boxes += anns.len();
                 result.images += 1;
-                annotations::save_predictions(p, id, &anns)?;
             }
         }
         done += chunk.len();

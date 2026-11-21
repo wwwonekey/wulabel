@@ -441,5 +441,6 @@
   "不认识的划分：{s}": "Unbekannte Aufteilung: {s}",
   "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Das Trainingsset ist leer. Verschiebe auf der Trainingsseite unter „Ansehen und anpassen“ einige Bilder ins Trainingsset",
   "不能合并到同一个类别": "Eine Klasse kann nicht mit sich selbst zusammengeführt werden",
-  "合并了两个类别": "Zwei Klassen zusammengeführt"
+  "合并了两个类别": "Zwei Klassen zusammengeführt",
+  "OpenVINO 组件没装上，这次没导出：{e}": "Die OpenVINO-Komponente konnte nicht installiert werden, daher wurde OpenVINO diesmal nicht exportiert: {e}"
 }

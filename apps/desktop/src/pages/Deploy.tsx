@@ -38,7 +38,7 @@ import { fmtTime, metricNames, modelName, MODELS } from "./Train";
 const stamp = () => {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 };
 /** 把译文里的 {key} 换成一个元素（比如 <code>） */
 const fill = (s: string, key: string, node: ReactNode) => {
@@ -402,7 +402,8 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
   // 模型自己的输入尺寸（SSDLite 固定 320）
   const ownSize = builtin?.fixedSize ?? run.config?.imgSize ?? 640;
   const sizeOptions = [...new Set([...(builtin?.task === "classify" ? [160, 224, 256, 320, 384] : [320, 416, 480, 640, 800, 960, 1280]), ownSize])].sort((a, b) => a - b);
-  const [formats, setFormats] = useState<string[]>(["onnx", "openvino"]);
+  // 默认只导出 ONNX；OpenVINO 要另外下载安装组件，需要时自己勾
+  const [formats, setFormats] = useState<string[]>(["onnx"]);
   const [size, setSize] = useState(ownSize);
   const [parent, setParent] = useState(prefs.get("deployParent", ""));
   const [name, setName] = useState(t("{name}_模型_{time}", { name: project.name, time: stamp() }));
@@ -422,10 +423,11 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
     const un = await listen<string>("deploy-log", (e) => setLines((l) => [...l.slice(-200), e.payload]));
     try {
       setResults(await api.exportFormats(run.id, formats, size, join(parent, name)));
-      setName(t("{name}_模型_{time}", { name: project.name, time: stamp() }));
     } catch (e) {
       message.error(errText(e));
     } finally {
+      // 不管成没成功都换一个新文件夹名，重试时不会报「输出目录不为空」
+      setName(t("{name}_模型_{time}", { name: project.name, time: stamp() }));
       un();
       setBusy(false);
     }

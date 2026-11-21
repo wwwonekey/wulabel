@@ -52,7 +52,14 @@ export const useApp = create<AppStore>((set, get) => ({
   highlight: null,
   queue: null,
   focusRunId: null,
-  annotateImage: (id, highlight) => set({ focusImageId: id, page: "annotate", highlight: highlight ?? null }),
+  // 要看的图不在之前那批（比如上次批量「去标注」留下的）里时，退出那批，免得打开的是别的图
+  annotateImage: (id, highlight) =>
+    set({
+      focusImageId: id,
+      page: "annotate",
+      highlight: highlight ?? null,
+      ...(get().queue && !get().queue!.ids.includes(id) ? { queue: null } : {}),
+    }),
   annotateQueue: (ids, name) => set({ queue: { ids, name }, focusImageId: null, highlight: null, page: "annotate" }),
   clearQueue: () => set({ queue: null }),
   takeFocusImage: () => {

@@ -1469,5 +1469,8 @@
   "正在下载模型（只需下载一次）": "Descargando modelos (solo una vez)",
   "下载失败": "Error en la descarga",
   "已下载": "Descargado",
-  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Descargando pesos preentrenados {name}: {progress} (solo una vez; si se corta, continúa donde quedó)"
+  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Descargando pesos preentrenados {name}: {progress} (solo una vez; si se corta, continúa donde quedó)",
+  "先选一个类别，或按 X 跳过这张": "Elige primero una clase o pulsa X para omitir esta imagen",
+  "选了类别的图自动算已标注，不用审核；模糊、无关的图点「跳过」，不参与训练。": "Las imágenes con clase cuentan como anotadas automáticamente, sin revisión; para imágenes borrosas o irrelevantes, haz clic en «Omitir» y no se usarán para entrenar.",
+  "「{name}」这一批标完了": "Lote «{name}» terminado"
 }

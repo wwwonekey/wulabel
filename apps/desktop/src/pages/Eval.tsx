@@ -361,7 +361,8 @@ export default function Eval({ project }: { project: ProjectInfo }) {
           </div>
         </>
       )}
-      {detail && !isCls && <FpTestPanel run={detail.run} defaultConf={ev?.thresholds?.best.conf ?? 0.5} />}
+      {/* 换了模型要重新开始，别留着上一个模型的测试结果 */}
+      {detail && !isCls && <FpTestPanel key={detail.run.id} run={detail.run} defaultConf={ev?.thresholds?.best.conf ?? 0.5} />}
     </div>
   );
 }

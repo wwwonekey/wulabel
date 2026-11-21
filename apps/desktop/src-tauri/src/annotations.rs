@@ -161,10 +161,18 @@ pub fn append(p: &Project, image_id: i64, ann: Annotation) -> AppResult<String> 
     save(p, image_id, &all)
 }
 
-/// 保存模型预标注：替换这张图上模型来源的框，不改图片状态（仍等人工确认）
-pub fn save_predictions(p: &Project, image_id: i64, anns: &[Annotation]) -> AppResult<()> {
+/// 保存模型预标注：替换这张图上模型来源的框，不改图片状态（仍等人工确认）。
+/// 只写还是「未标注」的图：批量预标注在后台跑的时候，人已经标好、记为没有目标或跳过的图不动。写了返回 true
+pub fn save_predictions(p: &Project, image_id: i64, anns: &[Annotation]) -> AppResult<bool> {
     let mut conn = p.conn.lock();
     let tx = conn.transaction()?;
+    let todo: bool = tx
+        .query_row("SELECT status = 'todo' FROM images WHERE id = ?1", [image_id], |r| r.get(0))
+        .optional()?
+        .unwrap_or(false);
+    if !todo {
+        return Ok(false);
+    }
     tx.execute("DELETE FROM annotations WHERE image_id = ?1 AND source = 'model'", [image_id])?;
     {
         let now = db::now();
@@ -177,7 +185,7 @@ pub fn save_predictions(p: &Project, image_id: i64, anns: &[Annotation]) -> AppR
         }
     }
     tx.commit()?;
-    Ok(())
+    Ok(true)
 }
 
 pub fn set_status(p: &Project, image_id: i64, status: &str) -> AppResult<()> {
@@ -473,6 +481,31 @@ mod tests {
         assert_eq!(load(&p, 1).unwrap().status, "todo");
         assert_eq!(load(&p, 2).unwrap().annotations.len(), 1);
         assert_eq!(list_labels(&p).unwrap().len(), 1);
+        drop(p);
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn predictions_only_on_todo() {
+        let (base, p) = setup("pred");
+        let a = add_label(&p, "安全帽", "#3d8bfd").unwrap();
+        let mut pred = bbox(a.id, 1.0, 1.0, 5.0, 5.0);
+        pred.source = "model".into();
+        // 未标注的图：写上，状态不变
+        assert!(save_predictions(&p, 1, &[pred.clone()]).unwrap());
+        assert_eq!(load(&p, 1).unwrap().status, "todo");
+        // 人已经标好的图（批量预标注跑的时候标的）：不动
+        save(&p, 2, &[bbox(a.id, 0.0, 0.0, 10.0, 10.0)]).unwrap();
+        assert!(!save_predictions(&p, 2, &[pred.clone()]).unwrap());
+        assert_eq!(load(&p, 2).unwrap().annotations.len(), 1);
+        // 记为没有目标（已审核）、跳过的图：不动
+        set_status(&p, 1, "skipped").unwrap();
+        let mut other = pred.clone();
+        other.data = serde_json::json!([20.0, 20.0, 5.0, 5.0]);
+        assert!(!save_predictions(&p, 1, &[other]).unwrap());
+        let kept = load(&p, 1).unwrap().annotations;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].data, pred.data);
         drop(p);
         let _ = fs::remove_dir_all(base);
     }

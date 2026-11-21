@@ -1469,5 +1469,8 @@
   "正在下载模型（只需下载一次）": "Đang tải mô hình (chỉ cần tải một lần)",
   "下载失败": "Tải xuống thất bại",
   "已下载": "Đã tải",
-  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Đang tải trọng số huấn luyện sẵn {name}: {progress} (chỉ cần tải một lần, bị ngắt sẽ tải tiếp)"
+  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Đang tải trọng số huấn luyện sẵn {name}: {progress} (chỉ cần tải một lần, bị ngắt sẽ tải tiếp)",
+  "先选一个类别，或按 X 跳过这张": "Hãy chọn một lớp trước, hoặc nhấn X để bỏ qua ảnh này",
+  "选了类别的图自动算已标注，不用审核；模糊、无关的图点「跳过」，不参与训练。": "Ảnh đã chọn lớp tự động được tính là đã gán nhãn, không cần duyệt; ảnh mờ hoặc không liên quan thì nhấn \"Bỏ qua\", ảnh sẽ không được dùng để huấn luyện.",
+  "「{name}」这一批标完了": "Đã xong lượt \"{name}\""
 }

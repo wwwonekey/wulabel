@@ -223,12 +223,16 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const [labels, setLabels] = useState<Label[]>([]);
   const [curLabel, setCurLabel] = useState<number | null>(null);
   const [filter, setFilter] = useState(queue ? "queue" : "all");
+  // 那一批被退出了（比如去看一张不在批里的图），筛选回到「全部」
+  useEffect(() => {
+    if (filter === "queue" && !queue) setFilter("all");
+  }, [filter, queue]);
   const [ids, setIds] = useState<number[] | null>(null);
   const [idx, setIdx] = useState(0);
   /** 每张图的状态（缩略图状态点、跳到下一张未标注用）；拿不到时是空的 */
   const [statusMap, setStatusMap] = useState<Map<number, ImageStatus>>(() => new Map());
   /** 翻过最后一张时的提示（已标注、未标注张数） */
-  const [endInfo, setEndInfo] = useState<{ done: number; todo: number } | null>(null);
+  const [endInfo, setEndInfo] = useState<{ done: number; todo: number; firstTodo: number } | null>(null);
   // 顶栏序号：点开输入序号跳转
   const [jumpOpen, setJumpOpen] = useState(false);
   const [jumpTo, setJumpTo] = useState<number | null>(null);
@@ -686,22 +690,30 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   /** 翻过最后一张：提示这一批标完了，可以去训练，或者接着标未标注的 */
   const showEnd = async () => {
     await flush();
+    // 只在「全部」「未标注」和指定的一批图里提示；已标注、已跳过等筛选翻到头就停
+    if (!(filter === "all" || filter === "todo" || filter === "queue")) return;
     let done = 0;
     let todo = 0;
-    // 协作成员只算自己看得到的图
-    const st = remote ? await api.imageStatuses().catch(() => null) : null;
-    if (st && st.length) {
-      for (const [, s] of st) {
-        if (s === "todo") todo++;
-        else if (s === "labeled" || s === "reviewed") done++;
-      }
+    let firstTodo = -1;
+    // 按当前列表里每张图的最新状态算（「这一批」就是现在翻的这些图）
+    const st = await api.imageStatuses().catch(() => null);
+    if (st && st.length && ids) {
+      const mp = new Map<number, ImageStatus>(st);
+      setStatusMap(mp);
+      ids.forEach((id, i) => {
+        const s = mp.get(id);
+        if (s === "todo") {
+          todo++;
+          if (firstTodo < 0) firstTodo = i;
+        } else if (s === "labeled" || s === "reviewed") done++;
+      });
     } else {
       await refreshStats();
       const s = useApp.getState().project?.stats;
       done = (s?.labeled ?? 0) + (s?.reviewed ?? 0);
       todo = s?.todo ?? 0;
     }
-    setEndInfo({ done, todo });
+    setEndInfo({ done, todo, firstTodo });
   };
 
   const go = (i: number) => {
@@ -785,6 +797,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     if (review) return setStatus("reviewed", true);
     const m = metaRef.current;
     if (!m) return;
+    // 分类项目每张图要有一个类别，没有「没有目标」这回事
+    if (isCls && !tag) {
+      message.warning(t("先选一个类别，或按 X 跳过这张"));
+      return;
+    }
     if (objects.length === 0 && !tag) {
       const prev = m.status;
       const ok = await setStatus("reviewed", true);
@@ -2251,7 +2268,9 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               ? t("提交后等审核员审核；被打回的图会出现在「被打回」里，原因显示在图上方。")
               : review
                 ? t("「跳过」的图不参与训练，可用于模糊、无关的图片。")
-                : t("标了目标的图自动算已标注，不用审核。确实没有目标的图点「完成」，会作为负样本参与训练；模糊、无关的图点「跳过」，不参与训练。")}
+                : isCls
+                  ? t("选了类别的图自动算已标注，不用审核；模糊、无关的图点「跳过」，不参与训练。")
+                  : t("标了目标的图自动算已标注，不用审核。确实没有目标的图点「完成」，会作为负样本参与训练；模糊、无关的图点「跳过」，不参与训练。")}
           </div>
         </section>
       </aside>
@@ -2278,14 +2297,14 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       </div>
 
       <Modal
-        title={t("这一批标完了")}
+        title={filter === "queue" && queue ? t("「{name}」这一批标完了", { name: queue.name }) : t("这一批标完了")}
         open={!!endInfo}
         onCancel={() => setEndInfo(null)}
         width={420}
         footer={
           endInfo && (
             <Space>
-              {!remote && (
+              {!remote && endInfo.done > 0 && (
                 <Button
                   type={endInfo.todo > 0 ? "default" : "primary"}
                   onClick={() => {
@@ -2296,13 +2315,30 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
                   {t("去训练")}
                 </Button>
               )}
-              {endInfo.todo > 0 && (
+              {/* 一张都没标（比如全跳过了）：去训练也没用，去数据页看看 */}
+              {!remote && endInfo.done === 0 && endInfo.todo === 0 && (
                 <Button
                   type="primary"
                   onClick={() => {
                     setEndInfo(null);
-                    setFilter("todo");
-                    setIdsVersion((n) => n + 1);
+                    setPage("data");
+                  }}
+                >
+                  {t("去数据页")}
+                </Button>
+              )}
+              {endInfo.todo > 0 && (
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    const first = endInfo.firstTodo;
+                    setEndInfo(null);
+                    // 指定的一批图里还有没标的：跳回去接着标；否则切到「未标注」
+                    if (filter === "queue" && first >= 0) setIdx(first);
+                    else {
+                      setFilter("todo");
+                      setIdsVersion((n) => n + 1);
+                    }
                   }}
                 >
                   {t("继续标未标注的")}

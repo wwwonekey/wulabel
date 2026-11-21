@@ -441,5 +441,6 @@
   "不认识的划分：{s}": "Pembagian tidak dikenal: {s}",
   "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Set pelatihan kosong. Di halaman Pelatihan, gunakan \"Lihat dan atur\" untuk memindahkan beberapa gambar ke set pelatihan",
   "不能合并到同一个类别": "Tidak bisa menggabungkan kelas ke dirinya sendiri",
-  "合并了两个类别": "Menggabungkan dua kelas"
+  "合并了两个类别": "Menggabungkan dua kelas",
+  "OpenVINO 组件没装上，这次没导出：{e}": "Komponen OpenVINO tidak berhasil dipasang, jadi kali ini OpenVINO tidak diekspor: {e}"
 }

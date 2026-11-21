@@ -330,10 +330,9 @@ pub fn prelabel_all(
             Err(e) => return Err(msg(t!("第 {n} 张出错，已预标注 {done} 张：{e}", n = n + 1, done = result.images, e = e))),
         };
         let anns = training::task_annotations(p, &pred, conf, "ai")?;
-        if !anns.is_empty() {
+        if !anns.is_empty() && annotations::save_predictions(p, *id, &anns)? {
             result.boxes += anns.len();
             result.images += 1;
-            annotations::save_predictions(p, *id, &anns)?;
         }
         progress(n + 1, total);
     }
@@ -463,8 +462,9 @@ fn prelabel_special(
                             }
                             let pred = to_pred(p, rt, pr, id, found, log)?;
                             let anns = training::task_annotations(p, &pred, conf, "ai")?;
-                            if !anns.is_empty() {
-                                annotations::save_predictions(p, id, &anns)?;
+                            // 期间被人标过的图不写，不计数
+                            if anns.is_empty() || !annotations::save_predictions(p, id, &anns)? {
+                                return Ok(0);
                             }
                             Ok(anns.len())
                         })();

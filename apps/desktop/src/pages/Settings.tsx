@@ -204,6 +204,21 @@ export default function Settings() {
     load(false);
   }, [load]);
 
+  // 安装是在这个页面点的（装完由 install 刷新）；切到别的页面再回来时不是
+  const mine = useRef(false);
+  // 回来时安装还在进行：隔几秒查一次，装完刷新状态，按钮不再一直转圈
+  useEffect(() => {
+    if (!installing || mine.current) return;
+    const timer = window.setInterval(async () => {
+      const s = await api.envStatus(false).catch(() => null);
+      if (s && !s.installing) {
+        window.clearInterval(timer);
+        load(true);
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [installing, load]);
+
   useEffect(() => {
     const un = listen<string>("env-log", (e) => {
       setLines((ls) => [...ls.slice(-400), e.payload]);
@@ -218,6 +233,7 @@ export default function Settings() {
 
   const install = async () => {
     const v = variant ?? st?.variant ?? "cpu";
+    mine.current = true;
     setInstalling(true);
     setInstalled(false);
     setLines([]);
@@ -229,6 +245,7 @@ export default function Settings() {
     } catch (e) {
       modal.error({ title: t("安装没有完成"), content: <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{errText(e)}</pre>, width: 640 });
     } finally {
+      mine.current = false;
       setInstalling(false);
       setProgress(null);
       load(true);
