@@ -15,6 +15,7 @@ import LineChart from "../components/LineChart";
 import RunCompare from "../components/RunCompare";
 import ImportModelModal from "../components/ImportModelModal";
 import AugPanel from "../components/AugPanel";
+import { DownloadEv, downloadPercent, downloadText } from "../components/DownloadProgress";
 import SplitModal from "../components/SplitModal";
 
 /** 内置模型，和 worker/xlabel_worker/models.py 的 MODELS 对应。oneStage：单阶段检测，部署到 TensorRT / NPU 更顺；
@@ -165,6 +166,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const [importing, setImporting] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
+  /** 正在下载的预训练权重（训练开始前） */
+  const [dl, setDl] = useState<DownloadEv | null>(null);
   const selRef = useRef<number | null>(null);
   selRef.current = sel;
   const logBox = useRef<HTMLDivElement>(null);
@@ -231,6 +234,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
     setDetail(null);
     setProg(null);
     setShowTrace(false);
+    setDl(null);
     if (sel != null) loadDetail(sel).catch((e) => message.error(errText(e)));
   }, [sel, loadDetail, message]);
 
@@ -241,6 +245,10 @@ export default function Train({ project }: { project: ProjectInfo }) {
       if (runId !== selRef.current) return;
       const ty = event.type;
       if (ty === "progress") setProg(event as unknown as ProgressEv);
+      else if (ty === "download") {
+        const d = event as unknown as DownloadEv;
+        setDl(d.finished || d.failed ? null : d);
+      }
       else if (ty === "metric" || ty === "log" || ty === "error" || ty === "warn") loadDetail(runId);
       else if (ty === "batch") {
         message.warning(t("显存不够，批大小已从 {was} 自动调到 {batch}，重新开始训练", { was: event.was as number, batch: event.batch as number }));
@@ -679,13 +687,21 @@ export default function Train({ project }: { project: ProjectInfo }) {
                 {run.status === "running" && (
                   <div style={{ marginTop: 12 }}>
                     <Progress
-                      percent={prog ? Math.floor(((prog.epoch - 1 + prog.iter / prog.iters) / prog.epochs) * 100) : Math.floor((metrics.length / epochs) * 100)}
+                      percent={
+                        !prog && dl
+                          ? downloadPercent(dl)
+                          : prog
+                            ? Math.floor(((prog.epoch - 1 + prog.iter / prog.iters) / prog.epochs) * 100)
+                            : Math.floor((metrics.length / epochs) * 100)
+                      }
                       status="active"
                     />
                     <div className="dim" style={{ fontSize: 12 }}>
                       {prog
                         ? t("第 {epoch} / {epochs} 轮 · 本轮 {iter}/{iters} · loss {loss} · 预计剩余 {eta}", { epoch: prog.epoch, epochs: prog.epochs, iter: prog.iter, iters: prog.iters, loss: prog.loss.toFixed(4), eta: fmtDur(prog.eta) })
-                        : t("正在准备（首次会下载预训练权重）…")}
+                        : dl
+                          ? t("正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）", { name: dl.name, progress: downloadText(dl) })
+                          : t("正在准备（首次会下载预训练权重）…")}
                     </div>
                   </div>
                 )}

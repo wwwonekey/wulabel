@@ -1465,5 +1465,9 @@
   "标注页：标完一批有提示，「完成」直接跳到下一张未标注；新增 X 跳过、Shift+D 下一张未标注；底部缩略图显示状态，可以输入序号跳转；批量预标注可以中途停止；删除类别时可以合并到另一个类别。": "Trang Gán nhãn: có thông báo khi xong một lượt, \"Xong\" chuyển thẳng tới ảnh chưa gán nhãn tiếp theo; thêm phím tắt X (bỏ qua) và Shift+D (ảnh chưa gán nhãn tiếp theo); ảnh thu nhỏ bên dưới hiển thị trạng thái, có thể nhập số thứ tự để nhảy tới; gán nhãn trước hàng loạt có thể dừng giữa chừng; khi xóa lớp có thể gộp vào lớp khác.",
   "数据页可以批量设为跳过、恢复未标注、送去标注、移到训练/验证/测试集；视频抽帧和导入图片可以中途停止；把视频拖进窗口直接抽帧。": "Trang Dữ liệu: hàng loạt đặt bỏ qua, khôi phục về chưa gán nhãn, gửi đi gán nhãn, chuyển sang tập huấn luyện/kiểm định/kiểm thử; trích khung hình video và nhập ảnh có thể dừng giữa chừng; kéo video vào cửa sổ để trích khung hình ngay.",
   "体检去重时优先保留有标注的图，也可以自己选留哪张；忽略的问题可以恢复，疑似漏标可以一次全部加上。": "Kiểm tra dữ liệu: khi xóa ảnh trùng sẽ ưu tiên giữ ảnh có nhãn, cũng có thể tự chọn giữ ảnh nào; vấn đề đã bỏ qua có thể khôi phục, các chỗ nghi thiếu nhãn có thể thêm tất cả một lần.",
-  "新建项目时可以直接填好类别；预训练权重下载不完整时自动删掉重下。": "Khi tạo dự án có thể nhập luôn các lớp; trọng số huấn luyện sẵn tải về chưa đầy đủ sẽ tự động bị xóa và tải lại."
+  "新建项目时可以直接填好类别；预训练权重下载不完整时自动删掉重下。": "Khi tạo dự án có thể nhập luôn các lớp; trọng số huấn luyện sẵn tải về chưa đầy đủ sẽ tự động bị xóa và tải lại.",
+  "正在下载模型（只需下载一次）": "Đang tải mô hình (chỉ cần tải một lần)",
+  "下载失败": "Tải xuống thất bại",
+  "已下载": "Đã tải",
+  "正在下载预训练权重 {name}：{progress}（只需下载一次，断了会接着下）": "Đang tải trọng số huấn luyện sẵn {name}: {progress} (chỉ cần tải một lần, bị ngắt sẽ tải tiếp)"
 }

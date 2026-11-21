@@ -11,8 +11,12 @@ from pathlib import Path
 
 import torch
 
+from .download import patch_torch_hub
 from .i18n import tr
 from .protocol import log, warn
+
+# 预训练权重下载显示进度、断了接着下
+patch_torch_hub()
 
 # 名称和说明给界面展示（界面另有一份，见桌面端 Train.tsx 的 MODELS）
 MODELS = {

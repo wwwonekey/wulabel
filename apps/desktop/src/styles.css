@@ -215,3 +215,6 @@ html:not([lang="zh-CN"]):not([lang="zh-TW"]) { --nav-w: 96px; }
 .annot-strip .t .dot.skipped { background: var(--dim); }
 .annot-jump { cursor: pointer; border-bottom: 1px dashed currentColor; }
 .annot-jump:hover { color: var(--accent); }
+
+/* 右下角的模型下载进度 */
+.dl-float { position: fixed; right: 16px; bottom: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 1000; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); }
