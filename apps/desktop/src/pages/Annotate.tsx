@@ -661,7 +661,8 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     const m = metaRef.current;
     if (!m) return;
     if (objects.length === 0 && !tag) return setStatus("reviewed", true);
-    if (m.status === "skipped") return setStatus("labeled", true);
+    // 批量预标注的图还是未标注（等人确认），看过按完成就算已标注；跳过的图同理
+    if (m.status === "skipped" || m.status === "todo") return setStatus("labeled", true);
     await flush();
     go(idx + 1);
   };
