@@ -1456,5 +1456,14 @@
   "改用 CPU": "Usar CPU",
   "去数据页": "Ir a Datos",
   "关键信息": "Información clave",
-  "日志开头的设备、数据量、预训练权重": "Dispositivo, cantidad de datos y pesos preentrenados del inicio del registro"
+  "日志开头的设备、数据量、预训练权重": "Dispositivo, cantidad de datos y pesos preentrenados del inicio del registro",
+  "实时验证和推理服务包支持分割、关键点、分类模型；视频流支持 RTSP、HTTP-FLV、HLS（m3u8）和 MP4。": "La verificación en vivo y el paquete de servicio de inferencia admiten modelos de segmentación, puntos clave y clasificación; las transmisiones de video admiten RTSP, HTTP-FLV, HLS (m3u8) y MP4.",
+  "训练页可以看到每张图分在训练集、验证集还是测试集，能手动移动，也能按比例重新划分。": "En la página Entrenar puedes ver en qué conjunto está cada imagen (entrenamiento, validación o prueba), moverlas a mano o volver a dividir por proporciones.",
+  "一个人标注时不再需要审核：标了目标就算已标注，确实没有目标的图点「完成」作为负样本。团队协作时才有审核流程。": "Si anotas solo, ya no hace falta revisar: las imágenes con objetos cuentan como anotadas, y para una imagen que realmente no tiene objetos haz clic en «Listo» y se usa como muestra negativa. La revisión solo se usa en colaboración en equipo.",
+  "训练前提示每轮和总共的步数，数据太少会先提醒；训练中指标一直是 0、没下载到预训练权重时醒目提示；常见报错直接给出解决办法。": "Antes de entrenar se muestran los pasos por época y en total, y se avisa si hay muy pocos datos. Durante el entrenamiento se avisa claramente si la métrica sigue en 0 o si no se pudieron descargar los pesos preentrenados. Los errores comunes indican cómo solucionarlos.",
+  "训练完成的通知带上结果；评估页给出结论和最差的类别，推荐的报警阈值自动带到部署页。": "La notificación de entrenamiento terminado muestra el resultado; la página Evaluar da una conclusión y señala la peor clase, y el umbral de alarma recomendado pasa automáticamente a la página Desplegar.",
+  "标注页：标完一批有提示，「完成」直接跳到下一张未标注；新增 X 跳过、Shift+D 下一张未标注；底部缩略图显示状态，可以输入序号跳转；批量预标注可以中途停止；删除类别时可以合并到另一个类别。": "Página Anotar: aviso al terminar un lote y «Listo» salta directamente a la siguiente imagen sin anotar; nuevos atajos X (omitir) y Mayús+D (siguiente sin anotar); las miniaturas inferiores muestran el estado y puedes escribir un número para saltar; el preetiquetado por lotes se puede detener; al eliminar una clase puedes fusionarla con otra.",
+  "数据页可以批量设为跳过、恢复未标注、送去标注、移到训练/验证/测试集；视频抽帧和导入图片可以中途停止；把视频拖进窗口直接抽帧。": "Página Datos: en bloque, marcar como omitidas, volver a sin anotar, enviar a anotar o mover al conjunto de entrenamiento/validación/prueba; la extracción de fotogramas y la importación de imágenes se pueden detener; arrastra un video a la ventana para extraer fotogramas directamente.",
+  "体检去重时优先保留有标注的图，也可以自己选留哪张；忽略的问题可以恢复，疑似漏标可以一次全部加上。": "Revisión de datos: al quitar duplicados se conservan primero las imágenes anotadas, y puedes elegir cuál conservar; los problemas ignorados se pueden restaurar y las posibles etiquetas faltantes se pueden añadir todas de una vez.",
+  "新建项目时可以直接填好类别；预训练权重下载不完整时自动删掉重下。": "Al crear un proyecto puedes escribir las clases directamente; si los pesos preentrenados no se descargaron completos, se borran y se vuelven a descargar automáticamente."
 }
