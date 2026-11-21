@@ -4,7 +4,7 @@ import { CheckCircleOutlined, FolderOpenOutlined, ReloadOutlined, ThunderboltOut
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { AiModel, api, EnvStatus, errText, SpeedResult, UpdateInfo, XtAccount } from "../api";
-import { prefs } from "../store";
+import { prefs, useApp } from "../store";
 import UpdateModal from "../components/UpdateModal";
 import { LANGS, langSetting, setLangSetting, systemLang, t, type Lang } from "../i18n";
 import { setThemeSetting, themeSetting, type ThemeSetting } from "../theme";
@@ -160,6 +160,10 @@ export default function Settings() {
   const [st, setSt] = useState<EnvStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState(false);
+  // 刚装好训练环境：给个「去训练」
+  const [installed, setInstalled] = useState(false);
+  const setPage = useApp((s) => s.setPage);
+  const hasProject = useApp((s) => !!s.project);
   const [variant, setVariant] = useState<string | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const [progress, setProgress] = useState<DlProgress | null>(null);
@@ -215,11 +219,13 @@ export default function Settings() {
   const install = async () => {
     const v = variant ?? st?.variant ?? "cpu";
     setInstalling(true);
+    setInstalled(false);
     setLines([]);
     setProgress(null);
     try {
       await api.envInstall(v);
       message.success(t("训练环境安装完成"));
+      setInstalled(true);
     } catch (e) {
       modal.error({ title: t("安装没有完成"), content: <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{errText(e)}</pre>, width: 640 });
     } finally {
@@ -457,6 +463,21 @@ export default function Settings() {
               </div>
             )}
 
+            {installed && !installing && st.ready && (
+              <Alert
+                type="success"
+                showIcon
+                style={{ marginTop: 12 }}
+                message={t("训练环境安装完成")}
+                action={
+                  hasProject ? (
+                    <Button size="small" type="primary" onClick={() => setPage("train")}>
+                      {t("去训练")}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            )}
             {installing && progress && progress.total > 0 && (
               <div style={{ marginTop: 12 }}>
                 <Progress percent={Math.floor((progress.downloaded / progress.total) * 100)} status="active" />
