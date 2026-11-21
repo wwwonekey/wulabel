@@ -220,6 +220,7 @@ pub fn text_prelabel_all(
     progress: &dyn Fn(usize, usize),
     log: &(dyn Fn(String) + Sync),
 ) -> AppResult<PrelabelResult> {
+    training::prelabel_stop(false);
     ensure_deps(rt, log)?;
     let (qs, ids) = queries(p)?;
     let seg = p.meta.task == "segment";
@@ -229,6 +230,9 @@ pub fn text_prelabel_all(
     progress(0, total);
     let mut done = 0;
     for chunk in items.chunks(8) {
+        if training::prelabel_stopped() {
+            break;
+        }
         let mut got: Vec<(i64, RawPred)> = Vec::new();
         let fwd = forward_log(log);
         pr.call(rt, &text_request(&qs, conf, seg, chunk), &mut |v| {

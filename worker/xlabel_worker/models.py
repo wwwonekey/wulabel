@@ -12,7 +12,7 @@ from pathlib import Path
 import torch
 
 from .i18n import tr
-from .protocol import log
+from .protocol import log, warn
 
 # 名称和说明给界面展示（界面另有一份，见桌面端 Train.tsx 的 MODELS）
 MODELS = {
@@ -120,8 +120,9 @@ def is_cls(key: str) -> bool:
     return task_of(key) == "classify"
 
 
-def _with_weights(builder, pretrained: bool, extra: dict, label: str):
-    """先试完整预训练权重，再试只用骨干网络权重，都不行就随机初始化"""
+def _with_weights(builder, pretrained: bool, extra: dict, label: str, warn_missing: bool = True):
+    """先试完整预训练权重，再试只用骨干网络权重，都不行就随机初始化。
+    warn_missing：都加载不了时在界面上醒目提示（接着上次的模型训练时不用）"""
     if pretrained:
         tries = [(dict(weights="DEFAULT"), tr("{label}预训练权重", label=label))]
         if label != "ImageNet ":
@@ -133,16 +134,20 @@ def _with_weights(builder, pretrained: bool, extra: dict, label: str):
                 return m
             except Exception as e:  # 多半是网络问题
                 log(tr("加载 {what} 失败：{e}", what=what, e=e))
-        log(tr("没有可用的预训练权重，从头训练，效果会差很多"))
+        msg = tr("没有可用的预训练权重，从头训练，效果会差很多")
+        if warn_missing:
+            warn("no_pretrained", msg)
+        else:
+            log(msg)
     if label == "ImageNet ":
         return builder(weights=None, **extra)
     return builder(weights=None, weights_backbone=None, **extra)
 
 
-def _build_cls(key: str, num_classes: int, pretrained: bool) -> torch.nn.Module:
+def _build_cls(key: str, num_classes: int, pretrained: bool, warn_missing: bool = True) -> torch.nn.Module:
     from torchvision import models as M
 
-    model = _with_weights(getattr(M, MODELS[key]["builder"]), pretrained, {}, "ImageNet ")
+    model = _with_weights(getattr(M, MODELS[key]["builder"]), pretrained, {}, "ImageNet ", warn_missing)
     # 把最后一个全连接层换成我们的类别数
     if hasattr(model, "fc") and isinstance(model.fc, torch.nn.Linear):
         model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
@@ -152,17 +157,20 @@ def _build_cls(key: str, num_classes: int, pretrained: bool) -> torch.nn.Module:
     return model
 
 
-def build(key: str, num_classes: int, img_size: int, pretrained: bool = True, num_keypoints: int = 17) -> torch.nn.Module:
-    """num_classes 不含背景。预训练权重下载失败时退回只用骨干网络权重，再不行就随机初始化。"""
+def build(
+    key: str, num_classes: int, img_size: int, pretrained: bool = True, num_keypoints: int = 17, warn_missing: bool = True
+) -> torch.nn.Module:
+    """num_classes 不含背景。预训练权重下载失败时退回只用骨干网络权重，再不行就随机初始化。
+    warn_missing=False：没加载到预训练权重时不醒目提示（接着上次的模型训练，权重会被覆盖）"""
     if key not in MODELS:
         raise ValueError(tr("不支持的模型：{key}", key=key))
     kind = kind_of(key)
     if kind == "cls":
-        return _build_cls(key, num_classes, pretrained)
+        return _build_cls(key, num_classes, pretrained, warn_missing)
     if kind == "yolox":
         from . import yolox_det
 
-        return yolox_det.build(key, num_classes, img_size, pretrained)
+        return yolox_det.build(key, num_classes, img_size, pretrained, warn_missing)
 
     from torchvision.models import detection as D
 
@@ -170,7 +178,7 @@ def build(key: str, num_classes: int, img_size: int, pretrained: bool = True, nu
     n = num_classes + 1  # 检测类模型多一个背景类（序号 0）
     # SSDLite 固定 320 输入，不接受尺寸参数；其他检测器按训练尺寸缩放
     size = {} if kind == "ssd" else dict(min_size=img_size, max_size=int(img_size * 1.667))
-    model = _with_weights(builder, pretrained, size, "COCO ")
+    model = _with_weights(builder, pretrained, size, "COCO ", warn_missing)
 
     if kind == "rcnn":
         from torchvision.models.detection.faster_rcnn import FastRCNNPredictor

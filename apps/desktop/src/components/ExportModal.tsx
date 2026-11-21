@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Form, Input, InputNumber, Modal, Progress, Radio, Space } from "antd";
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { AnonymizeConfig, api, DatasetFormat, errText, ExportResult, ImportProgress, ProjectInfo, SplitSummary, Task, VersionInfo } from "../api";
-import { prefs } from "../store";
+import { prefs, useReview } from "../store";
 import { t } from "../i18n";
 import AnonymizeOptions from "./AnonymizeOptions";
 
@@ -64,6 +64,7 @@ export default function ExportModal({
     return formats.some((f) => f.value === saved) ? saved : formats[0].value;
   });
   const [onlyReviewed, setOnlyReviewed] = useState(false);
+  const review = useReview();
   const [ratios, setRatios] = useState<[number, number, number]>([80, 20, 0]);
   const [parent, setParent] = useState(prefs.get("exportParent", ""));
   const [name, setName] = useState("");
@@ -71,11 +72,19 @@ export default function ExportModal({
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [anonymize, setAnonymize] = useState<AnonymizeConfig | null>(null);
   const [stage, setStage] = useState("");
+  // 用户自己改过文件夹名，换格式时就不再覆盖
+  const nameEdited = useRef(false);
+
+  useEffect(() => {
+    if (visible) nameEdited.current = false;
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
-    const tag = version ? `${version.name}_` : "";
-    setName(`${project.name}_${tag}${format}_${stamp()}`.replace(/[\\/:*?"<>|]/g, "_"));
+    if (!nameEdited.current) {
+      const tag = version ? `${version.name}_` : "";
+      setName(`${project.name}_${tag}${format}_${stamp()}`.replace(/[\\/:*?"<>|]/g, "_"));
+    }
     api.splitSummary().then(setSummary).catch(() => {});
   }, [visible, project.name, format, version]);
 
@@ -119,7 +128,7 @@ export default function ExportModal({
     const un = await listen<ImportProgress>("export-progress", (e) => setProgress(e.payload));
     const unLog = await listen<string>("export-log", (e) => setStage(e.payload));
     try {
-      const options = { format, outDir, onlyReviewed, ratios: r() };
+      const options = { format, outDir, onlyReviewed: review && onlyReviewed, ratios: r() };
       const res = version ? await api.exportVersion(version.id, options, anonymize) : await api.exportDataset(options, anonymize);
       prefs.set("exportFormat", format);
       prefs.set("exportParent", parent);
@@ -135,6 +144,9 @@ export default function ExportModal({
             <div className="dim" style={{ wordBreak: "break-all", marginTop: 6 }}>
               {res.outDir}
             </div>
+            <Button size="small" icon={<FolderOpenOutlined />} style={{ marginTop: 8 }} onClick={() => api.revealPath(res.outDir).catch((e) => message.error(errText(e)))}>
+              {t("打开文件夹")}
+            </Button>
           </div>
         ),
       });
@@ -177,12 +189,18 @@ export default function ExportModal({
           extra={
             project.task === "classify"
               ? t("未标注和已跳过的图片不导出；没打类别的图片不导出。")
-              : t("未标注和已跳过的图片不导出；已审核但没有标注的图片会作为负样本导出。")
+              : review
+                ? t("未标注和已跳过的图片不导出；已审核但没有标注的图片会作为负样本导出。")
+                : t("未标注和已跳过的图片不导出；标为「没有目标」的图片会作为负样本导出。")
           }
         >
-          <Checkbox checked={onlyReviewed} onChange={(e) => setOnlyReviewed(e.target.checked)}>
-            {t("只导出已审核的图片")}
-          </Checkbox>
+          {review ? (
+            <Checkbox checked={onlyReviewed} onChange={(e) => setOnlyReviewed(e.target.checked)}>
+              {t("只导出已审核的图片")}
+            </Checkbox>
+          ) : (
+            <span className="muted">{t("已标注的图片")}</span>
+          )}
         </Form.Item>
         {version ? (
           <Form.Item label={t("划分")}>
@@ -244,7 +262,15 @@ export default function ExportModal({
               {t("浏览")}
             </Button>
           </Space.Compact>
-          <Input style={{ marginTop: 8 }} value={name} onChange={(e) => setName(e.target.value)} addonBefore={t("文件夹名")} />
+          <Input
+            style={{ marginTop: 8 }}
+            value={name}
+            onChange={(e) => {
+              nameEdited.current = true;
+              setName(e.target.value);
+            }}
+            addonBefore={t("文件夹名")}
+          />
         </Form.Item>
         <Form.Item label={t("打码")}>
           <AnonymizeOptions task={project.task} value={anonymize} onChange={setAnonymize} />

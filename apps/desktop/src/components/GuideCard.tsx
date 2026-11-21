@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "antd";
 import { CheckOutlined, CloseOutlined, ReadOutlined } from "@ant-design/icons";
-import { api } from "../api";
+import { api, ProjectSummary } from "../api";
 import { prefs, useApp } from "../store";
 import { currentLang, t } from "../i18n";
 
@@ -11,8 +11,17 @@ const guideUrl = () => {
   return `https://wulabel.xiaowuiot.com/${l === "zh" ? "" : l + "/"}guide.html`;
 };
 
-/** 首页的新手引导：从装训练环境到部署的六步，能判断的步骤自动打勾 */
-export default function GuideCard({ hasProject, onNewProject }: { hasProject: boolean; onNewProject: () => void }) {
+/** 首页的新手引导：从装训练环境到部署的六步，能判断的步骤自动打勾。
+ *  summary：最近打开的项目的概况（图片数、已标注、训练次数），用来判断导入、标注、训练三步 */
+export default function GuideCard({
+  hasProject,
+  summary,
+  onNewProject,
+}: {
+  hasProject: boolean;
+  summary?: ProjectSummary | null;
+  onNewProject: () => void;
+}) {
   const [hidden, setHidden] = useState(prefs.get("guideHidden", "0") === "1");
   const [envReady, setEnvReady] = useState<boolean | null>(null);
   const setPage = useApp((s) => s.setPage);
@@ -63,9 +72,9 @@ export default function GuideCard({ hasProject, onNewProject }: { hasProject: bo
         </Button>
       ),
     },
-    { title: t("导入图片"), description: t("图片、文件夹、视频抽帧、摄像头采集，或导入已有数据集"), done: false, action: null },
-    { title: t("标一小批"), description: t("先标几十到一两百张；SAM 点一下出轮廓，文本提示自动找目标"), done: false, action: null },
-    { title: t("训练"), description: t("检测推荐 YOLOX-S，训 50 轮以上"), done: false, action: null },
+    { title: t("导入图片"), description: t("图片、文件夹、视频抽帧、摄像头采集，或导入已有数据集"), done: !!summary && summary.images > 0, action: null },
+    { title: t("标一小批"), description: t("先标几十到一两百张；SAM 点一下出轮廓，文本提示自动找目标"), done: !!summary && summary.labeled > 0, action: null },
+    { title: t("训练"), description: t("检测推荐 YOLOX-S，训 50 轮以上"), done: !!summary && summary.runs > 0, action: null },
     { title: t("预标注和部署"), description: t("用训好的模型预标注剩下的图，评估后导出部署"), done: false, action: null },
   ];
   const current = steps.findIndex((s) => !s.done);

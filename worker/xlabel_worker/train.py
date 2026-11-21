@@ -32,7 +32,7 @@ from . import models
 from .data import ClsFolder, CocoDetection, collate, has_cls_split, has_split
 from .i18n import tr
 from .metrics import ImageGt, ImagePred, classify_eval, classify_threshold_curve, evaluate, threshold_curve
-from .protocol import emit, log
+from .protocol import emit, log, warn
 
 
 def pick_device(pref: str) -> torch.device:
@@ -182,6 +182,23 @@ def split_report(r, classes: list[str], images: int) -> dict:
 # ---------- 训练主流程 ----------
 
 
+class ZeroWatch:
+    """主指标（mAP50 / 分类的准确率）连续 n 轮都是 0 时提示一次"""
+
+    def __init__(self, n: int):
+        self.n = max(1, n)
+        self.streak = 0
+        self.fired = False
+
+    def update(self, value: float) -> bool:
+        """记一轮的指标，该提示时返回 True（只返回一次）"""
+        self.streak = self.streak + 1 if value <= 1e-6 else 0
+        if self.streak >= self.n and not self.fired:
+            self.fired = True
+            return True
+        return False
+
+
 def is_oom(e: BaseException) -> bool:
     """显卡（CUDA / Apple MPS）或内存不够"""
     if isinstance(e, (torch.cuda.OutOfMemoryError, MemoryError)):
@@ -265,7 +282,10 @@ def run_once(cfg: dict) -> None:
         num_workers=workers,
         drop_last=len(train_ds) > batch,
     )
-    model = models.build(key, len(classes), img_size, num_keypoints=int(cfg.get("num_keypoints", 17))).to(device)
+    # 接着上次的模型训练时，预训练权重会被覆盖，没下载到也不用提示
+    model = models.build(
+        key, len(classes), img_size, num_keypoints=int(cfg.get("num_keypoints", 17)), warn_missing=not cfg.get("init_weights")
+    ).to(device)
     if cfg.get("init_weights"):
         models.load_init(model, key, cfg["init_weights"], classes)
     # 多尺度训练：输入尺寸在几档之间随机（评估时 torchvision 用最后一档，也就是原尺寸）
@@ -284,6 +304,7 @@ def run_once(cfg: dict) -> None:
         opt = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=1e-4)
     iters_per_epoch = max(len(loader), 1)
     total = epochs * iters_per_epoch
+    log(tr("批大小 {batch}，每轮 {n} 步，共 {m} 步", batch=batch, n=iters_per_epoch, m=total))
     warmup = min(300, iters_per_epoch * 2)
 
     def lr_factor(it: int) -> float:
@@ -307,6 +328,7 @@ def run_once(cfg: dict) -> None:
     best_epoch = 0
     best_map50 = None
     stopped = False
+    zero = ZeroWatch(min(10, epochs))
     t0 = time.time()
     it = 0
     for epoch in range(1, epochs + 1):
@@ -374,10 +396,21 @@ def run_once(cfg: dict) -> None:
         if is_best:
             best, best_epoch, best_map50 = fitness, epoch, r.map50
             models.save(out / "best.pt", eval_model, key, classes, img_size, {"epoch": epoch, "map50": r.map50, **extra})
-            if cls:
+            if fitness <= 0:
+                # 指标全是 0（多半是刚开始训）：照样存一份，免得没有模型可用，但不说成「最好的模型」
+                log(tr("第 {epoch} 轮指标还是 0，先保存当前模型，之后有更好的会替换", epoch=epoch))
+            elif cls:
                 log(tr("第 {epoch} 轮准确率 {acc}、宏平均 F1 {f1}，保存为最好的模型", epoch=epoch, acc=f"{r.map50:.3f}", f1=f"{r.map:.3f}"))
             else:
                 log(tr("第 {epoch} 轮 mAP50 {map50}、mAP50-95 {map}，保存为最好的模型", epoch=epoch, map50=f"{r.map50:.3f}", map=f"{r.map:.3f}"))
+        if zero.update(r.map50):
+            text = tr(
+                "连续 {n} 轮{metric}都是 0，模型基本没学到东西。常见原因：图太少或训练步数太少；标注或类别有问题；没加载到预训练权重（看日志开头）",
+                n=zero.n,
+                metric=tr("准确率") if cls else " mAP50 ",
+            )
+            # 中文里 mAP50 两边要空格，别的语言会多出空格，合并掉
+            warn("zero_metric", " ".join(text.split()))
     metrics_file.close()
 
     if not (out / "best.pt").exists():

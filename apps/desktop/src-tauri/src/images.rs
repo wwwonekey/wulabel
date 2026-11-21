@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageDecoder, ImageReader};
@@ -24,7 +24,12 @@ pub struct ImportResult {
     pub added: usize,
     pub duplicated: usize,
     pub failed: Vec<String>,
+    /// 中途停止时没导入的张数
+    pub stopped: usize,
 }
+
+/// 数据页「停止导入」：置位后还没处理的图不再导入，已处理的照常入库
+pub static STOP_IMPORT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -169,6 +174,16 @@ pub fn import(
     import_mapped(project, files, copy, on_progress).map(|(r, _)| r)
 }
 
+/// 同 import，可以用 STOP_IMPORT 中途停止（数据页导入图片用）
+pub fn import_stoppable(
+    project: &Project,
+    files: &[PathBuf],
+    copy: bool,
+    on_progress: &(dyn Fn(usize, usize) + Sync),
+) -> AppResult<ImportResult> {
+    import_inner(project, files, copy, None, Some(&STOP_IMPORT), on_progress).map(|(r, _)| r)
+}
+
 /// 同 import，另外返回「源文件 → 图片 id」（重复的图对应已有的 id），导入带标注的数据集时用
 pub fn import_mapped(
     project: &Project,
@@ -193,16 +208,31 @@ pub fn import_batch(
     batch: Option<i64>,
     on_progress: &(dyn Fn(usize, usize) + Sync),
 ) -> AppResult<(ImportResult, HashMap<PathBuf, i64>)> {
+    import_inner(project, files, copy, batch, None, on_progress)
+}
+
+fn import_inner(
+    project: &Project,
+    files: &[PathBuf],
+    copy: bool,
+    batch: Option<i64>,
+    stop: Option<&AtomicBool>,
+    on_progress: &(dyn Fn(usize, usize) + Sync),
+) -> AppResult<(ImportResult, HashMap<PathBuf, i64>)> {
     let mut map = HashMap::new();
     let total = files.len();
     let done = AtomicUsize::new(0);
     on_progress(0, total);
 
-    // 1. 并行：算哈希、读宽高、生成缩略图
-    let prepared: Vec<Result<Prepared, String>> = files
+    // 1. 并行：算哈希、读宽高、生成缩略图；停止后剩下的跳过（None）
+    let prepared: Vec<Option<Result<Prepared, String>>> = files
         .par_iter()
         .map(|f| {
-            let r = prepare(project, f).map_err(|e| format!("{}：{e}", f.display()));
+            let r = if stop.is_some_and(|s| s.load(Ordering::Relaxed)) {
+                None
+            } else {
+                Some(prepare(project, f).map_err(|e| format!("{}：{e}", f.display())))
+            };
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
             on_progress(n, total);
             r
@@ -210,7 +240,7 @@ pub fn import_batch(
         .collect();
 
     // 2. 串行：去重、复制、写库
-    let mut result = ImportResult { added: 0, duplicated: 0, failed: Vec::new() };
+    let mut result = ImportResult { added: 0, duplicated: 0, failed: Vec::new(), stopped: 0 };
     let mut seen: HashMap<String, i64> = HashMap::new();
     let mut conn = project.conn.lock();
     let tx = conn.transaction()?;
@@ -226,8 +256,12 @@ pub fn import_batch(
         };
         for item in prepared {
             let p = match item {
-                Ok(p) => p,
-                Err(e) => {
+                None => {
+                    result.stopped += 1;
+                    continue;
+                }
+                Some(Ok(p)) => p,
+                Some(Err(e)) => {
                     result.failed.push(e);
                     continue;
                 }
@@ -257,13 +291,13 @@ pub fn list(project: &Project, status: Option<&str>, offset: u32, limit: u32) ->
     let conn = project.conn.lock();
     let status = status.filter(|s| !s.is_empty() && *s != "all");
     let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM images WHERE (?1 IS NULL OR status = ?1)",
+        "SELECT COUNT(*) FROM images WHERE (?1 IS NULL OR status = ?1 OR (?1 = 'done' AND status IN ('labeled', 'reviewed')))",
         [status],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(
         "SELECT id, path, width, height, status, split FROM images
-         WHERE (?1 IS NULL OR status = ?1) ORDER BY id LIMIT ?2 OFFSET ?3",
+         WHERE (?1 IS NULL OR status = ?1 OR (?1 = 'done' AND status IN ('labeled', 'reviewed'))) ORDER BY id LIMIT ?2 OFFSET ?3",
     )?;
     let items = stmt
         .query_map(params![status, limit.min(1000), offset], |r| {

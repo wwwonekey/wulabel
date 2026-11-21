@@ -437,5 +437,9 @@
   "问题描述太长": "La description est trop longue",
   "服务端发送邮件失败，请稍后再试": "Le serveur n'a pas pu envoyer l'e-mail. Réessayez plus tard.",
   "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Échec du téléchargement de ffmpeg : {errors}. Installez-le avec le gestionnaire de paquets du système (par ex. apt install ffmpeg) ou indiquez son chemin dans les Paramètres.",
-  "请填写视频流地址或选择视频文件": "Saisissez l'adresse d'un flux ou choisissez un fichier vidéo"
+  "请填写视频流地址或选择视频文件": "Saisissez l'adresse d'un flux ou choisissez un fichier vidéo",
+  "不认识的划分：{s}": "Répartition inconnue : {s}",
+  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Le jeu d'entraînement est vide. Sur la page Entraînement, utilisez « Voir et ajuster » pour y déplacer quelques images",
+  "不能合并到同一个类别": "Impossible de fusionner une classe avec elle-même",
+  "合并了两个类别": "Deux classes fusionnées"
 }

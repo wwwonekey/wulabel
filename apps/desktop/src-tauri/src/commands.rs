@@ -108,13 +108,14 @@ pub async fn import_images(
 ) -> AppResult<ImportResult> {
     let project = state.current()?;
     let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    images::STOP_IMPORT.store(false, std::sync::atomic::Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
         let files = images::collect(&paths);
         if files.is_empty() {
             return Err(msg(t!("没有找到图片（支持 jpg、png、bmp、webp、tif）")));
         }
         let last = std::sync::atomic::AtomicUsize::new(0);
-        images::import(&project, &files, copy, &|done, total| {
+        images::import_stoppable(&project, &files, copy, &|done, total| {
             // 每 1% 或最后一张推一次进度，避免事件太多
             let step = (total / 100).max(1);
             if done == total || done >= last.load(std::sync::atomic::Ordering::Relaxed) + step {
@@ -125,6 +126,13 @@ pub async fn import_images(
     })
     .await
     .map_err(|e| msg(t!("导入任务异常：{e}", e = e)))?
+}
+
+/// 停止正在进行的图片导入，已处理的图照常入库
+#[tauri::command]
+pub async fn stop_import() -> AppResult<()> {
+    images::STOP_IMPORT.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 #[derive(Clone, Serialize)]
@@ -156,6 +164,7 @@ pub async fn extract_video(
     let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
     tauri::async_runtime::spawn_blocking(move || {
         let rt = app.state::<Runtime>();
+        let ext = app.state::<video::Extractor>();
         let a = app.clone();
         let progress = move |stage: &str, done: u64, total: u64, speed: u64, detail: &str| {
             let _ = a.emit(
@@ -163,7 +172,7 @@ pub async fn extract_video(
                 VideoProgress { stage: stage.to_string(), done, total, speed, detail: detail.to_string() },
             );
         };
-        video::extract(&project, &rt, &paths, every, max_frames, &progress, &|_line| {})
+        video::extract(&project, &rt, &ext, &paths, every, max_frames, &progress, &|_line| {})
     })
     .await
     .map_err(|e| msg(t!("抽帧任务异常：{e}", e = e)))?
@@ -827,6 +836,12 @@ pub async fn health_ignore(state: State<'_, AppState>, keys: Vec<String>) -> App
     health::ignore(&*state.current()?, &keys)
 }
 
+/// 恢复这份体检报告里忽略掉的问题
+#[tauri::command]
+pub async fn health_unignore(state: State<'_, AppState>) -> AppResult<()> {
+    health::unignore(&*state.current()?)
+}
+
 #[tauri::command]
 pub async fn append_annotation(state: State<'_, AppState>, image_id: i64, annotation: Annotation) -> AppResult<String> {
     annotations::append(&*state.current()?, image_id, annotation)
@@ -842,6 +857,16 @@ pub async fn split_summary(state: State<'_, AppState>) -> AppResult<SplitSummary
 #[tauri::command]
 pub async fn assign_splits(state: State<'_, AppState>, ratios: [f64; 3], all: bool) -> AppResult<SplitSummary> {
     dataset::assign_splits(&*state.current()?, ratios, all)
+}
+
+#[tauri::command]
+pub async fn list_split_images(state: State<'_, AppState>, split: String, offset: u32, limit: u32) -> AppResult<ImagePage> {
+    dataset::list_split(&*state.current()?, &split, offset, limit)
+}
+
+#[tauri::command]
+pub async fn set_split(state: State<'_, AppState>, ids: Vec<i64>, split: String) -> AppResult<SplitSummary> {
+    dataset::set_split(&*state.current()?, &ids, &split)
 }
 
 fn progress_emitter(app: AppHandle, event: &'static str) -> impl Fn(usize, usize) + Sync {
@@ -975,6 +1000,28 @@ pub async fn set_image_status(state: State<'_, AppState>, share: State<'_, Share
     }
 }
 
+/// 数据页批量改状态（设为跳过、恢复未标注），返回改了几张。共享中别人正在标的图不动
+#[tauri::command]
+pub async fn set_status_many(state: State<'_, AppState>, share: State<'_, Share>, ids: Vec<i64>, status: String) -> AppResult<usize> {
+    let project = state.current()?;
+    let hub = share.hub_for(&project);
+    let ids: Vec<i64> = match &hub {
+        Some(h) => {
+            let me = h.host_member();
+            ids.into_iter().filter(|id| h.check_write(&me, *id).is_ok()).collect()
+        }
+        None => ids,
+    };
+    let changed = annotations::set_status_many(&project, &ids, &status)?;
+    if let Some(h) = hub {
+        let me = h.host_member();
+        for (id, s) in &changed {
+            h.status_changed(&me, *id, s, &status);
+        }
+    }
+    Ok(changed.len())
+}
+
 // ---------- 类别 ----------
 
 #[tauri::command]
@@ -1034,6 +1081,32 @@ pub async fn delete_label(state: State<'_, AppState>, share: State<'_, Share>, i
         h.labels_changed(&h.host_member(), &t!("删除了一个类别"));
     }
     Ok(n)
+}
+
+// ---------- 标注页：缩略图状态、合并类别、停止批量预标注 ----------
+
+/// 全部图片的 (id, 状态)，缩略图条上的状态点用
+#[tauri::command]
+pub async fn image_statuses(state: State<'_, AppState>) -> AppResult<Vec<(i64, String)>> {
+    annotations::statuses(&*state.current()?)
+}
+
+/// 把类别 from 的标注合并到类别 to，再删掉 from
+#[tauri::command]
+pub async fn merge_label(state: State<'_, AppState>, share: State<'_, Share>, from: i64, to: i64) -> AppResult<usize> {
+    let project = state.current()?;
+    let n = annotations::merge_label(&project, from, to)?;
+    if let Some(h) = share.hub_for(&project) {
+        h.labels_changed(&h.host_member(), &t!("合并了两个类别"));
+    }
+    Ok(n)
+}
+
+/// 停止批量预标注，已经标好的保留
+#[tauri::command]
+pub async fn stop_prelabel() -> AppResult<()> {
+    training::prelabel_stop(true);
+    Ok(())
 }
 
 // ---------- 实时协作（主机这边） ----------

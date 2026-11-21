@@ -45,7 +45,7 @@ import {
   ShareEvent,
   thumbUrl,
 } from "../api";
-import { prefs, useApp } from "../store";
+import { prefs, useApp, useReview } from "../store";
 import AnnotCanvas, { Box, Poly, RectXYWH, Tool } from "../components/AnnotCanvas";
 import AiRulesDrawer from "../components/AiRulesDrawer";
 import { t } from "../i18n";
@@ -57,6 +57,14 @@ const FILTERS = [
   { label: t("未标注"), value: "todo" },
   { label: t("已标注"), value: "labeled" },
   { label: t("已审核"), value: "reviewed" },
+  { label: t("已跳过"), value: "skipped" },
+];
+/** 一个人标注（不用审核）时的筛选：已标注包含已审核 */
+const SOLO_FILTERS = [
+  { label: t("全部"), value: "all" },
+  { label: t("未标注"), value: "todo" },
+  { label: t("已标注"), value: "done" },
+  { label: t("已跳过"), value: "skipped" },
 ];
 const STATUS_TEXT: Record<ImageStatus, { text: string; color?: string }> = {
   todo: { text: t("未标注") },
@@ -193,6 +201,8 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const isAnnotator = remote && team.me?.role === "annotator";
   const canReview = !remote || team.me?.role === "reviewer";
   const collab = remote || team.shareRunning;
+  // 协作时才有审核流程；一个人标注时标完就算数
+  const review = useReview();
   const canEditLabels = !remote || team.options.membersEditLabels;
   const aiAllowed = !remote || team.options.allowAi;
   /** 别人正在改这张图时是他的名字（只读） */
@@ -215,6 +225,13 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const [filter, setFilter] = useState(queue ? "queue" : "all");
   const [ids, setIds] = useState<number[] | null>(null);
   const [idx, setIdx] = useState(0);
+  /** 每张图的状态（缩略图状态点、跳到下一张未标注用）；拿不到时是空的 */
+  const [statusMap, setStatusMap] = useState<Map<number, ImageStatus>>(() => new Map());
+  /** 翻过最后一张时的提示（已标注、未标注张数） */
+  const [endInfo, setEndInfo] = useState<{ done: number; todo: number } | null>(null);
+  // 顶栏序号：点开输入序号跳转
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpTo, setJumpTo] = useState<number | null>(null);
   const [meta, setMeta] = useState<ImageAnnotations | null>(null);
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [polys, setPolys] = useState<Poly[]>([]);
@@ -264,6 +281,12 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   // ---------- 保存 ----------
 
+  /** 本地记下某张图的新状态（没读到状态表时不记） */
+  const markStatus = useCallback(
+    (id: number, s: ImageStatus) => setStatusMap((mp) => (mp.has(id) && mp.get(id) !== s ? new Map(mp).set(id, s) : mp)),
+    [],
+  );
+
   const flush = useCallback(async () => {
     window.clearTimeout(timer.current);
     const m = metaRef.current;
@@ -278,6 +301,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         ...(tagRef.current ? [tagToAnn(tagRef.current)] : []),
         ...othersRef.current,
       ]);
+      markStatus(m.id, status);
       if (metaRef.current?.id === m.id) {
         metaRef.current = { ...metaRef.current, status };
         setMeta(metaRef.current);
@@ -288,7 +312,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       setSaveState("error");
       message.error(t("保存失败：{err}", { err: errText(e) }));
     }
-  }, [message]);
+  }, [message, markStatus]);
 
   const schedule = useCallback(() => {
     dirty.current = true;
@@ -416,18 +440,56 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   };
 
   const removeLabel = (l: Label) => {
-    modal.confirm({
+    // 有标注时可以先合并到另一个类别，标注不丢
+    const others = labels.filter((x) => x.id !== l.id);
+    const canMerge = l.count > 0 && others.length > 0;
+    let target: number | null = null;
+    const okProps = () =>
+      target != null
+        ? { okText: t("合并"), okButtonProps: { danger: false } }
+        : { okText: canMerge ? t("直接删除") : t("删除"), okButtonProps: { danger: true } };
+    const dlg = modal.confirm({
       title: t("删除类别「{name}」？", { name: l.name }),
-      content: l.count > 0 ? t("这个类别下的 {n} 个标注会一起删除，无法恢复。", { n: l.count }) : t("这个类别还没有标注。"),
-      okText: t("删除"),
-      okButtonProps: { danger: true },
+      content:
+        l.count > 0 ? (
+          <>
+            <div>{t("这个类别下的 {n} 个标注会一起删除，无法恢复。", { n: l.count })}</div>
+            {canMerge && (
+              <div style={{ marginTop: 10 }}>
+                <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
+                  {t("也可以把这些标注合并到另一个类别，标注不会丢：")}
+                </div>
+                <Select
+                  allowClear
+                  style={{ width: "100%" }}
+                  placeholder={t("合并到…")}
+                  options={others.map((x) => ({ value: x.id, label: x.name }))}
+                  onChange={(v: number | undefined) => {
+                    target = v ?? null;
+                    dlg.update(okProps());
+                  }}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          t("这个类别还没有标注。")
+        ),
+      ...okProps(),
       cancelText: t("取消"),
       onOk: async () => {
+        const to = target;
         try {
           await flush();
-          await api.deleteLabel(l.id);
+          if (to != null) {
+            const n = await api.mergeLabel(l.id, to);
+            message.success(t("已把 {n} 个标注合并到「{name}」", { n, name: nameOf(to) }));
+          } else {
+            await api.deleteLabel(l.id);
+          }
           await loadLabels();
           await reloadCurrent();
+          await loadStatuses();
           await refreshStats();
         } catch (e) {
           message.error(errText(e));
@@ -441,7 +503,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     setCurLabel(id);
     if (isCls) {
       if (tagRef.current?.labelId !== id || tagRef.current.source !== "manual") commitTag({ labelId: id, source: "manual" });
-      if (autoNext && ids && idx < ids.length - 1) go(idx + 1);
+      if (autoNext && ids) go(nextIndex());
       return;
     }
     if (!selected) return;
@@ -454,10 +516,17 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   // ---------- 图片列表与翻图 ----------
 
+  /** 重新读每张图的状态；读不到（比如发起人的版本较旧）就不显示状态点 */
+  const loadStatuses = useCallback(async () => {
+    const st = await api.imageStatuses().catch(() => null);
+    setStatusMap(new Map<number, ImageStatus>(st ?? []));
+  }, []);
+
   useEffect(() => {
     let alive = true;
     (async () => {
       await flush();
+      await loadStatuses();
       let all: number[];
       if (filter === "queue" && queue) {
         // 指定的一批图：按给定顺序，去掉已经删除的
@@ -481,7 +550,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     return () => {
       alive = false;
     };
-  }, [filter, flush, takeFocusImage, message, queue, idsVersion]);
+  }, [filter, flush, loadStatuses, takeFocusImage, message, queue, idsVersion]);
 
   const clearSam = () => {
     setSamPoints([]);
@@ -614,22 +683,63 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     };
   }, [collab, remote, myId, loadLabels, message]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const go = useCallback(
-    (i: number) => {
-      if (!ids || i < 0 || i >= ids.length) return;
-      setIdx(i);
-      refreshStats();
-      loadLabels();
-    },
-    [ids, refreshStats, loadLabels],
-  );
+  /** 翻过最后一张：提示这一批标完了，可以去训练，或者接着标未标注的 */
+  const showEnd = async () => {
+    await flush();
+    let done = 0;
+    let todo = 0;
+    // 协作成员只算自己看得到的图
+    const st = remote ? await api.imageStatuses().catch(() => null) : null;
+    if (st && st.length) {
+      for (const [, s] of st) {
+        if (s === "todo") todo++;
+        else if (s === "labeled" || s === "reviewed") done++;
+      }
+    } else {
+      await refreshStats();
+      const s = useApp.getState().project?.stats;
+      done = (s?.labeled ?? 0) + (s?.reviewed ?? 0);
+      todo = s?.todo ?? 0;
+    }
+    setEndInfo({ done, todo });
+  };
 
-  const setStatus = async (status: ImageStatus, next: boolean) => {
+  const go = (i: number) => {
+    if (!ids || i < 0) return;
+    if (i >= ids.length) {
+      if (ids.length > 0 && !endInfo) showEnd().catch((e) => message.error(errText(e)));
+      return;
+    }
+    setIdx(i);
+    refreshStats();
+    loadLabels();
+  };
+
+  /** 标完一张后去哪：「全部」「未标注」或指定的一批图里，跳到后面第一张未标注的，没有就下一张。
+   *  审核员审图时照旧下一张 */
+  const nextIndex = () => {
+    if (ids && (!review || isAnnotator) && (filter === "all" || filter === "todo" || filter === "queue")) {
+      for (let j = idx + 1; j < ids.length; j++) if (statusMap.get(ids[j]) === "todo") return j;
+    }
+    return idx + 1;
+  };
+
+  /** Shift+D：下一张未标注，后面没有了就提示这一批标完了 */
+  const goNextTodo = () => {
+    if (!ids) return;
+    // 没读到状态时退回普通的下一张
+    if (statusMap.size === 0) return go(idx + 1);
+    for (let j = idx + 1; j < ids.length; j++) if (statusMap.get(ids[j]) === "todo") return go(j);
+    go(ids.length);
+  };
+
+  /** 改当前图的状态，成功返回 true */
+  const setStatus = async (status: ImageStatus, next: boolean): Promise<boolean> => {
     const m = metaRef.current;
-    if (!m) return;
+    if (!m) return false;
     if (readOnlyRef.current) {
       message.warning(t("「{name}」正在标这张图，现在只能看", { name: readOnlyRef.current }));
-      return;
+      return false;
     }
     // 标注员的「通过」是提交，等审核
     const real: ImageStatus = isAnnotator && status === "reviewed" ? "labeled" : status;
@@ -639,11 +749,74 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       if (real === "labeled" || real === "reviewed") setTeamInfo((ti) => (ti ? { ...ti, rejectReason: "" } : ti));
       metaRef.current = { ...m, status: real };
       setMeta(metaRef.current);
-      if (next) go(idx + 1);
+      markStatus(m.id, real);
+      if (next) go(nextIndex());
       else refreshStats();
+      return true;
+    } catch (e) {
+      message.error(errText(e));
+      return false;
+    }
+  };
+
+  /** 撤回「没有目标」：那张图改回原来的状态，并跳回去 */
+  const undoNegative = async (id: number, prev: ImageStatus) => {
+    try {
+      await api.setImageStatus(id, prev);
+      markStatus(id, prev);
+      if (metaRef.current?.id === id) {
+        metaRef.current = { ...metaRef.current, status: prev };
+        setMeta(metaRef.current);
+      }
+      const i = ids ? ids.indexOf(id) : -1;
+      if (i >= 0) {
+        setEndInfo(null);
+        setIdx(i);
+      }
+      refreshStats();
     } catch (e) {
       message.error(errText(e));
     }
+  };
+
+  /** 不用审核时的「完成并下一张」：有标注的图本来就算已标注，直接下一张；
+   *  没有目标的图记成「没有目标」（存为已审核，作为负样本参与训练） */
+  const finish = async () => {
+    if (review) return setStatus("reviewed", true);
+    const m = metaRef.current;
+    if (!m) return;
+    if (objects.length === 0 && !tag) {
+      const prev = m.status;
+      const ok = await setStatus("reviewed", true);
+      // 误按了 Enter 可以撤回
+      if (ok && prev !== "reviewed") {
+        const key = `neg-${m.id}`;
+        message.open({
+          key,
+          type: "success",
+          duration: 5,
+          content: (
+            <span>
+              {t("已记为「没有目标」")}
+              <a
+                style={{ marginLeft: 8 }}
+                onClick={() => {
+                  message.destroy(key);
+                  undoNegative(m.id, prev);
+                }}
+              >
+                {t("撤回")}
+              </a>
+            </span>
+          ),
+        });
+      }
+      return;
+    }
+    // 批量预标注的图还是未标注（等人确认），看过按完成就算已标注；跳过的图同理
+    if (m.status === "skipped" || m.status === "todo") return setStatus("labeled", true);
+    await flush();
+    go(nextIndex());
   };
 
   // ---------- 编辑 ----------
@@ -958,37 +1131,58 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       ),
       okText: t("开始"),
       cancelText: t("取消"),
-      onOk: async () => {
-        await flush();
-        setBatch({ done: 0, total: 0 });
-        const un = await listen<{ done: number; total: number }>("prelabel-progress", (e) => setBatch(e.payload));
-        try {
-          const r =
-            aiSrc === "model"
-              ? await api.prelabelAll(modelId as number, conf)
-              : aiSrc === "text"
-                ? await api.textPrelabelAll(conf)
-                : await api.aiPrelabelAll(aiModel, conf);
-          await loadLabels();
-          await reloadCurrent();
-          const v = { images: r.images, n: r.boxes };
-          message.success(
-            isCls
-              ? t("已预标注 {images} 张图片，共 {n} 个类别", v)
-              : isSeg
-                ? t("已预标注 {images} 张图片，共 {n} 个轮廓", v)
-                : isPose
-                  ? t("已预标注 {images} 张图片，共 {n} 个目标", v)
-                  : t("已预标注 {images} 张图片，共 {n} 个框", v),
-          );
-        } catch (e) {
-          message.error(errText(e));
-        } finally {
-          un();
-          setBatch(null);
-        }
+      // 不等跑完就关掉对话框，进度和「停止」按钮在右侧
+      onOk: () => {
+        runPrelabel();
       },
     });
+  };
+
+  // 批量预标注可以中途停止，已经标好的保留
+  const batchStop = useRef(false);
+  const [batchStopping, setBatchStopping] = useState(false);
+  const stopBatch = () => {
+    batchStop.current = true;
+    setBatchStopping(true);
+    api.stopPrelabel().catch(() => {});
+  };
+
+  const runPrelabel = async () => {
+    batchStop.current = false;
+    setBatchStopping(false);
+    setBatch({ done: 0, total: 0 });
+    const un = await listen<{ done: number; total: number }>("prelabel-progress", (e) => setBatch(e.payload));
+    try {
+      await flush();
+      const r =
+        aiSrc === "model"
+          ? await api.prelabelAll(modelId as number, conf)
+          : aiSrc === "text"
+            ? await api.textPrelabelAll(conf)
+            : await api.aiPrelabelAll(aiModel, conf);
+      await loadLabels();
+      // 预标注只改还没有标注的图：当前图没标、也没有没保存的改动时才重新读，免得冲掉正在改的
+      const empty = !boxesRef.current.length && !polysRef.current.length && !posesRef.current.length && !tagRef.current;
+      if (empty && !dirty.current) await reloadCurrent();
+      const v = { images: r.images, n: r.boxes };
+      message.success(
+        batchStop.current
+          ? t("已停止，预标注了 {n} 张", { n: r.images })
+          : isCls
+            ? t("已预标注 {images} 张图片，共 {n} 个类别", v)
+            : isSeg
+              ? t("已预标注 {images} 张图片，共 {n} 个轮廓", v)
+              : isPose
+                ? t("已预标注 {images} 张图片，共 {n} 个目标", v)
+                : t("已预标注 {images} 张图片，共 {n} 个框", v),
+      );
+    } catch (e) {
+      message.error(errText(e));
+    } finally {
+      un();
+      setBatch(null);
+      setBatchStopping(false);
+    }
   };
 
   // ---------- SAM 交互分割 ----------
@@ -1235,9 +1429,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       const l = labels[Number(k) - 1];
       if (l) pickLabel(l.id);
     } else if (k === "delete" || k === "backspace") deleteBox(selected);
+    else if ((k === "d" || k === "arrowright") && e.shiftKey) goNextTodo();
     else if (k === "d" || k === "arrowright") go(idx + 1);
     else if (k === "a" || k === "arrowleft") go(idx - 1);
-    else if (k === "enter") setStatus("reviewed", true);
+    else if (k === "enter") finish();
+    else if (k === "x" && !e.repeat) setStatus("skipped", true); // 按住不放不连续跳
     else if (k === "f") setFitSignal((n) => n + 1);
     else if (k === "h") setShowNames((v) => !v);
     else if (k === "p") predictCurrent();
@@ -1261,6 +1457,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
       await api.reviewImage(m.id, false, rejecting);
       metaRef.current = { ...m, status: "todo" };
       setMeta(metaRef.current);
+      markStatus(m.id, "todo");
       setRejecting(null);
       message.success(t("已打回，图回到标注员的任务里"));
       go(idx + 1);
@@ -1289,6 +1486,19 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
 
   const stripStart = Math.max(0, idx - 12);
   const strip = (ids ?? []).slice(stripStart, stripStart + 25);
+  /** 缩略图上的状态点：未标注不显示；不用审核时已审核也算已标注（蓝） */
+  const dotClass = (id: number) => {
+    const s = statusMap.get(id);
+    if (s === "labeled" || (s === "reviewed" && !review)) return "dot labeled";
+    if (s === "reviewed") return "dot reviewed";
+    if (s === "skipped") return "dot skipped";
+    return null;
+  };
+  /** 顶栏输入序号跳转 */
+  const jump = () => {
+    if (ids && jumpTo != null && jumpTo >= 1 && jumpTo <= ids.length) go(Math.round(jumpTo) - 1);
+    setJumpOpen(false);
+  };
   const curColor = colorOf(curLabel);
   const saveText = { saved: t("已保存"), dirty: t("未保存"), saving: t("保存中…"), error: t("保存失败") }[saveState];
   const kptCount = (p: Pose) => p.kpts.filter((_, i) => i % 3 === 2).filter((v) => v > 0).length;
@@ -1302,11 +1512,14 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const selPose = poses.find((p) => p.key === selected) ?? null;
   const placingPose = placing ? poses.find((p) => p.key === placing.key) : null;
   const toolLabel = isSeg ? t("画多边形轮廓 (R)") : isPose ? t("画目标框，再逐个点关键点 (R)") : t("画矩形框 (R)");
+  const enterHint = review ? t("Enter 审核通过") : t("Enter 完成并下一张");
   const hint = isCls
-    ? t("1–9 选类别{auto} · A/D 翻图 · Enter 审核通过 · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张 · ? 全部快捷键", {
+    ? t("1–9 选类别{auto} · A/D 翻图 · {enter} · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张 · ? 全部快捷键", {
         auto: autoNext ? t("（选完自动下一张）") : "",
+        enter: enterHint,
       })
-    : t("{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键", {
+    : t("{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · {enter} · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键", {
+        enter: enterHint,
         draw: isSeg ? t("R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）") : isPose ? t("R 画目标框后逐个点关键点") : t("R 画框"),
       });
   // 点名要加粗，先整句翻译再从 {name} 处分开
@@ -1326,7 +1539,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     ...(isCls ? [] : [{ label: t("文本提示"), value: "text" }, ...(remote || !xuntongEnabled() ? [] : [{ label: t("巡瞳 AI"), value: "ai" }])]),
   ];
   const filterOpts = [
-    ...FILTERS.map((f) => (f.value === "all" && isAnnotator ? { ...f, label: t("我的全部") } : f)),
+    ...(review ? FILTERS : SOLO_FILTERS).map((f) => (f.value === "all" && isAnnotator ? { ...f, label: t("我的全部") } : f)),
     ...(collab ? [{ label: t("被打回"), value: "rejected" }] : []),
   ];
   const canPredict = aiSrc === "model" ? modelId != null : aiSrc === "ai" ? !!aiModel && !aiError : labels.length > 0;
@@ -1358,12 +1571,46 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <strong>{meta?.name ?? "—"}</strong>{" "}
           <span className="muted">
-            · {ids?.length ? idx + 1 : 0} / {ids?.length ?? 0}
+            ·{" "}
+            <Popover
+              trigger="click"
+              open={jumpOpen}
+              onOpenChange={(o) => {
+                setJumpOpen(o);
+                if (o) setJumpTo(idx + 1);
+              }}
+              content={
+                <Space.Compact>
+                  <InputNumber
+                    size="small"
+                    autoFocus
+                    min={1}
+                    max={ids?.length || 1}
+                    precision={0}
+                    value={jumpTo}
+                    onChange={(v) => setJumpTo(typeof v === "number" ? v : null)}
+                    onPressEnter={jump}
+                    style={{ width: 110 }}
+                  />
+                  <Button size="small" type="primary" onClick={jump}>
+                    {t("跳转")}
+                  </Button>
+                </Space.Compact>
+              }
+            >
+              <span className="annot-jump" title={t("点击输入序号跳转")}>
+                {ids?.length ? idx + 1 : 0} / {ids?.length ?? 0}
+              </span>
+            </Popover>
             {meta && ` · ${meta.width}×${meta.height}`}
           </span>
         </span>
         <Button size="small" icon={<RightOutlined />} disabled={!ids || idx >= ids.length - 1} onClick={() => go(idx + 1)} />
-        {meta && <Tag color={STATUS_TEXT[meta.status].color}>{STATUS_TEXT[meta.status].text}</Tag>}
+        {meta && (() => {
+          // 不用审核时：已审核的图显示成已标注；没有目标的显示「没有目标」
+          const st = review || meta.status !== "reviewed" ? STATUS_TEXT[meta.status] : objects.length || tag ? STATUS_TEXT.labeled : { text: t("没有目标"), color: undefined };
+          return <Tag color={st.color}>{st.text}</Tag>;
+        })()}
         <Segmented
           size="small"
           value={filter}
@@ -1582,11 +1829,13 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         {(
           [
             [
-              t("翻图和审核"),
+              review ? t("翻图和审核") : t("翻图"),
               [
                 ["A / ←", t("上一张")],
                 ["D / →", t("下一张")],
-                ["Enter", t("审核通过（并跳到下一张）")],
+                ["Shift + D / Shift + →", t("下一张未标注")],
+                ["Enter", review ? t("审核通过（并跳到下一张）") : t("完成并下一张（没有目标的图记为负样本）")],
+                ["X", t("跳过（不参与训练）")],
                 ["P", t("用选中的模型预测当前图")],
                 ["Ctrl + D", t("沿用上一张的标注")],
               ],
@@ -1750,7 +1999,14 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
               </div>
             </>
           )}
-          {batch && <Progress size="small" percent={batch.total ? Math.floor((batch.done / batch.total) * 100) : 0} style={{ marginTop: 6 }} />}
+          {batch && (
+            <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: "nowrap" }}>
+              <Progress size="small" percent={batch.total ? Math.floor((batch.done / batch.total) * 100) : 0} style={{ flex: 1, margin: 0 }} />
+              <Button size="small" danger loading={batchStopping} onClick={stopBatch}>
+                {t("停止")}
+              </Button>
+            </div>
+          )}
           {isCls && tagHints.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>{t("模型的候选（点选采用）")}</div>
@@ -1960,10 +2216,10 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         )}
 
         <section>
-          <h3>{t("审核")}</h3>
+          <h3>{review ? t("审核") : t("完成")}</h3>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <Button size="small" icon={<CheckOutlined />} onClick={() => setStatus("reviewed", true)}>
-              {isAnnotator ? t("提交并下一张") : t("通过并下一张")}
+            <Button size="small" icon={<CheckOutlined />} onClick={finish}>
+              {!review ? t("完成并下一张") : isAnnotator ? t("提交并下一张") : t("通过并下一张")}
             </Button>
             {collab && canReview && meta && (meta.status === "labeled" || meta.status === "reviewed") && (
               <Button size="small" danger icon={<RollbackOutlined />} onClick={() => setRejecting("")}>
@@ -1973,7 +2229,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             <Button size="small" icon={<StepForwardOutlined />} onClick={() => setStatus("skipped", true)}>
               {t("跳过")}
             </Button>
-            {meta && (meta.status === "reviewed" || meta.status === "skipped") && (
+            {meta && (meta.status === "skipped" || (meta.status === "reviewed" && (review || (objects.length === 0 && !tag)))) && (
               <Button size="small" onClick={() => setStatus(objects.length || tag ? "labeled" : "todo", false)}>
                 {t("撤回")}
               </Button>
@@ -1993,7 +2249,9 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
             {isAnnotator
               ? t("提交后等审核员审核；被打回的图会出现在「被打回」里，原因显示在图上方。")
-              : t("「跳过」的图不参与训练，可用于模糊、无关的图片。")}
+              : review
+                ? t("「跳过」的图不参与训练，可用于模糊、无关的图片。")
+                : t("标了目标的图自动算已标注，不用审核。确实没有目标的图点「完成」，会作为负样本参与训练；模糊、无关的图点「跳过」，不参与训练。")}
           </div>
         </section>
       </aside>
@@ -2008,12 +2266,62 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         }}
       />
       <div className="annot-strip">
-        {strip.map((id, i) => (
-          <div key={id} className={id === imageId ? "t on" : "t"} style={{ height: stripH - 26 }} onClick={() => go(stripStart + i)}>
-            <img src={thumbUrl(project.path, id)} alt="" draggable={false} />
-          </div>
-        ))}
+        {strip.map((id, i) => {
+          const dot = dotClass(id);
+          return (
+            <div key={id} className={id === imageId ? "t on" : "t"} style={{ height: stripH - 26 }} onClick={() => go(stripStart + i)}>
+              <img src={thumbUrl(project.path, id)} alt="" draggable={false} />
+              {dot && <span className={dot} />}
+            </div>
+          );
+        })}
       </div>
+
+      <Modal
+        title={t("这一批标完了")}
+        open={!!endInfo}
+        onCancel={() => setEndInfo(null)}
+        width={420}
+        footer={
+          endInfo && (
+            <Space>
+              {!remote && (
+                <Button
+                  type={endInfo.todo > 0 ? "default" : "primary"}
+                  onClick={() => {
+                    setEndInfo(null);
+                    setPage("train");
+                  }}
+                >
+                  {t("去训练")}
+                </Button>
+              )}
+              {endInfo.todo > 0 && (
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    setEndInfo(null);
+                    setFilter("todo");
+                    setIdsVersion((n) => n + 1);
+                  }}
+                >
+                  {t("继续标未标注的")}
+                </Button>
+              )}
+              {remote && endInfo.todo === 0 && (
+                <Button type="primary" onClick={() => setEndInfo(null)}>
+                  {t("知道了")}
+                </Button>
+              )}
+            </Space>
+          )
+        }
+      >
+        {endInfo &&
+          (endInfo.todo > 0
+            ? t("已标注 {done} 张，还有 {todo} 张未标注。", endInfo)
+            : t("已标注 {done} 张，没有未标注的图了。", endInfo))}
+      </Modal>
 
       <AiRulesDrawer
         open={rulesOpen}

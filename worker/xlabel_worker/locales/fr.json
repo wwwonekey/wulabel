@@ -115,5 +115,9 @@
   "下载预训练权重失败（{url}）：{e}": "Échec du téléchargement des poids pré-entraînés ({url}) : {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "L'entraînement YOLOX passe par YoloxTask, pas par cet adaptateur",
   "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "Dernières {n} époques : Mosaic / MixUp désactivés, perte L1 activée",
-  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Impossible d'ouvrir la source vidéo : {src}. Pour un flux, vérifiez l'adresse, l'identifiant et le mot de passe ainsi que le réseau ; pour un fichier vidéo, vérifiez le chemin et le format."
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Impossible d'ouvrir la source vidéo : {src}. Pour un flux, vérifiez l'adresse, l'identifiant et le mot de passe ainsi que le réseau ; pour un fichier vidéo, vérifiez le chemin et le format.",
+  "本地的预训练权重文件损坏（{path}），删掉重新下载": "Le fichier local de poids pré-entraînés est corrompu ({path}) ; suppression et nouveau téléchargement",
+  "批大小 {batch}，每轮 {n} 步，共 {m} 步": "Taille de lot {batch}, {n} pas par époque, {m} pas au total",
+  "第 {epoch} 轮指标还是 0，先保存当前模型，之后有更好的会替换": "Époque {epoch} : métriques toujours à 0 ; le modèle actuel est enregistré en attendant, il sera remplacé par un meilleur",
+  "准确率": "Exactitude"
 }

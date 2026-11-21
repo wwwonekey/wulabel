@@ -33,6 +33,7 @@ import { t } from "../i18n";
 import { xuntongEnabled } from "../features";
 import { rgba } from "../components/AnnotCanvas";
 import { XuntongUpload } from "../components/Xuntong";
+import { fmtTime, metricNames, modelName, MODELS } from "./Train";
 
 const stamp = () => {
   const d = new Date();
@@ -93,7 +94,18 @@ interface FrameEv {
 const taskOf = (model?: string) =>
   model?.startsWith("maskrcnn") ? "segment" : model?.startsWith("keypointrcnn") ? "pose" : model?.startsWith("cls_") ? "classify" : "detect";
 
-function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
+/** 置信度输入框旁边的「用推荐值」（推荐值是评估页 F1 最高的阈值） */
+function RecConf({ value, rec, onUse }: { value: number; rec: number | null; onUse: (v: number) => void }) {
+  if (rec == null) return null;
+  if (Math.abs(value - rec) < 0.001) return <span className="dim" style={{ fontSize: 12 }}>{t("（推荐值）")}</span>;
+  return (
+    <Button size="small" type="link" style={{ padding: 0 }} onClick={() => onUse(rec)}>
+      {t("用推荐值 {v}", { v: rec.toFixed(2) })}
+    </Button>
+  );
+}
+
+function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recConf: number | null }) {
   const { message } = App.useApp();
   const refreshStats = useApp((s) => s.refreshStats);
   const [kind, setKind] = useState(prefs.get("liveKind", "rtsp"));
@@ -112,6 +124,16 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
   classesRef.current = classes;
   const confRef = useRef(conf);
   confRef.current = conf;
+  // 默认用这个模型的推荐阈值，用户自己拖过就不再改
+  const confTouched = useRef(false);
+  useEffect(() => {
+    if (recConf != null && !confTouched.current) setConf(recConf);
+  }, [recConf]);
+  const applyConf = (v: number) => {
+    setConf(v);
+    prefs.set("liveConf", String(v));
+    if (running) api.liveConf(v).catch(() => {});
+  };
 
   const colorOf = useCallback(
     (name: string) => labels.find((l) => l.name === name)?.color ?? "#ffd43b",
@@ -324,12 +346,12 @@ function LiveTab({ run, labels }: { run: RunInfo; labels: Label[] }) {
           step={0.05}
           value={conf}
           onChange={(v) => {
-            setConf(v);
-            prefs.set("liveConf", String(v));
-            if (running) api.liveConf(v).catch(() => {});
+            confTouched.current = true;
+            applyConf(v);
           }}
         />
         <span style={{ width: 36 }}>{conf.toFixed(2)}</span>
+        <RecConf value={conf} rec={recConf} onUse={applyConf} />
         <Button icon={<CameraOutlined />} disabled={!running} onClick={() => api.liveSnapshot().catch((e) => message.error(errText(e)))}>
           {t("截图加入数据集")}
         </Button>
@@ -374,8 +396,14 @@ const FORMATS = [
 
 function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
   const { message } = App.useApp();
+  const builtin = MODELS.find((m) => m.value === run.config?.model);
+  // 两阶段模型（Faster / Mask / Keypoint R-CNN）转 NPU、老 TensorRT 容易出问题；导入的外部模型不算
+  const twoStage = run.engine !== "external" && !!builtin && !builtin.oneStage && builtin.task !== "classify";
+  // 模型自己的输入尺寸（SSDLite 固定 320）
+  const ownSize = builtin?.fixedSize ?? run.config?.imgSize ?? 640;
+  const sizeOptions = [...new Set([...(builtin?.task === "classify" ? [160, 224, 256, 320, 384] : [320, 416, 480, 640, 800, 960, 1280]), ownSize])].sort((a, b) => a - b);
   const [formats, setFormats] = useState<string[]>(["onnx", "openvino"]);
-  const [size, setSize] = useState(run.config?.imgSize ?? 640);
+  const [size, setSize] = useState(ownSize);
   const [parent, setParent] = useState(prefs.get("deployParent", ""));
   const [name, setName] = useState(t("{name}_模型_{time}", { name: project.name, time: stamp() }));
   const [busy, setBusy] = useState(false);
@@ -414,15 +442,24 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
           ))}
         </Space>
       </Checkbox.Group>
-      <Alert
-        type="warning"
-        showIcon
-        style={{ margin: "12px 0" }}
-        message={t("内置的 Faster R-CNN 是两阶段模型，NPU（RKNN）和老版本 TensorRT 对它支持有限，转换可能失败或速度不理想；ONNX 和 OpenVINO 可以放心使用。")}
-      />
+      {twoStage && builtin ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ margin: "12px 0" }}
+          message={t("{name} 是两阶段模型，NPU（RKNN）和老版本 TensorRT 对它支持有限，转换可能失败或速度不理想；ONNX 和 OpenVINO 可以放心使用。", { name: builtin.name })}
+        />
+      ) : (
+        <div style={{ height: 12 }} />
+      )}
       <Form layout="vertical">
         <Form.Item label={t("固定尺寸（用于固定尺寸 ONNX、TensorRT、RKNN）")}>
-          <Select style={{ width: 160 }} value={size} onChange={setSize} options={[320, 480, 640, 800, 960, 1280].map((v) => ({ value: v, label: `${v}×${v}` }))} />
+          <Select
+            style={{ width: 200 }}
+            value={size}
+            onChange={setSize}
+            options={sizeOptions.map((v) => ({ value: v, label: v === ownSize ? t("{v}×{v}（训练时的尺寸）", { v }) : `${v}×${v}` }))}
+          />
         </Form.Item>
         <Form.Item label={t("导出到")} extra={parent && join(parent, name)}>
           <FolderPicker value={parent} onChange={setParent} title={t("选择导出位置")} />
@@ -506,7 +543,7 @@ const DEFAULT_FORM: ServiceForm = {
   refluxHigh: 0.5,
 };
 
-function ServiceTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
+function ServiceTab({ run, project, recConf }: { run: RunInfo; project: ProjectInfo; recConf: number | null }) {
   const { message, modal } = App.useApp();
   const classes = run.config?.classes ?? [];
   const [f, setF] = useState<ServiceForm>(() => {
@@ -526,6 +563,11 @@ function ServiceTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
     setF(next);
     prefs.set("serviceForm", JSON.stringify(next));
   };
+  // 告警阈值默认用这个模型的推荐阈值，用户自己改过就不再动
+  const scoreTouched = useRef(false);
+  useEffect(() => {
+    if (recConf != null && !scoreTouched.current) setF((o) => ({ ...o, minScore: recConf }));
+  }, [recConf]);
   const setStream = (i: number, patch: Partial<StreamRow>) => set({ streams: f.streams.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
 
   const build = async () => {
@@ -606,7 +648,19 @@ function ServiceTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
           </Form.Item>
           <Space wrap>
             <Form.Item label={t("置信度阈值")} style={{ marginBottom: 10 }}>
-              <InputNumber min={0.05} max={0.99} step={0.05} value={f.minScore} onChange={(v) => set({ minScore: Number(v ?? 0.5) })} />
+              <InputNumber
+                min={0.05}
+                max={0.99}
+                step={0.05}
+                value={f.minScore}
+                onChange={(v) => {
+                  scoreTouched.current = true;
+                  set({ minScore: Number(v ?? 0.5) });
+                }}
+              />
+              <div>
+                <RecConf value={f.minScore} rec={recConf} onUse={(v) => set({ minScore: v })} />
+              </div>
             </Form.Item>
             <Form.Item label={t("去重间隔（秒）")} tooltip={t("同一路视频同一类别，这段时间内只告警一次")} style={{ marginBottom: 10 }}>
               <InputNumber min={0} max={86400} value={f.cooldown} onChange={(v) => set({ cooldown: Number(v ?? 60) })} />
@@ -743,23 +797,48 @@ function RefluxTab() {
 export default function Deploy({ project }: { project: ProjectInfo }) {
   const { message } = App.useApp();
   const setPage = useApp((s) => s.setPage);
+  const mn = metricNames(project.task);
   const [runs, setRuns] = useState<RunInfo[] | null>(null);
   const [runId, setRunId] = useState<number | null>(null);
   const [labels, setLabels] = useState<Label[]>([]);
   const [tab, setTab] = useState(prefs.get("deployTab", "live"));
+  const [recConf, setRecConf] = useState<number | null>(null);
 
   useEffect(() => {
+    // 别的页带过来的那次训练优先；训练中的还没训完，不默认选
+    const focus = useApp.getState().focusRunId;
     api.listRuns().then((rs) => {
       const ok = rs.filter((r) => r.hasWeights);
       setRuns(ok);
-      setRunId(ok[0]?.id ?? null);
+      const ready = ok.filter((r) => r.status !== "running");
+      setRunId(ready.find((r) => r.id === focus)?.id ?? ready[0]?.id ?? null);
+      useApp.getState().takeFocusRun();
     }).catch((e) => message.error(errText(e)));
     api.listLabels().then(setLabels).catch(() => {});
   }, [message]);
 
+  // 评估页算出的推荐阈值（F1 最高），实时验证和推理服务包默认用它
+  useEffect(() => {
+    setRecConf(null);
+    if (runId == null) return;
+    let alive = true;
+    api
+      .runDetail(runId)
+      .then((d) => {
+        const sp = d.eval?.splits;
+        const c = (sp?.val ?? sp?.test)?.thresholds?.best.conf;
+        if (alive && c != null) setRecConf(Math.max(0.05, Math.round(c * 100) / 100));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [runId]);
+
   const run = useMemo(() => runs?.find((r) => r.id === runId) ?? null, [runs, runId]);
 
-  if (runs && runs.length === 0) {
+  // 只有正在训练的记录时也当成还没有模型
+  if (runs && !runs.some((r) => r.status !== "running")) {
     return (
       <div className="empty-page">
         <Empty description={t("还没有训练好的模型。先训练一个模型，再到这里验证和部署。")}>
@@ -777,10 +856,14 @@ export default function Deploy({ project }: { project: ProjectInfo }) {
           <p className="desc" style={{ margin: 0 }}>{t("先接摄像头看实际效果，再导出模型或生成推理服务包，拷到现场就能用。")}</p>
         </div>
         <Select
-          style={{ width: 360 }}
+          style={{ width: 420 }}
           value={runId}
           onChange={setRunId}
-          options={(runs ?? []).map((r) => ({ value: r.id, label: t("模型：{name} · mAP50 {map}", { name: r.name, map: r.bestMap50?.toFixed(3) ?? "—" }) }))}
+          options={(runs ?? []).map((r) => ({
+            value: r.id,
+            disabled: r.status === "running",
+            label: `${fmtTime(r.createdAt)} · ${modelName(r)} · ${r.status === "running" ? t("训练中") : `${mn.m50} ${r.bestMap50?.toFixed(3) ?? "—"}`}`,
+          }))}
         />
       </div>
       {run && (
@@ -791,9 +874,9 @@ export default function Deploy({ project }: { project: ProjectInfo }) {
             prefs.set("deployTab", k);
           }}
           items={[
-            { key: "live", label: t("实时验证"), children: <LiveTab key={run.id} run={run} labels={labels} /> },
+            { key: "live", label: t("实时验证"), children: <LiveTab key={run.id} run={run} labels={labels} recConf={recConf} /> },
             { key: "export", label: t("导出模型"), children: <ExportTab key={run.id} run={run} project={project} /> },
-            { key: "service", label: t("推理服务包"), children: <ServiceTab key={run.id} run={run} project={project} /> },
+            { key: "service", label: t("推理服务包"), children: <ServiceTab key={run.id} run={run} project={project} recConf={recConf} /> },
             { key: "reflux", label: t("现场回流"), children: <RefluxTab /> },
           ]}
         />

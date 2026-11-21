@@ -191,6 +191,33 @@ pub fn set_status(p: &Project, image_id: i64, status: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// 数据页批量改状态，一个事务里改完。改成 todo（恢复未标注）时，有人工标注的图恢复成已标注，
+/// 没有标注或只有模型预标注的才是未标注。返回改到的图和它们的新状态
+pub fn set_status_many(p: &Project, ids: &[i64], status: &str) -> AppResult<Vec<(i64, String)>> {
+    if !STATUSES.contains(&status) {
+        return Err(msg(t!("不支持的状态：{status}", status = status)));
+    }
+    let mut conn = p.conn.lock();
+    let tx = conn.transaction()?;
+    let mut out = Vec::new();
+    {
+        let mut up = tx.prepare(
+            "UPDATE images SET status = CASE
+                WHEN ?2 = 'todo' AND EXISTS (SELECT 1 FROM annotations a WHERE a.image_id = images.id AND a.source != 'model')
+                THEN 'labeled' ELSE ?2 END
+             WHERE id = ?1",
+        )?;
+        let mut get = tx.prepare("SELECT status FROM images WHERE id = ?1")?;
+        for &id in ids {
+            if up.execute(params![id, status])? > 0 {
+                out.push((id, get.query_row([id], |r| r.get::<_, String>(0))?));
+            }
+        }
+    }
+    tx.commit()?;
+    Ok(out)
+}
+
 /// 标注页翻图用：按筛选条件返回全部图片 id
 pub fn list_ids(p: &Project, status: Option<&str>) -> AppResult<Vec<i64>> {
     let status = status.filter(|s| !s.is_empty() && *s != "all");
@@ -201,9 +228,20 @@ pub fn list_ids(p: &Project, status: Option<&str>) -> AppResult<Vec<i64>> {
         let ids = stmt.query_map([], |r| r.get(0))?.collect::<Result<Vec<i64>, _>>()?;
         return Ok(ids);
     }
-    let mut stmt = conn.prepare("SELECT id FROM images WHERE (?1 IS NULL OR status = ?1) ORDER BY id")?;
+    // done：已标注和已审核（不用审核流程时两者都算「已标注」）
+    let mut stmt = conn.prepare(
+        "SELECT id FROM images WHERE (?1 IS NULL OR status = ?1 OR (?1 = 'done' AND status IN ('labeled', 'reviewed'))) ORDER BY id",
+    )?;
     let ids = stmt.query_map([status], |r| r.get(0))?.collect::<Result<Vec<i64>, _>>()?;
     Ok(ids)
+}
+
+/// 标注页缩略图条用：全部图片的 (id, 状态)
+pub fn statuses(p: &Project) -> AppResult<Vec<(i64, String)>> {
+    let conn = p.conn.lock();
+    let mut stmt = conn.prepare("SELECT id, status FROM images ORDER BY id")?;
+    let v = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<(i64, String)>, _>>()?;
+    Ok(v)
 }
 
 // ---------- 类别 ----------
@@ -326,6 +364,29 @@ pub fn delete_label(p: &Project, id: i64) -> AppResult<usize> {
     Ok(removed)
 }
 
+/// 把类别 from 的标注全部改成类别 to，然后删掉 from，返回改了几个标注。
+/// 分类项目一张图只有一个类别：已经是 to 的图上多出来的 from 直接去掉。
+pub fn merge_label(p: &Project, from: i64, to: i64) -> AppResult<usize> {
+    if from == to {
+        return Err(msg(t!("不能合并到同一个类别")));
+    }
+    let mut conn = p.conn.lock();
+    let tx = conn.transaction()?;
+    let exists: i64 = tx.query_row("SELECT COUNT(*) FROM labels WHERE id IN (?1, ?2)", params![from, to], |r| r.get(0))?;
+    if exists != 2 {
+        return Err(msg(t!("类别不存在")));
+    }
+    tx.execute(
+        "DELETE FROM annotations WHERE label_id = ?1 AND type = 'tag'
+         AND image_id IN (SELECT image_id FROM annotations WHERE label_id = ?2 AND type = 'tag')",
+        params![from, to],
+    )?;
+    let moved = tx.execute("UPDATE annotations SET label_id = ?2 WHERE label_id = ?1", params![from, to])?;
+    tx.execute("DELETE FROM labels WHERE id = ?1", [from])?;
+    tx.commit()?;
+    Ok(moved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,6 +473,31 @@ mod tests {
         assert_eq!(load(&p, 1).unwrap().status, "todo");
         assert_eq!(load(&p, 2).unwrap().annotations.len(), 1);
         assert_eq!(list_labels(&p).unwrap().len(), 1);
+        drop(p);
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn merge_labels() {
+        let (base, p) = setup("merge");
+        let a = add_label(&p, "安全帽", "#3d8bfd").unwrap();
+        let b = add_label(&p, "头盔", "#2fb67c").unwrap();
+        save(&p, 1, &[bbox(a.id, 0.0, 0.0, 10.0, 10.0), bbox(b.id, 5.0, 5.0, 10.0, 10.0)]).unwrap();
+        // 图 2 上两个分类标签都有：合并后只留一个
+        let tag = |l: i64| Annotation { label_id: Some(l), kind: "tag".into(), data: serde_json::json!([]), score: None, source: "manual".into() };
+        save(&p, 2, &[tag(a.id), tag(b.id)]).unwrap();
+
+        assert!(merge_label(&p, a.id, a.id).is_err(), "合并到自己");
+        assert!(merge_label(&p, b.id, 999).is_err(), "目标不存在");
+        assert_eq!(merge_label(&p, b.id, a.id).unwrap(), 1);
+
+        let labels = list_labels(&p).unwrap();
+        assert_eq!(labels.len(), 1);
+        assert_eq!((labels[0].id, labels[0].count), (a.id, 3));
+        let img1 = load(&p, 1).unwrap();
+        assert_eq!(img1.status, "labeled");
+        assert!(img1.annotations.iter().all(|x| x.label_id == Some(a.id)));
+        assert_eq!(load(&p, 2).unwrap().annotations.len(), 1);
         drop(p);
         let _ = fs::remove_dir_all(base);
     }

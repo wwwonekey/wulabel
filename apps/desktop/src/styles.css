@@ -93,6 +93,7 @@ main { overflow: auto; position: relative; }
 .thumb:hover { border-color: var(--accent); }
 .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .thumb.picked { border-color: var(--bad); box-shadow: inset 0 0 0 2px var(--bad); }
+.thumb.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--accent); }
 .thumb .pick { position: absolute; right: 8px; top: 6px; pointer-events: none; }
 .thumb .st { position: absolute; left: 6px; top: 6px; }
 .thumb .nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; font-size: 11px; background: linear-gradient(transparent, rgba(0, 0, 0, .8)); color: #cfd3d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -205,3 +206,12 @@ table.cm td { min-width: 44px; text-align: center; padding: 6px 4px; border-radi
 
 /* 中文以外的语言导航文字更长（如 Bereitstellen、Развёртывание），左侧栏放宽一点 */
 html:not([lang="zh-CN"]):not([lang="zh-TW"]) { --nav-w: 96px; }
+
+/* 标注页：缩略图状态点、顶栏序号跳转 */
+.annot-strip .t { position: relative; }
+.annot-strip .t .dot { position: absolute; right: 4px; top: 4px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .55); pointer-events: none; }
+.annot-strip .t .dot.labeled { background: var(--accent); }
+.annot-strip .t .dot.reviewed { background: var(--ok); }
+.annot-strip .t .dot.skipped { background: var(--dim); }
+.annot-jump { cursor: pointer; border-bottom: 1px dashed currentColor; }
+.annot-jump:hover { color: var(--accent); }

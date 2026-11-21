@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Checkbox, Empty, Form, InputNumber, Progress, Radio, Select, Space, Table, Tag, Tooltip } from "antd";
+import { Alert, App, Button, Checkbox, Empty, Form, InputNumber, Popconfirm, Progress, Radio, Select, Space, Table, Tag, Tooltip } from "antd";
 import {
   CaretRightOutlined,
   DeleteOutlined,
@@ -9,12 +9,13 @@ import {
 } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { api, EnvStatus, errText, ProjectInfo, RunDetail, RunInfo, RunStatus, SplitSummary, Task, TrainConfig, VersionInfo } from "../api";
-import { prefs, useApp } from "../store";
+import { prefs, useApp, useReview } from "../store";
 import { t } from "../i18n";
 import LineChart from "../components/LineChart";
 import RunCompare from "../components/RunCompare";
 import ImportModelModal from "../components/ImportModelModal";
 import AugPanel from "../components/AugPanel";
+import SplitModal from "../components/SplitModal";
 
 /** 内置模型，和 worker/xlabel_worker/models.py 的 MODELS 对应。oneStage：单阶段检测，部署到 TensorRT / NPU 更顺；
  *  yolox：YOLOX 系列（官方数据增强，增强设置里只有翻转生效）；defaultSize：选中时默认的输入尺寸 */
@@ -75,6 +76,38 @@ export const modelName = (r: RunInfo) =>
 export const metricNames = (task: Task) =>
   task === "classify" ? { m50: t("准确率"), m: t("宏平均 F1") } : { m50: "mAP50", m: "mAP50-95" };
 
+/** 主指标给个结论：检测类看 mAP50（<0.3 差、0.3~0.6 一般、>0.6 可用），分类看准确率（<0.6、0.6~0.85、>0.85） */
+export const rateMetric = (task: Task, v: number) => {
+  const [lo, hi] = task === "classify" ? [0.6, 0.85] : [0.3, 0.6];
+  if (v < lo) return { level: "bad" as const, word: t("差@@评价") };
+  return v <= hi ? { level: "fair" as const, word: t("一般@@评价") } : { level: "good" as const, word: t("可用@@评价") };
+};
+
+/** 结果很差，多半什么都没学到（不建议拿去预标注） */
+export const isPoor = (task: Task, v: number | null | undefined) => v == null || v < (task === "classify" ? 0.5 : 0.1);
+
+/** 常见的训练错误换成人话。fix：能直接去改的地方（settings 换 PyTorch 版本、cpu 改用 CPU、data 去数据页） */
+export const explainError = (err: string): { hint: string; fix?: "settings" | "cpu" | "data" } | null => {
+  const e = err.toLowerCase();
+  if (/no kernel image|cuda driver version is insufficient|found no nvidia driver|nvidia driver on your system is too old|invalid device function|cudnn_status_not_initialized|not compiled with cuda/.test(e))
+    return { hint: t("显卡驱动和 PyTorch 版本对不上（或者显卡太老、太新）。去设置换一个 PyTorch 版本重新安装，或者在高级设置里改用 CPU。"), fix: "settings" };
+  if (/out of memory|outofmemoryerror|can't allocate memory|memoryerror/.test(e))
+    return { hint: t("显存或内存不够，批大小调到 1 也不行。在高级设置里调小输入尺寸，或者改用 CPU、换小一点的模型。"), fix: "cpu" };
+  if (/no space left on device|errno 28|not enough space on the disk/.test(e)) return { hint: t("磁盘满了。清理一下项目所在的盘和训练环境所在的盘，再重新训练。") };
+  if (/urlerror|urlopen error|connection (reset|refused|aborted)|timed out|getaddrinfo failed|name or service not known|max retries exceeded|remote end closed/.test(e))
+    return { hint: t("网络问题，下载失败。检查网络或代理后重新训练。") };
+  if (/cannot identify image file|(no such file or directory|filenotfounderror)[^\n]*\.(jpe?g|png|bmp|webp|tiff?)/.test(e))
+    return { hint: t("图片文件找不到或打不开，可能被移动或删除了。到「数据」页检查一下。"), fix: "data" };
+  return null;
+};
+
+/** 日志里要标出来的行（失败、错误、警告） */
+const WARN_WORDS = ["失败", "错误", "没有可用", "error", "warning", "traceback", "failed", t("失败").toLowerCase()];
+const isWarnLine = (l: string) => {
+  const s = l.toLowerCase();
+  return WARN_WORDS.some((w) => w && s.includes(w));
+};
+
 export const RUN_STATUS: Record<RunStatus, { text: string; color: string }> = {
   running: { text: t("训练中"), color: "processing" },
   done: { text: t("完成"), color: "success" },
@@ -103,7 +136,12 @@ interface ProgressEv {
 export default function Train({ project }: { project: ProjectInfo }) {
   const { message, modal } = App.useApp();
   const setPage = useApp((s) => s.setPage);
+  const openRun = useApp((s) => s.openRun);
+  const focusRunId = useApp((s) => s.focusRunId);
+  const takeFocusRun = useApp((s) => s.takeFocusRun);
   const task = project.task;
+  // 协作时才有审核；一个人标注时不出现「已审核」「只用已审核的图片」
+  const review = useReview();
   const models = MODELS.filter((m) => m.task === task);
   const mn = metricNames(task);
   const cfgKey = `trainConfig.${task}`;
@@ -125,6 +163,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [comparing, setComparing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [showTrace, setShowTrace] = useState(false);
   const selRef = useRef<number | null>(null);
   selRef.current = sel;
   const logBox = useRef<HTMLDivElement>(null);
@@ -158,9 +198,19 @@ export default function Train({ project }: { project: ProjectInfo }) {
 
   const loadDetail = useCallback(async (id: number) => {
     const d = await api.runDetail(id);
+    // 用户往上翻着看日志时不拉到底，本来在底部才跟着滚
+    const box = logBox.current;
+    const atBottom = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     if (selRef.current === id) setDetail(d);
-    requestAnimationFrame(() => logBox.current?.scrollTo(0, logBox.current.scrollHeight));
+    if (atBottom) requestAnimationFrame(() => logBox.current?.scrollTo(0, logBox.current.scrollHeight));
   }, []);
+
+  // 从别处带着训练记录过来（比如训练失败的通知里点「看错误」）
+  useEffect(() => {
+    if (focusRunId == null || useApp.getState().page !== "train") return;
+    setSel(focusRunId);
+    takeFocusRun();
+  }, [focusRunId, takeFocusRun]);
 
   useEffect(() => {
     (async () => {
@@ -168,7 +218,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
         const [rs, sp] = await Promise.all([loadRuns(), api.splitSummary()]);
         setSplit(sp);
         const running = await api.runningRun();
-        setSel(running ?? rs[0]?.id ?? null);
+        setSel((cur) => cur ?? running ?? rs[0]?.id ?? null);
       } catch (e) {
         message.error(errText(e));
       }
@@ -180,6 +230,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
   useEffect(() => {
     setDetail(null);
     setProg(null);
+    setShowTrace(false);
     if (sel != null) loadDetail(sel).catch((e) => message.error(errText(e)));
   }, [sel, loadDetail, message]);
 
@@ -190,7 +241,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
       if (runId !== selRef.current) return;
       const ty = event.type;
       if (ty === "progress") setProg(event as unknown as ProgressEv);
-      else if (ty === "metric" || ty === "log" || ty === "error") loadDetail(runId);
+      else if (ty === "metric" || ty === "log" || ty === "error" || ty === "warn") loadDetail(runId);
       else if (ty === "batch") {
         message.warning(t("显存不够，批大小已从 {was} 自动调到 {batch}，重新开始训练", { was: event.was as number, batch: event.batch as number }));
         loadRuns();
@@ -200,9 +251,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
         setProg(null);
         loadRuns();
         loadDetail(runId);
-        const st = event.status as string;
-        // 训练完成的提示在 App 里统一弹（不在训练页也能看到）
-        if (st === "failed") message.error(t("训练失败，看下方日志"));
+        // 训练完成、失败的提示在 App 里统一弹（不在训练页也能看到）
       }
     });
     return () => {
@@ -234,11 +283,11 @@ export default function Train({ project }: { project: ProjectInfo }) {
     else update({ model: value });
   };
 
-  const start = async () => {
+  const doStart = async () => {
     setStarting(true);
     try {
       // 记住的版本可能已经被删掉了，那就用当前数据
-      const id = await api.startTraining({ ...cfg, version: useVersion ? cfg.version : null, baseRun: baseRun ? baseRun.id : null });
+      const id = await api.startTraining({ ...cfg, onlyReviewed: review && cfg.onlyReviewed, version: useVersion ? cfg.version : null, baseRun: baseRun ? baseRun.id : null });
       await loadRuns();
       setSel(id);
       setSplit(await api.splitSummary());
@@ -251,6 +300,10 @@ export default function Train({ project }: { project: ProjectInfo }) {
   };
 
   const run = detail?.run;
+  const logLines = detail?.log ?? [];
+  const logHead = (detail?.logHead ?? []).filter((l) => l.trim());
+  const warnMsgs = new Set((detail?.warnings ?? []).map((w) => w.msg));
+  const errHint = detail?.error ? explainError(detail.error) : null;
   const running = runs.some((r) => r.status === "running");
   const trainable = split ? split.train + split.val + split.test + split.unset : 0;
   const metrics = detail?.metrics ?? [];
@@ -263,12 +316,64 @@ export default function Train({ project }: { project: ProjectInfo }) {
   );
   const baseRun = baseRuns.find((r) => r.id === cfg.baseRun) ?? null;
   const recommended = recommendModel(task, gpuMem);
-  const descText = {
-    detect: t("用已标注和已审核的图片训练检测模型。"),
-    segment: t("用已标注和已审核的图片训练实例分割模型。"),
-    pose: t("用已标注和已审核的图片训练关键点模型。"),
-    classify: t("用已标注和已审核的图片训练图像分类模型。"),
-  }[task];
+
+  // 估一下训练集、验证集张数和步数（未划分的图按比例分；只用已审核时会更少，所以都说「约」）
+  const ver = useVersion ? versions.find((v) => v.id === cfg.version) : undefined;
+  const counts = ver ? { train: ver.train, val: ver.val, test: ver.test, unset: Math.max(0, ver.images - ver.train - ver.val - ver.test) } : split;
+  const ratioSum = cfg.ratios[0] + cfg.ratios[1] + cfg.ratios[2] || 1;
+  const trainN = counts ? counts.train + Math.round((counts.unset * cfg.ratios[0]) / ratioSum) : 0;
+  const valN = counts ? counts.val + Math.round((counts.unset * cfg.ratios[1]) / ratioSum) : 0;
+  // 和 worker 一样：图比批大小多时丢掉最后不满的一批
+  const stepsPerEpoch = trainN > cfg.batch ? Math.floor(trainN / cfg.batch) : 1;
+  const totalSteps = stepsPerEpoch * cfg.epochs;
+  const fewData = trainN > 0 && (trainN < 20 || totalSteps < 300);
+  const fewVal = trainN > 0 && valN <= 2;
+
+  const start = () => {
+    if (!fewData && !fewVal) {
+      doStart();
+      return;
+    }
+    // 凑够约 300 步要的轮数
+    const needEpochs = Math.min(500, Math.ceil(300 / stepsPerEpoch));
+    modal.confirm({
+      title: fewData ? t("数据太少，这样训多半学不到东西") : t("验证集太少"),
+      width: 520,
+      content: (
+        <div>
+          {fewData && (
+            <>
+              <p style={{ marginTop: 0 }}>
+                {t("训练集约 {n} 张、批大小 {batch}，每轮约 {s} 步，一共只训约 {m} 步。步数太少时模型基本学不到东西，指标可能一直是 0。", { n: trainN, batch: cfg.batch, s: stepsPerEpoch, m: totalSteps })}
+              </p>
+              <ul style={{ paddingLeft: 18, margin: "0 0 8px" }}>
+                <li>{t("多标一些图，每个类别至少几十张")}</li>
+                {needEpochs > cfg.epochs && <li>{t("或者把训练轮数加大到 {x}（凑够约 300 步）", { x: needEpochs })}</li>}
+                {task === "detect" && cfg.model !== "frcnn_mobilenet" && <li>{t("数据很少时可以先用 Faster R-CNN MobileNetV3，小数据上更容易学出来")}</li>}
+              </ul>
+            </>
+          )}
+          {fewVal && <p style={{ margin: 0 }}>{t("验证集只有 {n} 张，指标波动会很大、不可信。", { n: valN })}</p>}
+        </div>
+      ),
+      okText: t("仍然开始"),
+      cancelText: t("取消"),
+      onOk: doStart,
+    });
+  };
+  const descText = (review
+    ? {
+        detect: t("用已标注和已审核的图片训练检测模型。"),
+        segment: t("用已标注和已审核的图片训练实例分割模型。"),
+        pose: t("用已标注和已审核的图片训练关键点模型。"),
+        classify: t("用已标注和已审核的图片训练图像分类模型。"),
+      }
+    : {
+        detect: t("用已标注的图片训练检测模型。"),
+        segment: t("用已标注的图片训练实例分割模型。"),
+        pose: t("用已标注的图片训练关键点模型。"),
+        classify: t("用已标注的图片训练图像分类模型。"),
+      })[task];
   const fewText =
     task === "classify"
       ? t("图片较少，建议每个类别至少标 100 张图再训练。")
@@ -332,12 +437,24 @@ export default function Train({ project }: { project: ProjectInfo }) {
             />
           )}
           <div className="card" style={{ marginBottom: 12 }}>
-            <div className="muted">{t("可训练图片")}</div>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span className="muted">{t("可训练图片")}</span>
+              {trainable > 0 && (
+                <Button size="small" onClick={() => setSplitOpen(true)}>
+                  {t("查看和调整")}
+                </Button>
+              )}
+            </div>
             <div className="kpi">{trainable}</div>
             {split && (
               <div className="dim" style={{ fontSize: 12 }}>
                 {t("训练 {train} · 验证 {val} · 测试 {test}", { train: split.train, val: split.val, test: split.test })}
                 {split.unset > 0 && ` · ${t("未划分 {n}（开始训练时按比例分配）", { n: split.unset })}`}
+              </div>
+            )}
+            {review && cfg.onlyReviewed && !useVersion && (
+              <div style={{ color: "var(--warn)", fontSize: 12, marginTop: 4 }}>
+                {t("高级设置里勾了「只用已审核的图片」，只标注、没审核的图这次不参与训练")}
               </div>
             )}
             {trainable > 0 && trainable < 50 && (
@@ -438,7 +555,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   type="info"
                   showIcon
                   message={t("YOLOX 用官方的数据增强")}
-                  description={t("Mosaic 拼图、MixUp、随机缩放旋转、颜色抖动、水平翻转、多尺度训练都自动开启，最后约 10% 的轮数关掉强增强收尾。学习率按批大小自动换算（界面上的学习率当作批大小 64 时的值）。")}
+                  description={t("Mosaic 拼图、MixUp、随机缩放旋转、颜色抖动、水平翻转、多尺度训练都自动开启，最后约 10% 的轮数关掉强增强收尾。学习率按批大小自动换算。")}
                 />
               ) : (
                 <AugPanel value={cfg.aug} task={task} imgSize={picked?.fixedSize ?? cfg.imgSize} fixedSize={!!picked?.fixedSize} onChange={(aug) => update({ aug })} />
@@ -449,12 +566,21 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   <Radio value="cpu">{t("只用 CPU")}</Radio>
                 </Radio.Group>
               </Form.Item>
-              <Form.Item>
-                <Checkbox checked={cfg.onlyReviewed} onChange={(e) => update({ onlyReviewed: e.target.checked })}>
-                  {t("只用已审核的图片")}
-                </Checkbox>
-              </Form.Item>
+              {review && (
+                <Form.Item>
+                  <Checkbox checked={cfg.onlyReviewed} onChange={(e) => update({ onlyReviewed: e.target.checked })}>
+                    {t("只用已审核的图片")}
+                  </Checkbox>
+                </Form.Item>
+              )}
                 </>
+              )}
+              {trainN > 0 && (
+                <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
+                  {t("每轮约 {n} 步 · 共约 {m} 步", { n: stepsPerEpoch, m: totalSteps })}
+                  {fewData && <span style={{ color: "var(--warn)" }}> · {t("步数太少，多半学不到东西")}</span>}
+                  {fewVal && <div style={{ color: "var(--warn)" }}>{t("验证集只有 {n} 张，指标波动会很大、不可信。", { n: valN })}</div>}
+                </div>
               )}
               <Button
                 type="primary"
@@ -477,6 +603,35 @@ export default function Train({ project }: { project: ProjectInfo }) {
             </div>
           ) : (
             <>
+              {(detail?.warnings ?? []).map((w) => (
+                <Alert
+                  key={w.code}
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  message={
+                    w.code === "no_pretrained"
+                      ? t("没下载到预训练权重，从头训练效果会差很多")
+                      : w.code === "zero_metric"
+                        ? t("{metric} 一直是 0，模型基本没学到东西", { metric: mn.m50 })
+                        : w.msg
+                  }
+                  description={
+                    w.code === "no_pretrained"
+                      ? t("多半是网络问题（要能访问 github.com 或 download.pytorch.org）。检查网络或代理后重新训练；下载成功一次就会缓存，以后不用再下。")
+                      : w.code === "zero_metric"
+                        ? t("常见原因：图太少或训练步数太少（多标一些图、加大训练轮数）；标注或类别有问题（去体检看看）；没加载到预训练权重（看下面日志的关键信息）。")
+                        : undefined
+                  }
+                  action={
+                    w.code === "zero_metric" ? (
+                      <Button size="small" onClick={() => setPage("health")}>
+                        {t("去体检")}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ))}
               <div className="card" style={{ marginBottom: 12 }}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <div className="row">
@@ -492,13 +647,22 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   </div>
                   <Space>
                     {run.status === "running" && (
-                      <Button size="small" danger icon={<StopOutlined />} onClick={() => api.stopTraining(run.id).then(() => message.info(t("正在停止，当前这批算完就停"))).catch((e) => message.error(errText(e)))}>
-                        {t("停止")}
-                      </Button>
+                      <Popconfirm
+                        title={t("停止训练？目前最好的模型会保留，之后可以选它“接着训”")}
+                        okText={t("停止")}
+                        cancelText={t("取消")}
+                        okButtonProps={{ danger: true }}
+                        onConfirm={() => api.stopTraining(run.id).then(() => message.info(t("正在停止，当前这批算完就停"))).catch((e) => message.error(errText(e)))}
+                      >
+                        <Button size="small" danger icon={<StopOutlined />}>
+                          {t("停止")}
+                        </Button>
+                      </Popconfirm>
                     )}
                     {run.hasWeights && (
                       <>
-                        <Button size="small" onClick={() => setPage("eval")}>{t("看评估")}</Button>
+                        {/* 训练中的记录评估页不让选（还没训完） */}
+                        {run.status !== "running" && <Button size="small" onClick={() => openRun(run.id, "eval")}>{t("看评估")}</Button>}
                         {run.engine !== "external" && (
                           <Button size="small" icon={<ExportOutlined />} loading={exporting} onClick={doExport}>
                             {run.hasOnnx ? t("重新导出 ONNX") : t("导出 ONNX")}
@@ -526,7 +690,41 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   </div>
                 )}
                 {detail?.error && run.status !== "running" && (
-                  <Alert type="error" style={{ marginTop: 12 }} message={t("训练出错")} description={<pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12, maxHeight: 160, overflow: "auto" }}>{detail.error}</pre>} />
+                  <Alert
+                    type="error"
+                    style={{ marginTop: 12 }}
+                    message={t("训练出错")}
+                    description={
+                      <div>
+                        {errHint && <div style={{ fontWeight: 600, marginBottom: 6 }}>{errHint.hint}</div>}
+                        {/* 先只显示错误本身，调用栈收起来 */}
+                        <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: 12, maxHeight: 80, overflow: "auto" }}>{detail.error.split("\n\n")[0]}</div>
+                        <a style={{ fontSize: 12 }} onClick={() => setShowTrace(!showTrace)}>
+                          {showTrace ? t("收起详细信息") : t("详细信息")}
+                        </a>
+                        {showTrace && <pre style={{ whiteSpace: "pre-wrap", margin: "6px 0 0", fontSize: 12, maxHeight: 220, overflow: "auto", userSelect: "text" }}>{detail.error}</pre>}
+                      </div>
+                    }
+                    action={
+                      errHint?.fix === "settings" ? (
+                        <Button size="small" onClick={() => setPage("settings")}>{t("去设置换 PyTorch 版本")}</Button>
+                      ) : errHint?.fix === "cpu" ? (
+                        <Button
+                          size="small"
+                          disabled={cfg.device === "cpu"}
+                          onClick={() => {
+                            update({ device: "cpu" });
+                            toggleAdv(true);
+                            message.success(t("已改成只用 CPU，可以重新开始训练"));
+                          }}
+                        >
+                          {t("改用 CPU")}
+                        </Button>
+                      ) : errHint?.fix === "data" ? (
+                        <Button size="small" onClick={() => setPage("data")}>{t("去数据页")}</Button>
+                      ) : undefined
+                    }
+                  />
                 )}
                 <div className="cards" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
@@ -551,9 +749,23 @@ export default function Train({ project }: { project: ProjectInfo }) {
                 </div>
               </div>
               <div className="card" style={{ marginBottom: 12 }}>
+                {logHead.length > 0 && (
+                  <>
+                    <div className="muted" style={{ marginBottom: 6 }}>{t("关键信息")} <span className="dim">· {t("日志开头的设备、数据量、预训练权重")}</span></div>
+                    <div className="logbox" style={{ height: "auto", maxHeight: 110, marginBottom: 10 }}>
+                      {logHead.map((l, i) => (
+                        <div key={i} style={isWarnLine(l) || warnMsgs.has(l) ? { color: "var(--warn)" } : undefined}>{l}</div>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <div className="muted" style={{ marginBottom: 6 }}>{t("日志")}</div>
                 <div ref={logBox} className="logbox">
-                  {(detail?.log ?? []).join("\n") || "—"}
+                  {logLines.length === 0
+                    ? "—"
+                    : logLines.map((l, i) => (
+                        <div key={i} style={{ minHeight: "1em", color: isWarnLine(l) || warnMsgs.has(l) ? "var(--warn)" : undefined }}>{l}</div>
+                      ))}
                 </div>
               </div>
             </>
@@ -597,6 +809,15 @@ export default function Train({ project }: { project: ProjectInfo }) {
           </div>
         </div>
       </div>
+      <SplitModal
+        project={project}
+        review={review}
+        open={splitOpen}
+        ratios={cfg.ratios}
+        onRatios={(ratios) => update({ ratios })}
+        onClose={() => setSplitOpen(false)}
+        onChanged={setSplit}
+      />
       <ImportModelModal
         open={importing}
         onClose={() => setImporting(false)}

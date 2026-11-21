@@ -437,5 +437,9 @@
   "问题描述太长": "Mô tả quá dài",
   "服务端发送邮件失败，请稍后再试": "Máy chủ không gửi được email. Vui lòng thử lại sau.",
   "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Tải ffmpeg thất bại: {errors}. Bạn có thể cài bằng trình quản lý gói của hệ thống (ví dụ apt install ffmpeg) hoặc chỉ định đường dẫn trong Cài đặt.",
-  "请填写视频流地址或选择视频文件": "Hãy nhập địa chỉ luồng video hoặc chọn tệp video"
+  "请填写视频流地址或选择视频文件": "Hãy nhập địa chỉ luồng video hoặc chọn tệp video",
+  "不认识的划分：{s}": "Không rõ cách phân chia: {s}",
+  "训练集是空的：在训练页「查看和调整」里把一些图移到训练集": "Tập huấn luyện đang trống. Trên trang Huấn luyện, dùng \"Xem và điều chỉnh\" để chuyển một số ảnh sang tập huấn luyện",
+  "不能合并到同一个类别": "Không thể gộp một lớp vào chính nó",
+  "合并了两个类别": "Đã gộp hai lớp"
 }

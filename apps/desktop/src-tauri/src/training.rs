@@ -77,6 +77,10 @@ pub struct RunDetail {
     pub metrics: Vec<serde_json::Value>,
     pub eval: Option<serde_json::Value>,
     pub log: Vec<String>,
+    /// 日志开头几行（设备、数据量、预训练权重），日志长了 log 里就没有了
+    pub log_head: Vec<String>,
+    /// worker 发来的醒目提示（warn 事件：code、msg），存在 warnings.jsonl
+    pub warnings: Vec<serde_json::Value>,
     pub error: Option<String>,
 }
 
@@ -166,8 +170,28 @@ pub fn detail(p: &Project, id: i64) -> AppResult<RunDetail> {
     let log_text = fs::read_to_string(dir.join("log.txt")).unwrap_or_default();
     let lines: Vec<String> = log_text.lines().map(String::from).collect();
     let log = lines[lines.len().saturating_sub(300)..].to_vec();
+    let log_head = lines.iter().take(15).cloned().collect();
+    let warnings = read_warnings(&dir);
     let error = fs::read_to_string(dir.join("error.txt")).ok();
-    Ok(RunDetail { run, metrics, eval, log, error })
+    Ok(RunDetail { run, metrics, eval, log, log_head, warnings, error })
+}
+
+fn read_warnings(dir: &Path) -> Vec<serde_json::Value> {
+    fs::read_to_string(dir.join("warnings.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect()
+}
+
+/// 记下一条醒目提示，同一种（code）只记一次
+fn add_warning(dir: &Path, ev: &serde_json::Value) {
+    if read_warnings(dir).iter().any(|w| w["code"] == ev["code"]) {
+        return;
+    }
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(dir.join("warnings.jsonl")) {
+        let _ = writeln!(f, "{ev}");
+    }
 }
 
 pub fn delete_run(p: &Project, jobs: &Jobs, id: i64) -> AppResult<()> {
@@ -250,6 +274,11 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
             "pose" => t!("还没有关键点标注，先标注一些目标再训练"),
             _ => t!("没有任何标注，先标注一些图片再训练"),
         }));
+    }
+    // 手动把图都移出了训练集
+    if res.train == 0 {
+        let _ = fs::remove_dir_all(&dir);
+        return Err(msg(t!("训练集是空的：在训练页「查看和调整」里把一些图移到训练集")));
     }
     let mut worker_cfg = serde_json::json!({
         "dataset": ds, "out": dir, "model": cfg.model, "classes": res.classes, "task": p.meta.task,
@@ -336,8 +365,11 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                 Some("log") => {
                     let _ = writeln!(log_file.lock(), "{}", ev["msg"].as_str().unwrap_or(""));
                 }
+                Some("warn") => add_warning(&dir, &ev),
                 Some("batch") => {
                     // 显存不够自动调小了批大小：训练记录里改成实际用的，原来设的另存一份
+                    // 会从头重训，上一次的提示作废（预训练权重的提示重训时会再发）
+                    let _ = fs::remove_file(dir.join("warnings.jsonl"));
                     if let Some(b) = ev["batch"].as_u64() {
                         let conn = p.conn.lock();
                         let saved: Option<String> =
@@ -1062,6 +1094,17 @@ pub struct PrelabelResult {
     pub boxes: usize,
 }
 
+/// 批量预标注的停止开关（模型、文本提示、巡瞳 AI 共用）：每批之间检查，已经标好的保留
+static PRELABEL_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn prelabel_stop(on: bool) {
+    PRELABEL_STOP.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn prelabel_stopped() -> bool {
+    PRELABEL_STOP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// 批量预标注的对象：「未标注」且没有任何标注的图（id, 图片文件）
 pub fn prelabel_targets(p: &Project) -> AppResult<Vec<(i64, PathBuf)>> {
     let conn = p.conn.lock();
@@ -1083,6 +1126,7 @@ pub fn prelabel_all(
     conf: f64,
     progress: &dyn Fn(usize, usize),
 ) -> AppResult<PrelabelResult> {
+    prelabel_stop(false);
     let w = weights_of(p, run_id)?;
     let items = prelabel_targets(p)?;
     let total = items.len();
@@ -1091,6 +1135,9 @@ pub fn prelabel_all(
     let mut done = 0;
     progress(0, total);
     for chunk in items.chunks(16) {
+        if prelabel_stopped() {
+            break;
+        }
         let mut got: Vec<(i64, RawPred)> = Vec::new();
         let classes = pr.request(rt, &w, chunk, conf, &mut |id, r| got.push((id, r)))?;
         if map.is_none() {

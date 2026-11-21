@@ -19,6 +19,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  type InputRef,
 } from "antd";
 import { DownloadOutlined, PlusOutlined, ReloadOutlined, TeamOutlined } from "@ant-design/icons";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -90,6 +91,7 @@ export default function Team({ project }: { project: ProjectInfo }) {
   const [nm, setNm] = useState("");
   const [role, setRole] = useState<Role>("annotator");
   const [pw, setPw] = useState(randomPassword);
+  const nameInput = useRef<InputRef>(null);
   // 分配
   const [assignIds, setAssignIds] = useState<number[]>([]);
   const [scope, setScope] = useState<"unassigned" | "todo" | "unreviewed">("unassigned");
@@ -124,6 +126,7 @@ export default function Team({ project }: { project: ProjectInfo }) {
         api.teamActivity(100, null, withSaves),
       ]);
       setMembers(m);
+      setTeam({ hasMembers: m.length > 0 });
       setStats(st);
       setActs(a);
     } catch (e) {
@@ -185,8 +188,18 @@ export default function Team({ project }: { project: ProjectInfo }) {
 
   const start = async () => {
     if (!opts) return;
+    // 没有成员时开了也没人能登录，先拦下来
     if (members.filter((m) => !m.disabled).length === 0) {
-      message.warning(t("先在下面添加成员（给每个人设名字和密码），再开启协作"));
+      modal.info({
+        title: t("还没有成员"),
+        content: t("先添加成员（给每个人设名字和密码），再开启协作。"),
+        okText: t("去添加成员"),
+        onOk: () => {
+          nameInput.current?.focus();
+          nameInput.current?.input?.scrollIntoView({ behavior: "smooth", block: "center" });
+        },
+      });
+      return;
     }
     setStarting(true);
     try {
@@ -221,15 +234,18 @@ export default function Team({ project }: { project: ProjectInfo }) {
     }
     try {
       const m = await api.teamAddMember(nm.trim(), role, pw);
-      const text = t("账号：{name}　密码：{pw}", { name: m.name, pw });
+      // 协作开着时把访问地址也带上（外网中转连上了用外网地址，否则用局域网地址）
+      const urls = !running ? [] : status?.relay?.state === "online" && status.relay.url ? [status.relay.url] : status?.lanUrls ?? [];
+      const text = [t("账号：{name}　密码：{pw}", { name: m.name, pw }), ...(urls.length ? [t("访问地址：{url}", { url: urls.join(" / ") })] : [])].join("\n");
       modal.success({
         title: t("已添加{role}「{name}」", { role: ROLE_NAMES[m.role], name: m.name }),
         content: (
           <div>
             <div style={{ margin: "6px 0" }}>{t("把下面的账号密码和访问地址发给他（密码只显示这一次，忘了可以重设）：")}</div>
             <Typography.Paragraph copyable={{ text }} style={{ marginBottom: 0 }}>
-              <code>{text}</code>
+              <code style={{ whiteSpace: "pre-wrap" }}>{text}</code>
             </Typography.Paragraph>
+            {urls.length === 0 && <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>{t("开启协作后会显示访问地址")}</div>}
           </div>
         ),
       });
@@ -437,7 +453,7 @@ export default function Team({ project }: { project: ProjectInfo }) {
         extra={<Button size="small" type="text" icon={<ReloadOutlined />} onClick={loadData} />}
       >
         <Space wrap style={{ marginBottom: 12 }}>
-          <Input placeholder={t("名字（登录用）")} value={nm} onChange={(e) => setNm(e.target.value)} style={{ width: 160 }} onPressEnter={addMember} />
+          <Input ref={nameInput} placeholder={t("名字（登录用）")} value={nm} onChange={(e) => setNm(e.target.value)} style={{ width: 160 }} onPressEnter={addMember} />
           <Select<Role>
             value={role}
             onChange={setRole}

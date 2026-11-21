@@ -65,6 +65,8 @@ export interface ImportResult {
   added: number;
   duplicated: number;
   failed: string[];
+  /** 中途停止时没导入的张数 */
+  stopped?: number;
 }
 
 export interface ImportProgress {
@@ -80,6 +82,8 @@ export interface ExtractResult {
   failed: string[];
   /** 视频流采集的帧保存在哪个文件夹（绝对路径）；本地视频抽帧为 null */
   dir: string | null;
+  /** 本地视频抽帧被中途停止 */
+  stopped?: boolean;
 }
 
 /** 视频流边采边入库：这一批新入库的图片 id 和保存文件夹 */
@@ -468,6 +472,10 @@ export interface RunDetail {
   /** reevaluated：用「重新评估」按当时的数据算的（evaluatedAt 是时间） */
   eval: { classes: string[]; bestEpoch: number | null; splits: Record<string, SplitEval>; reevaluated?: boolean; evaluatedAt?: number } | null;
   log: string[];
+  /** 日志开头几行（设备、数据量、预训练权重） */
+  logHead: string[];
+  /** 训练时的醒目提示。code：no_pretrained 没加载到预训练权重，zero_metric 主指标一直是 0 */
+  warnings: { code: string; msg: string }[];
   error: string | null;
 }
 
@@ -532,6 +540,12 @@ export interface HealthReport {
   dupGroups: number[][];
   suggestions: string[];
   dims: Record<string, [number, number]>;
+  /** 体检后标注改过的图上的问题（key） */
+  changed?: string[];
+  /** 这份报告里被忽略的问题数 */
+  ignored?: number;
+  /** 重复图片的（状态, 标注数） */
+  imgInfo?: Record<string, [ImageStatus, number]>;
 }
 
 export interface FormatResult {
@@ -578,6 +592,7 @@ export const api = {
   healthLoad: () => invoke<HealthReport | null>("health_load"),
   healthRun: (runId: number | null) => invoke<HealthReport>("health_run", { runId }),
   healthIgnore: (keys: string[]) => invoke<void>("health_ignore", { keys }),
+  healthUnignore: () => invoke<void>("health_unignore"),
   appendAnnotation: (imageId: number, annotation: Annotation) => invoke<ImageStatus>("append_annotation", { imageId, annotation }),
   envStatus: (refresh: boolean) => invoke<EnvStatus>("env_status", { refresh }),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
@@ -595,6 +610,9 @@ export const api = {
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   splitSummary: () => invoke<SplitSummary>("split_summary"),
   assignSplits: (ratios: [number, number, number], all: boolean) => invoke<SplitSummary>("assign_splits", { ratios, all }),
+  /** split："train" / "val" / "test" / "unset"（只列已标注、已审核的图） */
+  listSplitImages: (split: string, offset: number, limit: number) => invoke<ImagePage>("list_split_images", { split, offset, limit }),
+  setSplit: (ids: number[], split: "train" | "val" | "test") => invoke<SplitSummary>("set_split", { ids, split }),
   exportDataset: (
     options: { format: DatasetFormat; outDir: string; onlyReviewed: boolean; ratios: [number, number, number] },
     anonymize: AnonymizeConfig | null = null,
@@ -607,6 +625,8 @@ export const api = {
   saveAnnotations: (imageId: number, annotations: Annotation[]) =>
     invoke<ImageStatus>("save_annotations", { imageId, annotations }),
   setImageStatus: (imageId: number, status: ImageStatus) => invoke<void>("set_image_status", { imageId, status }),
+  /** 批量改状态，返回改了几张；改成 todo 时有人工标注的图会变成已标注 */
+  setStatusMany: (ids: number[], status: ImageStatus) => invoke<number>("set_status_many", { ids, status }),
   listLabels: () => invoke<Label[]>("list_labels"),
   interpolateFrames: (imageId: number) => invoke<InterpResult>("interpolate_frames", { imageId }),
   trackFrames: (imageId: number, count: number) => invoke<TrackResult>("track_frames", { imageId, count }),
@@ -622,6 +642,10 @@ export const api = {
   aiDetect: (imageId: number, model: string, conf: number) => invoke<PredResult>("ai_detect", { imageId, model, conf }),
   aiPrelabelAll: (model: string, conf: number) => invoke<{ images: number; boxes: number }>("ai_prelabel_all", { model, conf }),
   deleteLabel: (id: number) => invoke<number>("delete_label", { id }),
+  /** 标注页：全部图片的 [id, 状态]、合并类别、停止批量预标注 */
+  imageStatuses: () => invoke<[number, ImageStatus][]>("image_statuses"),
+  mergeLabel: (from: number, to: number) => invoke<number>("merge_label", { from, to }),
+  stopPrelabel: () => invoke<void>("stop_prelabel"),
 
   createProject: (parent: string, name: string, task: Task) =>
     invoke<ProjectInfo>("create_project", { parent, name, task }),
@@ -632,6 +656,7 @@ export const api = {
   projectSummary: (path: string) => invoke<ProjectSummary | null>("project_summary", { path }),
   removeRecent: (path: string) => invoke<void>("remove_recent", { path }),
   importImages: (paths: string[], copy: boolean) => invoke<ImportResult>("import_images", { paths, copy }),
+  stopImport: () => invoke<void>("stop_import"),
   extractVideo: (paths: string[], every: number, maxFrames: number) =>
     invoke<ExtractResult>("extract_video", { paths, every, maxFrames }),
   probeStream: (url: string) => invoke<StreamInfo>("probe_stream", { url }),

@@ -19,7 +19,7 @@ import { PageKey, prefs, useApp } from "./store";
 import Home from "./pages/Home";
 import Data from "./pages/Data";
 import Annotate from "./pages/Annotate";
-import Train from "./pages/Train";
+import Train, { explainError, isPoor, metricNames, rateMetric } from "./pages/Train";
 import Health from "./pages/Health";
 import Eval from "./pages/Eval";
 import Settings from "./pages/Settings";
@@ -55,7 +55,7 @@ const TITLES: Record<PageKey, string> = {
 };
 
 export default function App() {
-  const { project, page, setPage, setProject, setTeam, team } = useApp();
+  const { project, page, setPage, setProject, setTeam, team, openRun } = useApp();
   const { notification } = AntApp.useApp();
   const [upd, setUpd] = useState<UpdateInfo | null>(null);
 
@@ -143,31 +143,79 @@ export default function App() {
     api.currentProject().then((p) => p && setProject(p)).catch(() => {});
   }, [setProject]);
 
-  // 训练完成：不管在哪个页面都提示，并给出下一步
+  // 训练完成或失败：不管在哪个页面都提示，带上结论和下一步
   useEffect(() => {
-    const un = listen<{ runId: number; event: { type?: string; status?: string } }>("train-event", (e) => {
+    const un = listen<{ runId: number; event: { type?: string; status?: string } }>("train-event", async (e) => {
       const ev = e.payload.event;
-      if (ev.type !== "finished" || ev.status !== "done") return;
-      const key = `train-done-${e.payload.runId}`;
+      if (ev.type !== "finished" || (ev.status !== "done" && ev.status !== "failed")) return;
+      const runId = e.payload.runId;
+      const key = `train-done-${runId}`;
       const go = (p: PageKey) => {
         notification.destroy(key);
-        setPage(p);
+        // 带上这次训练，评估页、训练页直接打开它
+        if (p === "annotate") setPage(p);
+        else openRun(runId, p);
       };
+      const d = await api.runDetail(runId).catch(() => null);
+      if (ev.status === "failed") {
+        const hint = d?.error ? explainError(d.error)?.hint : undefined;
+        notification.error({
+          key,
+          message: t("训练失败"),
+          description: (
+            <div>
+              {hint && <div style={{ marginBottom: 6 }}>{hint}</div>}
+              <Button size="small" type="primary" onClick={() => go("train")}>
+                {t("看错误")}
+              </Button>
+            </div>
+          ),
+          duration: 0,
+          placement: "bottomRight",
+        });
+        return;
+      }
+      const task = useApp.getState().project?.task ?? "detect";
+      const best = d?.run.bestMap50 ?? null;
+      // 结果很差或者有醒目提示（比如没加载到预训练权重）时，先去看原因，不建议拿去预标注
+      const poor = d != null && (isPoor(task, best) || d.warnings.length > 0);
       notification.success({
         key,
         message: t("训练完成"),
         description: (
-          <Space style={{ marginTop: 6 }} wrap>
-            <Button size="small" type="primary" onClick={() => go("eval")}>
-              {t("去评估")}
-            </Button>
-            <Button size="small" onClick={() => go("annotate")}>
-              {t("去预标注")}
-            </Button>
-            <Button size="small" onClick={() => go("train")}>
-              {t("看训练记录")}
-            </Button>
-          </Space>
+          <div>
+            {best != null && (
+              <div>
+                {t("最好 {metric} {v}（{rate}）", { metric: metricNames(task).m50, v: best.toFixed(3), rate: rateMetric(task, best).word })}
+              </div>
+            )}
+            {poor && <div className="dim">{t("效果不理想，先去训练页看看原因。")}</div>}
+            <Space style={{ marginTop: 6 }} wrap>
+              {poor ? (
+                <Button size="small" type="primary" onClick={() => go("train")}>
+                  {t("看原因")}
+                </Button>
+              ) : (
+                <Button size="small" type="primary" onClick={() => go("eval")}>
+                  {t("去评估")}
+                </Button>
+              )}
+              {poor ? (
+                <Button size="small" onClick={() => go("eval")}>
+                  {t("去评估")}
+                </Button>
+              ) : (
+                <Button size="small" onClick={() => go("annotate")}>
+                  {t("去预标注")}
+                </Button>
+              )}
+              {!poor && (
+                <Button size="small" onClick={() => go("train")}>
+                  {t("看训练记录")}
+                </Button>
+              )}
+            </Space>
+          </div>
         ),
         duration: 0,
         placement: "bottomRight",
@@ -176,7 +224,7 @@ export default function App() {
     return () => {
       un.then((f) => f());
     };
-  }, [notification, setPage]);
+  }, [notification, setPage, openRun]);
 
   // 协作开没开（标注页据此加锁、显示审核打回）
   useEffect(() => {
@@ -189,6 +237,15 @@ export default function App() {
       un.then((f) => f());
     };
   }, [setTeam, project?.path]);
+
+  // 项目里有没有协作成员（没有就不用审核流程）
+  useEffect(() => {
+    if (!project || team.remote) return;
+    api
+      .teamMembers()
+      .then((m) => setTeam({ hasMembers: m.length > 0 }))
+      .catch(() => setTeam({ hasMembers: false }));
+  }, [setTeam, project?.path, team.remote]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = async () => {
     await api.closeProject();
