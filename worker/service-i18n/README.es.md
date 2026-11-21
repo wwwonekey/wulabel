@@ -42,7 +42,7 @@ Para inferir con una GPU NVIDIA: cambia `onnxruntime` por `onnxruntime-gpu` en `
 }
 ```
 
-- Como fuente también se puede indicar la ruta de un archivo de video local, para pruebas (se reproduce en bucle por defecto).
+- Las fuentes pueden ser RTSP, HTTP-FLV, HLS (m3u8) o MP4 por http. También se puede indicar la ruta de un archivo de video local, para pruebas (los archivos locales y los videos bajo demanda por http se reproducen en bucle por defecto).
 - La región de detección se comprueba con el **punto medio del borde inferior** de cada caja (donde está la persona o el vehículo).
 
 ## Contenido de la alarma
@@ -62,6 +62,17 @@ Mensaje que reciben el Webhook (POST JSON) y MQTT:
 ```
 
 Si activas `with_image` en el Webhook, se añade un campo `image_base64` (JPEG con las cajas dibujadas).
+
+## Resultados según el tipo de modelo
+
+Los campos de cada elemento de `detections` dependen del modelo. El `task` que devuelven `GET /health` y `POST /predict` indica de qué tipo es:
+
+| Modelo | task | Campos de cada elemento |
+|---|---|---|
+| Detección de objetos | `detect` | `label`, `score`, `box` [x, y, w, h] |
+| Segmentación de instancias | `segment` | Lo mismo, más `polygon` [x1, y1, x2, y2, …] (contorno del objeto, píxeles de la imagen original) |
+| Puntos clave | `pose` | Lo mismo, más `keypoints` [x, y, v, …] (v = 2: encontrado, 0: no encontrado); las capturas de alarma dibujan el esqueleto según `skeleton` en `config.json` |
+| Clasificación de imágenes | `classify` | `label`, `score`, sin `box`: un elemento por cada clase cuya probabilidad alcance `min_score` (hasta 5). La clasificación evalúa toda la imagen y no filtra por `region` |
 
 ## API HTTP
 

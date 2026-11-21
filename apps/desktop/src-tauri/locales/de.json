@@ -125,7 +125,6 @@
   "这次训练没有产出模型": "Dieser Trainingslauf hat kein Modell erzeugt",
   "实时验证没有在运行": "Der Live-Test läuft nicht",
   "实时验证进程已退出": "Der Live-Test-Prozess wurde beendet",
-  "请填写 RTSP 地址或选择视频文件": "Geben Sie eine RTSP-Adresse ein oder wählen Sie eine Videodatei",
   "视频文件不存在：{source}": "Videodatei nicht gefunden: {source}",
   "无法启动实时验证：{e}": "Live-Test kann nicht gestartet werden: {e}",
   "截图失败": "Screenshot fehlgeschlagen",
@@ -288,7 +287,6 @@
   "PyPI 上没有找到对应的 uv 安装包": "Kein passendes uv-Paket auf PyPI gefunden",
   "下载 {url}": "Download: {url}",
   "下载 uv 失败：{errors}；{e}。可以手动安装 uv 后在设置里指定路径": "uv konnte nicht heruntergeladen werden: {errors}; {e}. Sie können uv manuell installieren und den Pfad in den Einstellungen angeben",
-  "没有找到 ffmpeg，请先用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "ffmpeg nicht gefunden. Installieren Sie es mit dem Paketmanager Ihres Systems (z. B. apt install ffmpeg) oder geben Sie den Pfad in den Einstellungen an",
   "下载 ffmpeg：{url}": "ffmpeg wird heruntergeladen: {url}",
   "下载失败：{e}": "Download fehlgeschlagen: {e}",
   "下载 ffmpeg 失败：{errors}。可以手动安装 ffmpeg 后在设置里指定路径": "ffmpeg konnte nicht heruntergeladen werden: {errors}. Sie können ffmpeg manuell installieren und den Pfad in den Einstellungen angeben",
@@ -357,9 +355,6 @@
   "这个训练没有在进行": "Dieser Trainingslauf ist nicht aktiv",
   "导入的外部模型本身就是 ONNX，直接用原来的模型文件部署即可": "Importierte externe Modelle sind bereits ONNX; stellen Sie die ursprüngliche Modelldatei direkt bereit",
   "导入的外部模型暂不支持实时验证和推理服务包，可以用来预标注、评估和误报测试": "Importierte externe Modelle unterstützen noch keinen Live-Test und keine Inferenz-Servicepakete; sie können für Vorannotation, Evaluierung und Fehlalarmtests verwendet werden",
-  "分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Klassifizierungsmodelle können nach ONNX / OpenVINO und in weitere Formate exportiert und selbst integriert werden; Inferenz-Servicepakete und Live-Test unterstützen derzeit nur Erkennungsmodelle",
-  "分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Segmentierungsmodelle können nach ONNX / OpenVINO und in weitere Formate exportiert und selbst integriert werden; Inferenz-Servicepakete und Live-Test unterstützen derzeit nur Erkennungsmodelle",
-  "关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Keypoint-Modelle können nach ONNX / OpenVINO und in weitere Formate exportiert und selbst integriert werden; Inferenz-Servicepakete und Live-Test unterstützen derzeit nur Erkennungsmodelle",
   "导出失败": "Export fehlgeschlagen",
   "无法启动推理进程：{e}": "Inferenzprozess kann nicht gestartet werden: {e}",
   "推理进程已退出，请重试": "Der Inferenzprozess wurde beendet. Bitte erneut versuchen",
@@ -441,5 +436,6 @@
   "问题描述不能为空": "Bitte beschreiben Sie das Problem",
   "问题描述太长": "Die Beschreibung ist zu lang",
   "服务端发送邮件失败，请稍后再试": "Der Server konnte die E-Mail nicht senden. Bitte versuchen Sie es später erneut.",
-  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "ffmpeg konnte nicht heruntergeladen werden: {errors}. Installieren Sie es über die Paketverwaltung (z. B. apt install ffmpeg) oder geben Sie den Pfad in den Einstellungen an."
+  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "ffmpeg konnte nicht heruntergeladen werden: {errors}. Installieren Sie es über die Paketverwaltung (z. B. apt install ffmpeg) oder geben Sie den Pfad in den Einstellungen an.",
+  "请填写视频流地址或选择视频文件": "Geben Sie eine Stream-Adresse ein oder wählen Sie eine Videodatei"
 }

@@ -31,7 +31,6 @@
   "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）": "R vẽ đa giác (nhấp từng điểm, nhấp đúp hoặc Enter để khép, Backspace để bỏ điểm)",
   "RKNN 转换包": "Gói chuyển đổi RKNN",
   "RT-DETR（Ultralytics）": "RT-DETR (Ultralytics)",
-  "RTSP 摄像头": "Camera RTSP",
   "SAM 准备中…（首次使用要安装组件、下载模型，可能需要几分钟）": "Đang chuẩn bị SAM… (lần đầu dùng cần cài thành phần và tải mô hình, có thể mất vài phút)",
   "SAM 计算中…": "SAM đang tính toán…",
   "TensorRT 转换包": "Gói chuyển đổi TensorRT",
@@ -49,9 +48,7 @@
   "images + labels + data.yaml，Ultralytics 等直接可用": "images + labels + data.yaml, dùng ngay được với Ultralytics và các công cụ khác",
   "keypoints + skeleton，通用格式": "keypoints + skeleton, định dạng phổ biến",
   "macOS 版（Apple 芯片用 MPS 加速）": "Bản macOS (chip Apple tăng tốc bằng MPS)",
-  "rtsp://admin:密码@192.168.1.64:554/Streaming/Channels/101": "rtsp://admin:matkhau@192.168.1.64:554/Streaming/Channels/101",
   "rtsp://…  或  https://…": "rtsp://…  hoặc  https://…",
-  "rtsp://… 或视频文件路径": "rtsp://… hoặc đường dẫn tệp video",
   "sk-live-…（在巡瞳 AI 控制台的「API Key」页创建）": "sk-live-… (tạo ở trang “API Key” trong bảng điều khiển Xuntong AI)",
   "train/类别/图片.jpg，ImageNet、YOLO-cls 通用": "train/<lớp>/<ảnh>.jpg, dùng chung cho ImageNet và YOLO-cls",
   "{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键": "{draw} · S chọn thông minh · V chọn · 1–9 đổi lớp · Del xóa · A/D ảnh trước/sau · Enter duyệt · P gán nhãn trước · Cuộn chuột thu phóng · Phím cách hoặc kéo chuột phải để di chuyển · H ẩn tên lớp · ? tất cả phím tắt",
@@ -384,7 +381,6 @@
   "在线": "Trực tuyến",
   "在线 · 巡瞳官方中转": "Trực tuyến · Trung chuyển chính thức của Xuntong",
   "在线 · 自建中转": "Trực tuyến · Trung chuyển tự dựng",
-  "填写 RTSP 地址或选择视频文件，点「开始」查看模型的实时检测效果": "Nhập địa chỉ RTSP hoặc chọn tệp video, nhấn “Bắt đầu” để xem hiệu quả phát hiện thời gian thực của mô hình",
   "备注": "Ghi chú",
   "备注（可选）：这一版改了什么": "Ghi chú (không bắt buộc): phiên bản này đã thay đổi gì",
   "复制上一张的标注 (Ctrl+D)": "Sao chép nhãn của ảnh trước (Ctrl+D)",
@@ -1319,5 +1315,8 @@
   "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "Nút xem hướng dẫn và liên kết trang web trong thông báo cập nhật giờ mở trang theo ngôn ngữ giao diện; thông báo từ máy chủ khi gửi phản hồi hay kiểm tra cập nhật cũng theo ngôn ngữ giao diện.",
   "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI là nền tảng của Trung Quốc nên các tính năng liên quan được ẩn mặc định khi giao diện không phải tiếng Trung. Nếu cần, hãy bật trong Cài đặt → Xuntong AI.",
   "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Sửa một số bản dịch chưa tự nhiên hoặc không thống nhất trong tiếng Việt, Nga, Indonesia, Tây Ban Nha và Đức.",
-  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Trên Linux, khi trích khung hình từ video sẽ tự tải ffmpeg, không cần cài thủ công nữa."
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Trên Linux, khi trích khung hình từ video sẽ tự tải ffmpeg, không cần cài thủ công nữa.",
+  "填写视频流地址或选择视频文件，点「开始」查看模型的实时效果": "Nhập địa chỉ luồng video hoặc chọn tệp video, nhấn “Bắt đầu” để xem kết quả thời gian thực của mô hình",
+  "rtsp:// / http(s):// 地址或视频文件路径": "Địa chỉ rtsp:// / http(s):// hoặc đường dẫn tệp video",
+  "分类模型按整张画面告警：某个类别的概率达到置信度阈值就告警，不按区域过滤。": "Mô hình phân loại cảnh báo theo toàn bộ khung hình: khi xác suất của một lớp đạt ngưỡng độ tin cậy thì cảnh báo, không lọc theo vùng."
 }

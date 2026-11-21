@@ -125,7 +125,6 @@
   "这次训练没有产出模型": "This training run produced no model",
   "实时验证没有在运行": "Live test isn't running",
   "实时验证进程已退出": "The live test process has exited",
-  "请填写 RTSP 地址或选择视频文件": "Enter an RTSP address or choose a video file",
   "视频文件不存在：{source}": "Video file not found: {source}",
   "无法启动实时验证：{e}": "Can't start live test: {e}",
   "截图失败": "Snapshot failed",
@@ -288,7 +287,6 @@
   "PyPI 上没有找到对应的 uv 安装包": "No matching uv package found on PyPI",
   "下载 {url}": "Downloading {url}",
   "下载 uv 失败：{errors}；{e}。可以手动安装 uv 后在设置里指定路径": "Failed to download uv: {errors}; {e}. You can install uv manually and set its path in Settings",
-  "没有找到 ffmpeg，请先用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "ffmpeg not found. Install it with your system package manager (e.g. apt install ffmpeg), or set its path in Settings",
   "下载 ffmpeg：{url}": "Downloading ffmpeg: {url}",
   "下载失败：{e}": "Download failed: {e}",
   "下载 ffmpeg 失败：{errors}。可以手动安装 ffmpeg 后在设置里指定路径": "Failed to download ffmpeg: {errors}. You can install ffmpeg manually and set its path in Settings",
@@ -357,9 +355,6 @@
   "这个训练没有在进行": "This training run isn't in progress",
   "导入的外部模型本身就是 ONNX，直接用原来的模型文件部署即可": "Imported external models are already ONNX; deploy the original model file directly",
   "导入的外部模型暂不支持实时验证和推理服务包，可以用来预标注、评估和误报测试": "Imported external models don't support live test or inference service packages yet; they can be used for pre-labeling, evaluation and false-positive tests",
-  "分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Classification models can be exported to ONNX / OpenVINO and other formats for your own integration; inference service packages and live test currently only support detection models",
-  "分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Segmentation models can be exported to ONNX / OpenVINO and other formats for your own integration; inference service packages and live test currently only support detection models",
-  "关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Keypoint models can be exported to ONNX / OpenVINO and other formats for your own integration; inference service packages and live test currently only support detection models",
   "导出失败": "Export failed",
   "无法启动推理进程：{e}": "Can't start the inference process: {e}",
   "推理进程已退出，请重试": "The inference process has exited. Try again",
@@ -441,5 +436,6 @@
   "问题描述不能为空": "Please describe the problem",
   "问题描述太长": "Description is too long",
   "服务端发送邮件失败，请稍后再试": "The server couldn't send the email. Please try again later.",
-  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Failed to download ffmpeg: {errors}. You can install it with your system's package manager (e.g. apt install ffmpeg) or set its path in Settings."
+  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Failed to download ffmpeg: {errors}. You can install it with your system's package manager (e.g. apt install ffmpeg) or set its path in Settings.",
+  "请填写视频流地址或选择视频文件": "Enter a stream URL or choose a video file"
 }

@@ -84,7 +84,6 @@
   "开始误报测试：每秒检测 {fps} 帧，阈值 {conf}": "Starting false positive test: detecting {fps} frames per second, threshold {conf}",
   "视频流读取失败，第 {n} 次重连…": "Failed to read the video stream, reconnect attempt {n}…",
   "图片编码失败": "Failed to encode the image",
-  "打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Can't open video source: {src}. For RTSP, check the URL, username/password and network; for video files, check the path and format.",
   "{label}预训练权重": "{label}pretrained weights",
   "骨干网络预训练权重": "pretrained backbone weights",
   "已加载 {what}": "Loaded {what}",
@@ -115,5 +114,6 @@
   "已加载 COCO 预训练权重（{name}，沿用 {keep}/{own} 组参数）": "Loaded COCO pretrained weights ({name}, reused {keep}/{own} parameter groups)",
   "下载预训练权重失败（{url}）：{e}": "Failed to download pretrained weights ({url}): {e}",
   "YOLOX 训练走 YoloxTask，不经过这个包装": "YOLOX training goes through YoloxTask, not this wrapper",
-  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "Last {n} epochs: Mosaic / MixUp off, L1 loss on"
+  "最后 {n} 轮：关掉 Mosaic / MixUp，加上 L1 损失": "Last {n} epochs: Mosaic / MixUp off, L1 loss on",
+  "打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。": "Can't open video source: {src}. For streams, check the URL, username/password and network; for video files, check the path and format."
 }

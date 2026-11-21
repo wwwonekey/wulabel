@@ -42,7 +42,7 @@
 }
 ```
 
-- 影像來源也可以填本機影片檔路徑，用於測試（預設循環播放）。
+- 影像來源支援 RTSP、HTTP-FLV、HLS（m3u8）、http 上的 MP4，也可以填本機影片檔路徑用於測試（本機檔案和 http 點播預設循環播放）。
 - 偵測區域依目標框的**底邊中點**判斷（人、車所站的位置）。
 
 ## 警報內容
@@ -62,6 +62,17 @@ Webhook（POST JSON）和 MQTT 收到的訊息：
 ```
 
 Webhook 開啟 `with_image` 時，會多一個 `image_base64` 欄位（畫好框的 JPEG）。
+
+## 不同模型的結果
+
+`detections` 裡每一項的欄位依模型而定，`GET /health` 和 `POST /predict` 回傳的 `task` 說明是哪種模型：
+
+| 模型 | task | 每一項的欄位 |
+|---|---|---|
+| 物件偵測 | `detect` | `label`、`score`、`box` [x, y, w, h] |
+| 實例分割 | `segment` | 同上，多一個 `polygon` [x1, y1, x2, y2, …]（目標輪廓，原圖像素） |
+| 關鍵點 | `pose` | 同上，多一個 `keypoints` [x, y, v, …]（v 為 2 表示找到了，0 表示沒找到）；警報截圖依 `config.json` 裡的 `skeleton` 畫骨架 |
+| 影像分類 | `classify` | `label`、`score`，沒有 `box`：機率達到 `min_score` 的類別各一項（最多 5 個）。分類依整張畫面判斷，不依 `region` 過濾 |
 
 ## HTTP API
 

@@ -42,7 +42,7 @@ Inferenz auf einer NVIDIA-GPU: Ersetzen Sie in `requirements.txt` `onnxruntime` 
 }
 ```
 
-- Als Quelle kann auch der Pfad zu einer lokalen Videodatei angegeben werden, zum Testen (wird standardmäßig in Schleife abgespielt).
+- Als Quelle gehen RTSP, HTTP-FLV, HLS (m3u8) und MP4 über http. Auch der Pfad zu einer lokalen Videodatei ist möglich, zum Testen (lokale Dateien und http-Videos auf Abruf werden standardmäßig in Schleife abgespielt).
 - Der Erkennungsbereich wird anhand des **Mittelpunkts der Unterkante** jeder Box geprüft (dort, wo Person oder Fahrzeug steht).
 
 ## Alarmnachricht
@@ -62,6 +62,17 @@ Nachricht, die an den Webhook (POST JSON) und per MQTT gesendet wird:
 ```
 
 Ist `with_image` beim Webhook aktiviert, kommt ein zusätzliches Feld `image_base64` hinzu (JPEG mit eingezeichneten Boxen).
+
+## Ergebnisse je nach Modelltyp
+
+Die Felder jedes Eintrags in `detections` hängen vom Modell ab. Das Feld `task` in den Antworten von `GET /health` und `POST /predict` zeigt den Typ:
+
+| Modell | task | Felder je Eintrag |
+|---|---|---|
+| Objekterkennung | `detect` | `label`, `score`, `box` [x, y, w, h] |
+| Instanzsegmentierung | `segment` | Wie oben, plus `polygon` [x1, y1, x2, y2, …] (Objektumriss, Pixel des Originalbilds) |
+| Keypoints | `pose` | Wie oben, plus `keypoints` [x, y, v, …] (v = 2: gefunden, 0: nicht gefunden); Alarmbilder zeichnen das Skelett nach `skeleton` in `config.json` |
+| Bildklassifizierung | `classify` | `label`, `score`, keine `box`: ein Eintrag je Klasse, deren Wahrscheinlichkeit `min_score` erreicht (höchstens 5). Die Klassifizierung bewertet das ganze Bild und filtert nicht nach `region` |
 
 ## HTTP-API
 

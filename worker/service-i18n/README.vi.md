@@ -42,7 +42,7 @@ Muốn suy luận bằng GPU NVIDIA: đổi `onnxruntime` thành `onnxruntime-gp
 }
 ```
 
-- Nguồn video cũng có thể là đường dẫn tới tệp video cục bộ, dùng để thử nghiệm (mặc định phát lặp lại).
+- Nguồn video hỗ trợ RTSP, HTTP-FLV, HLS (m3u8), MP4 qua http, cũng có thể là đường dẫn tới tệp video cục bộ để thử nghiệm (tệp cục bộ và video theo yêu cầu qua http mặc định phát lặp lại).
 - Vùng phát hiện được xét theo **trung điểm cạnh dưới** của khung đối tượng (vị trí người, xe đứng).
 
 ## Nội dung cảnh báo
@@ -62,6 +62,17 @@ Thông điệp gửi tới Webhook (POST JSON) và MQTT:
 ```
 
 Khi bật `with_image` cho Webhook, sẽ có thêm trường `image_base64` (ảnh JPEG đã vẽ khung).
+
+## Kết quả theo từng loại mô hình
+
+Các trường của mỗi mục trong `detections` tùy theo mô hình. Trường `task` do `GET /health` và `POST /predict` trả về cho biết loại mô hình:
+
+| Mô hình | task | Các trường của mỗi mục |
+|---|---|---|
+| Phát hiện đối tượng | `detect` | `label`, `score`, `box` [x, y, w, h] |
+| Phân đoạn thực thể | `segment` | Như trên, thêm `polygon` [x1, y1, x2, y2, …] (đường viền đối tượng, pixel ảnh gốc) |
+| Điểm chính | `pose` | Như trên, thêm `keypoints` [x, y, v, …] (v = 2: tìm thấy, 0: không tìm thấy); ảnh chụp cảnh báo vẽ khung xương theo `skeleton` trong `config.json` |
+| Phân loại ảnh | `classify` | `label`, `score`, không có `box`: mỗi lớp có xác suất đạt `min_score` là một mục (tối đa 5). Phân loại xét toàn bộ khung hình, không lọc theo `region` |
 
 ## API HTTP
 

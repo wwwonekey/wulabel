@@ -125,7 +125,6 @@
   "这次训练没有产出模型": "Lần huấn luyện này không tạo ra mô hình",
   "实时验证没有在运行": "Kiểm thử trực tiếp không chạy",
   "实时验证进程已退出": "Tiến trình kiểm thử trực tiếp đã thoát",
-  "请填写 RTSP 地址或选择视频文件": "Hãy nhập địa chỉ RTSP hoặc chọn tệp video",
   "视频文件不存在：{source}": "Không tìm thấy tệp video: {source}",
   "无法启动实时验证：{e}": "Không thể khởi động kiểm thử trực tiếp: {e}",
   "截图失败": "Chụp ảnh thất bại",
@@ -288,7 +287,6 @@
   "PyPI 上没有找到对应的 uv 安装包": "Không tìm thấy gói cài uv tương ứng trên PyPI",
   "下载 {url}": "Đang tải {url}",
   "下载 uv 失败：{errors}；{e}。可以手动安装 uv 后在设置里指定路径": "Tải uv thất bại: {errors}; {e}. Có thể tự cài uv rồi chỉ định đường dẫn trong phần cài đặt",
-  "没有找到 ffmpeg，请先用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Không tìm thấy ffmpeg, hãy cài bằng trình quản lý gói của hệ thống trước (ví dụ apt install ffmpeg), hoặc chỉ định đường dẫn trong phần cài đặt",
   "下载 ffmpeg：{url}": "Đang tải ffmpeg: {url}",
   "下载失败：{e}": "Tải xuống thất bại: {e}",
   "下载 ffmpeg 失败：{errors}。可以手动安装 ffmpeg 后在设置里指定路径": "Tải ffmpeg thất bại: {errors}. Có thể tự cài ffmpeg rồi chỉ định đường dẫn trong phần cài đặt",
@@ -357,9 +355,6 @@
   "这个训练没有在进行": "Lần huấn luyện này không đang chạy",
   "导入的外部模型本身就是 ONNX，直接用原来的模型文件部署即可": "Mô hình bên ngoài đã nhập vốn là ONNX, dùng trực tiếp tệp mô hình gốc để triển khai là được",
   "导入的外部模型暂不支持实时验证和推理服务包，可以用来预标注、评估和误报测试": "Mô hình bên ngoài đã nhập tạm chưa hỗ trợ kiểm thử trực tiếp và gói dịch vụ suy luận, có thể dùng để gán nhãn trước, đánh giá và kiểm thử báo nhầm",
-  "分类模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Mô hình phân loại có thể xuất sang ONNX / OpenVINO và các định dạng khác để tự tích hợp; gói dịch vụ suy luận và kiểm thử trực tiếp hiện chỉ hỗ trợ mô hình phát hiện",
-  "分割模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Mô hình phân đoạn có thể xuất sang ONNX / OpenVINO và các định dạng khác để tự tích hợp; gói dịch vụ suy luận và kiểm thử trực tiếp hiện chỉ hỗ trợ mô hình phát hiện",
-  "关键点模型可以导出 ONNX / OpenVINO 等格式自己集成；推理服务包和实时验证目前只支持检测模型": "Mô hình điểm khóa có thể xuất sang ONNX / OpenVINO và các định dạng khác để tự tích hợp; gói dịch vụ suy luận và kiểm thử trực tiếp hiện chỉ hỗ trợ mô hình phát hiện",
   "导出失败": "Xuất thất bại",
   "无法启动推理进程：{e}": "Không thể khởi động tiến trình suy luận: {e}",
   "推理进程已退出，请重试": "Tiến trình suy luận đã thoát, vui lòng thử lại",
@@ -441,5 +436,6 @@
   "问题描述不能为空": "Vui lòng mô tả vấn đề",
   "问题描述太长": "Mô tả quá dài",
   "服务端发送邮件失败，请稍后再试": "Máy chủ không gửi được email. Vui lòng thử lại sau.",
-  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Tải ffmpeg thất bại: {errors}. Bạn có thể cài bằng trình quản lý gói của hệ thống (ví dụ apt install ffmpeg) hoặc chỉ định đường dẫn trong Cài đặt."
+  "下载 ffmpeg 失败：{errors}。可以用系统的包管理器安装（如 apt install ffmpeg），或在设置里指定路径": "Tải ffmpeg thất bại: {errors}. Bạn có thể cài bằng trình quản lý gói của hệ thống (ví dụ apt install ffmpeg) hoặc chỉ định đường dẫn trong Cài đặt.",
+  "请填写视频流地址或选择视频文件": "Hãy nhập địa chỉ luồng video hoặc chọn tệp video"
 }

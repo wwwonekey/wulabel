@@ -42,7 +42,7 @@ NVIDIA の GPU で推論する場合：`requirements.txt` の `onnxruntime` を 
 }
 ```
 
-- 映像ソースにはローカルの動画ファイルのパスも指定でき、テストに使えます（デフォルトでループ再生）。
+- 映像ソースは RTSP、HTTP-FLV、HLS（m3u8）、http 上の MP4 に対応しています。ローカルの動画ファイルのパスも指定でき、テストに使えます（ローカルファイルと http のオンデマンド動画はデフォルトでループ再生）。
 - 検出領域に入っているかは、検出枠の**下辺の中点**（人や車が立っている位置）で判定します。
 
 ## アラートの内容
@@ -62,6 +62,17 @@ Webhook（POST JSON）と MQTT に送られるメッセージ：
 ```
 
 Webhook で `with_image` を有効にすると、`image_base64` フィールド（枠を描画した JPEG）が追加されます。
+
+## モデルごとの結果
+
+`detections` の各要素のフィールドはモデルによって異なります。`GET /health` と `POST /predict` が返す `task` でモデルの種類がわかります：
+
+| モデル | task | 各要素のフィールド |
+|---|---|---|
+| 物体検出 | `detect` | `label`、`score`、`box` [x, y, w, h] |
+| インスタンスセグメンテーション | `segment` | 同上に加えて `polygon` [x1, y1, x2, y2, …]（対象の輪郭、元画像のピクセル座標） |
+| キーポイント | `pose` | 同上に加えて `keypoints` [x, y, v, …]（v が 2 なら検出、0 なら未検出）。アラート画像は `config.json` の `skeleton` で骨格を描画 |
+| 画像分類 | `classify` | `label`、`score`（`box` なし）：確率が `min_score` 以上のクラスごとに 1 要素（最大 5 個）。分類は画面全体で判定し、`region` では絞り込みません |
 
 ## HTTP API
 

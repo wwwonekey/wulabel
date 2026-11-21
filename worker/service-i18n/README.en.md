@@ -42,7 +42,7 @@ To run inference on an NVIDIA GPU: replace `onnxruntime` with `onnxruntime-gpu` 
 }
 ```
 
-- A stream can also be a local video file path, for testing (it loops by default).
+- Streams can be RTSP, HTTP-FLV, HLS (m3u8) or MP4 over http. A stream can also be a local video file path, for testing (local files and http on-demand videos loop by default).
 - The detection region is checked against the **bottom-center point** of each box (where a person or vehicle stands).
 
 ## Alert message
@@ -62,6 +62,17 @@ Messages sent to the Webhook (POST JSON) and MQTT:
 ```
 
 With `with_image` enabled on the Webhook, an extra `image_base64` field (JPEG with boxes drawn) is included.
+
+## Results by model type
+
+The fields of each item in `detections` depend on the model. The `task` returned by `GET /health` and `POST /predict` tells you which kind it is:
+
+| Model | task | Fields of each item |
+|---|---|---|
+| Object detection | `detect` | `label`, `score`, `box` [x, y, w, h] |
+| Instance segmentation | `segment` | Same, plus `polygon` [x1, y1, x2, y2, …] (object outline, original image pixels) |
+| Keypoints | `pose` | Same, plus `keypoints` [x, y, v, …] (v = 2: found, 0: not found); alert snapshots draw the skeleton from `skeleton` in `config.json` |
+| Image classification | `classify` | `label`, `score`, no `box`: one item per class whose probability reaches `min_score` (up to 5). Classification looks at the whole frame and ignores `region` |
 
 ## HTTP API
 

@@ -1,9 +1,12 @@
-"""实时验证：读取 RTSP 流或视频文件，用模型逐帧检测。
+"""实时验证：读取视频流（RTSP、HTTP-FLV、HLS、http 上的 MP4 等）或视频文件，用模型逐帧推理。
 
-配置（JSON）：source（RTSP 地址或视频文件路径）、weights、conf、max_fps、preview_width
+配置（JSON）：source（视频流地址或视频文件路径）、weights、conf、max_fps、preview_width
 输出事件：
-    {"type": "open", "width", "height", "fps", "frames", "classes"}
-    {"type": "frame", "jpg": base64, "w", "h", "boxes": [[x, y, w, h, 类别序号, 分数]], "ms", "fps", "pos"}
+    {"type": "open", "width", "height", "fps", "frames", "classes", "task"}
+    {"type": "frame", "jpg": base64, "w", "h", "boxes": [[x, y, w, h, 类别序号, 分数]], "ms", "fps", "pos",
+     "polys": 分割模型每个框的多边形 [x1, y1, ...]（和 boxes 一一对应，没有时为 []），
+     "kpts": 关键点模型每个框的关键点 [x, y, v, ...]（和 boxes 一一对应），
+     "tags": 分类模型前几名 [[类别序号, 概率]]}
     {"type": "ended"} / {"type": "error", "msg"}
 标准输入命令：
     {"cmd": "conf", "value": 0.4}         调整置信度
@@ -26,8 +29,12 @@ os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
 
 import cv2  # noqa: E402
 import torch  # noqa: E402
+from PIL import Image  # noqa: E402
+from torchvision.transforms import functional as F  # noqa: E402
 
 from . import models  # noqa: E402
+from .assist import mask_to_poly  # noqa: E402
+from .data import cls_preprocess  # noqa: E402
 from .i18n import tr  # noqa: E402
 from .protocol import emit, log  # noqa: E402
 
@@ -37,7 +44,7 @@ def is_stream(src: str) -> bool:
 
 
 class Grabber(threading.Thread):
-    """后台读帧，只保留最新一帧。视频文件按原始帧率播放，RTSP 断线自动重连。"""
+    """后台读帧，只保留最新一帧。视频文件和 http 点播（有总帧数）按原始帧率播放、放完结束；直播流断线自动重连。"""
 
     def __init__(self, src: str):
         super().__init__(daemon=True)
@@ -53,6 +60,9 @@ class Grabber(threading.Thread):
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 25.0
         if not (1 <= self.fps <= 240):
             self.fps = 25.0
+        # http(s) 上的 MP4、点播 m3u8 有总帧数，当成视频文件播放；直播流没有总帧数
+        if self.stream and src.lower().startswith(("http://", "https://")) and (self.cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0) > 0:
+            self.stream = False
 
     def opened(self) -> bool:
         return self.cap.isOpened()
@@ -103,6 +113,36 @@ def write_image(path: str, frame) -> None:
     Path(path).write_bytes(buf.tobytes())
 
 
+def infer(model, ck: dict, task: str, rgb, device: torch.device, conf: float):
+    """一帧推理，按任务返回 (boxes, polys, kpts, tags)，格式见文件开头的说明"""
+    if task == "classify":
+        x = cls_preprocess(Image.fromarray(rgb), int(ck["img_size"])).unsqueeze(0).to(device)
+        prob = torch.softmax(model(x).float(), dim=1)[0].cpu()
+        top = torch.topk(prob, min(3, prob.numel()))
+        return [], [], [], [[int(i), round(float(s), 3)] for s, i in zip(top.values, top.indices)]
+    out = model([F.to_tensor(rgb).to(device)])[0]
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    masks = out["masks"].cpu().numpy() if task == "segment" and "masks" in out else None
+    kps = out["keypoints"].cpu().numpy() if task == "pose" and "keypoints" in out else None
+    ksc = out["keypoints_scores"].cpu().numpy() if kps is not None and "keypoints_scores" in out else None
+    boxes, polys, kpts = [], [], []
+    for i, (b, s, l) in enumerate(zip(out["boxes"].tolist(), out["scores"].tolist(), out["labels"].tolist())):
+        if s < conf:
+            continue
+        boxes.append([round(b[0], 1), round(b[1], 1), round(b[2] - b[0], 1), round(b[3] - b[1], 1), l - 1, round(s, 3)])
+        if masks is not None:
+            polys.append(mask_to_poly(masks[i, 0]) or [])
+        if kps is not None:
+            flat = []
+            for j, (kx, ky, _) in enumerate(kps[i]):
+                # 关键点热图分数 > 0 当成找到了，和预标注一致
+                ok = ksc is None or ksc[i, j] > 0
+                flat += [round(float(kx), 1), round(float(ky), 1), 2] if ok else [0, 0, 0]
+            kpts.append(flat)
+    return boxes, polys, kpts, []
+
+
 def run(cfg: dict) -> None:
     src = str(cfg["source"]).strip()
     conf = float(cfg.get("conf", 0.4))
@@ -116,12 +156,13 @@ def run(cfg: dict) -> None:
 
     g = Grabber(src)
     if not g.opened():
-        emit("error", msg=tr("打不开视频源：{src}。RTSP 请检查地址、账号密码和网络；视频文件请检查路径和格式。", src=src))
+        emit("error", msg=tr("打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。", src=src))
         return
     w = int(g.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(g.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frames = int(g.cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0) if not g.stream else 0
-    emit("open", width=w, height=h, fps=g.fps, frames=frames, classes=ck["classes"], device=str(device))
+    task = models.task_of(ck["model"])
+    emit("open", width=w, height=h, fps=g.fps, frames=frames, classes=ck["classes"], device=str(device), task=task)
     g.start()
 
     state = {"conf": conf, "stop": False, "snapshot": None}
@@ -165,15 +206,8 @@ def run(cfg: dict) -> None:
             last_seq = seq
             t0 = time.time()
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            x = torch.from_numpy(rgb).to(device).permute(2, 0, 1).float().div_(255)
-            out = model([x])[0]
-            if device.type == "cuda":
-                torch.cuda.synchronize()
+            boxes, polys, kpts, tags = infer(model, ck, task, rgb, device, state["conf"])
             ms = (time.time() - t0) * 1000
-            boxes = []
-            for b, s, l in zip(out["boxes"].tolist(), out["scores"].tolist(), out["labels"].tolist()):
-                if s >= state["conf"]:
-                    boxes.append([round(b[0], 1), round(b[1], 1), round(b[2] - b[0], 1), round(b[3] - b[1], 1), l - 1, round(s, 3)])
             fh, fw = frame.shape[:2]
             scale = min(1.0, preview_w / fw)
             small = cv2.resize(frame, (int(fw * scale), int(fh * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else frame
@@ -187,6 +221,9 @@ def run(cfg: dict) -> None:
                 w=fw,
                 h=fh,
                 boxes=boxes,
+                polys=polys,
+                kpts=kpts,
+                tags=tags,
                 ms=round(ms, 1),
                 fps=round(fps_avg, 1),
                 pos=pos,

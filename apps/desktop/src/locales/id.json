@@ -31,7 +31,6 @@
   "R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）": "R gambar kontur (klik titik demi titik, klik ganda atau Enter untuk menutup, Backspace untuk membatalkan titik)",
   "RKNN 转换包": "Paket konversi RKNN",
   "RT-DETR（Ultralytics）": "RT-DETR (Ultralytics)",
-  "RTSP 摄像头": "Kamera RTSP",
   "SAM 准备中…（首次使用要安装组件、下载模型，可能需要几分钟）": "Menyiapkan SAM… (penggunaan pertama akan menginstal komponen dan mengunduh model, mungkin butuh beberapa menit)",
   "SAM 计算中…": "SAM sedang memproses…",
   "TensorRT 转换包": "Paket konversi TensorRT",
@@ -49,9 +48,7 @@
   "images + labels + data.yaml，Ultralytics 等直接可用": "images + labels + data.yaml, langsung dapat dipakai di Ultralytics dan lainnya",
   "keypoints + skeleton，通用格式": "keypoints + skeleton, format umum",
   "macOS 版（Apple 芯片用 MPS 加速）": "Versi macOS (akselerasi MPS di Apple Silicon)",
-  "rtsp://admin:密码@192.168.1.64:554/Streaming/Channels/101": "rtsp://admin:sandi@192.168.1.64:554/Streaming/Channels/101",
   "rtsp://…  或  https://…": "rtsp://…  atau  https://…",
-  "rtsp://… 或视频文件路径": "rtsp://… atau path file video",
   "sk-live-…（在巡瞳 AI 控制台的「API Key」页创建）": "sk-live-… (buat di halaman \"API Key\" pada konsol Xuntong AI)",
   "train/类别/图片.jpg，ImageNet、YOLO-cls 通用": "train/<kelas>/<gambar>.jpg, cocok untuk ImageNet dan YOLO-cls",
   "{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键": "{draw} · S pilih cerdas · V pilih · 1–9 ganti kelas · Del hapus · A/D gambar sebelumnya/berikutnya · Enter setujui · P pra-anotasi · Roda mouse zoom · Spasi atau seret klik kanan untuk menggeser · H sembunyikan nama kelas · ? semua pintasan",
@@ -384,7 +381,6 @@
   "在线": "Online",
   "在线 · 巡瞳官方中转": "Online · Relay resmi Xuntong",
   "在线 · 自建中转": "Online · Relay sendiri",
-  "填写 RTSP 地址或选择视频文件，点「开始」查看模型的实时检测效果": "Isi alamat RTSP atau pilih file video, lalu klik \"Mulai\" untuk melihat hasil deteksi model secara langsung",
   "备注": "Catatan",
   "备注（可选）：这一版改了什么": "Catatan (opsional): apa yang berubah di versi ini",
   "复制上一张的标注 (Ctrl+D)": "Salin anotasi gambar sebelumnya (Ctrl+D)",
@@ -1319,5 +1315,8 @@
   "「看使用教程」和更新提示里的官网链接，按界面语言打开对应语言的页面；反馈、检查更新时服务器返回的提示也跟随界面语言。": "Tombol panduan dan tautan situs web di pemberitahuan pembaruan kini membuka halaman sesuai bahasa antarmuka; pesan dari server saat mengirim masukan atau memeriksa pembaruan juga mengikuti bahasa antarmuka.",
   "巡瞳 AI 是国内平台，非中文界面默认隐藏相关功能，需要的话在「设置 → 巡瞳 AI」里打开。": "Xuntong AI adalah platform dari Tiongkok, jadi fiturnya disembunyikan secara default di antarmuka selain bahasa Mandarin. Aktifkan di Pengaturan → Xuntong AI jika perlu.",
   "修正越南语、俄语、印尼语、西班牙语、德语里几处不通顺或前后不一致的译文。": "Memperbaiki beberapa terjemahan yang kurang alami atau tidak konsisten dalam bahasa Vietnam, Rusia, Indonesia, Spanyol, dan Jerman.",
-  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Di Linux, ekstraksi frame dari video kini mengunduh ffmpeg secara otomatis; tidak perlu memasangnya sendiri lagi."
+  "Linux 版视频抽帧也会自动下载 ffmpeg，不用再手动安装。": "Di Linux, ekstraksi frame dari video kini mengunduh ffmpeg secara otomatis; tidak perlu memasangnya sendiri lagi.",
+  "填写视频流地址或选择视频文件，点「开始」查看模型的实时效果": "Isi alamat stream atau pilih file video, lalu klik \"Mulai\" untuk melihat hasil model secara langsung",
+  "rtsp:// / http(s):// 地址或视频文件路径": "Alamat rtsp:// / http(s):// atau path file video",
+  "分类模型按整张画面告警：某个类别的概率达到置信度阈值就告警，不按区域过滤。": "Model klasifikasi memberi alarm berdasarkan seluruh frame: alarm muncul saat probabilitas suatu kelas mencapai ambang kepercayaan. Area tidak dipakai."
 }

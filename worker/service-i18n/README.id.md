@@ -42,7 +42,7 @@ Untuk inferensi dengan GPU NVIDIA: ganti `onnxruntime` menjadi `onnxruntime-gpu`
 }
 ```
 
-- Sumber video juga bisa berupa path file video lokal, untuk pengujian (diputar berulang secara default).
+- Sumber video mendukung RTSP, HTTP-FLV, HLS (m3u8), dan MP4 lewat http, juga bisa berupa path file video lokal untuk pengujian (file lokal dan video on-demand lewat http diputar berulang secara default).
 - Area deteksi diperiksa berdasarkan **titik tengah sisi bawah** setiap kotak (tempat orang atau kendaraan berdiri).
 
 ## Isi alarm
@@ -62,6 +62,17 @@ Pesan yang dikirim ke Webhook (POST JSON) dan MQTT:
 ```
 
 Jika `with_image` diaktifkan pada Webhook, ada tambahan field `image_base64` (JPEG dengan kotak tergambar).
+
+## Hasil menurut jenis model
+
+Field setiap item di `detections` bergantung pada model. Field `task` yang dikembalikan `GET /health` dan `POST /predict` menunjukkan jenisnya:
+
+| Model | task | Field setiap item |
+|---|---|---|
+| Deteksi objek | `detect` | `label`, `score`, `box` [x, y, w, h] |
+| Segmentasi instans | `segment` | Sama, ditambah `polygon` [x1, y1, x2, y2, …] (kontur objek, piksel gambar asli) |
+| Keypoint | `pose` | Sama, ditambah `keypoints` [x, y, v, …] (v = 2: ditemukan, 0: tidak ditemukan); gambar alarm menggambar kerangka sesuai `skeleton` di `config.json` |
+| Klasifikasi gambar | `classify` | `label`, `score`, tanpa `box`: satu item untuk setiap kelas yang probabilitasnya mencapai `min_score` (maksimal 5). Klasifikasi menilai seluruh frame dan tidak disaring dengan `region` |
 
 ## API HTTP
 
