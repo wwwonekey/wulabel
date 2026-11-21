@@ -201,7 +201,10 @@ pub fn list_ids(p: &Project, status: Option<&str>) -> AppResult<Vec<i64>> {
         let ids = stmt.query_map([], |r| r.get(0))?.collect::<Result<Vec<i64>, _>>()?;
         return Ok(ids);
     }
-    let mut stmt = conn.prepare("SELECT id FROM images WHERE (?1 IS NULL OR status = ?1) ORDER BY id")?;
+    // done：已标注和已审核（不用审核流程时两者都算「已标注」）
+    let mut stmt = conn.prepare(
+        "SELECT id FROM images WHERE (?1 IS NULL OR status = ?1 OR (?1 = 'done' AND status IN ('labeled', 'reviewed'))) ORDER BY id",
+    )?;
     let ids = stmt.query_map([status], |r| r.get(0))?.collect::<Result<Vec<i64>, _>>()?;
     Ok(ids)
 }

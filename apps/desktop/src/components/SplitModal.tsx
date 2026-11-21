@@ -10,6 +10,7 @@ const PAGE = 60;
 /** 训练页「查看和调整」：看每张已标注的图在训练集、验证集还是测试集，手动移动，或按比例重新分配 */
 export default function SplitModal({
   project,
+  review,
   open,
   ratios,
   onRatios,
@@ -17,6 +18,8 @@ export default function SplitModal({
   onChanged,
 }: {
   project: ProjectInfo;
+  /** 用不用审核流程（不用时已审核的图也显示成已标注） */
+  review: boolean;
   open: boolean;
   /** 未划分的图开始训练时按这个比例分配（小数，和训练参数里的一样） */
   ratios: [number, number, number];
@@ -115,7 +118,11 @@ export default function SplitModal({
         <div>{t("训练集：模型从这些图里学习。")}</div>
         <div>{t("验证集：不参与学习，每训练一轮用它评估一次，挑出效果最好的那一轮保存。")}</div>
         <div>{t("测试集：训练时完全不用，训完后在「评估」页单独打分，最接近模型上线后的真实效果。")}</div>
-        <div>{t("只有已标注和已审核的图参与训练；未标注、跳过的图不在这里。图分到哪个集合后不会自己变，前后几次训练可以直接比较。")}</div>
+        <div>
+          {review
+            ? t("只有已标注和已审核的图参与训练；未标注、跳过的图不在这里。图分到哪个集合后不会自己变，前后几次训练可以直接比较。")
+            : t("只有已标注的图参与训练；未标注、跳过的图不在这里。图分到哪个集合后不会自己变，前后几次训练可以直接比较。")}
+        </div>
       </div>
 
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
@@ -170,8 +177,8 @@ export default function SplitModal({
                 title={`${it.name}  ${it.width}×${it.height}\n${t("单击选择，双击打开标注")}`}
               >
                 <img src={thumbUrl(project.path, it.id)} loading="lazy" alt={it.name} draggable={false} />
-                <Tag className="st" color={it.status === "reviewed" ? "success" : "processing"}>
-                  {it.status === "reviewed" ? t("已审核") : t("已标注")}
+                <Tag className="st" color={review && it.status === "reviewed" ? "success" : "processing"}>
+                  {review && it.status === "reviewed" ? t("已审核") : t("已标注")}
                 </Tag>
                 <span className="nm">{it.name}</span>
               </div>

@@ -257,13 +257,13 @@ pub fn list(project: &Project, status: Option<&str>, offset: u32, limit: u32) ->
     let conn = project.conn.lock();
     let status = status.filter(|s| !s.is_empty() && *s != "all");
     let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM images WHERE (?1 IS NULL OR status = ?1)",
+        "SELECT COUNT(*) FROM images WHERE (?1 IS NULL OR status = ?1 OR (?1 = 'done' AND status IN ('labeled', 'reviewed')))",
         [status],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(
         "SELECT id, path, width, height, status, split FROM images
-         WHERE (?1 IS NULL OR status = ?1) ORDER BY id LIMIT ?2 OFFSET ?3",
+         WHERE (?1 IS NULL OR status = ?1 OR (?1 = 'done' AND status IN ('labeled', 'reviewed'))) ORDER BY id LIMIT ?2 OFFSET ?3",
     )?;
     let items = stmt
         .query_map(params![status, limit.min(1000), offset], |r| {

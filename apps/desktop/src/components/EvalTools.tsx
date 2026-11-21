@@ -169,7 +169,7 @@ export function FpTestPanel({ run, defaultConf }: { run: RunInfo; defaultConf: n
     const paths = alarms.map((a) => a.path).filter(Boolean);
     modal.confirm({
       title: t("把 {n} 张误报帧加进数据集？", { n: paths.length }),
-      content: t("会作为「已审核、没有目标」的负样本加入，下次训练时模型会学着不在这类画面上报警。如果其中有真的目标，加入后到标注页补上标注。"),
+      content: t("会作为「没有目标」的负样本加入，下次训练时模型会学着不在这类画面上报警。如果其中有真的目标，加入后到标注页补上标注。"),
       okText: t("加入"),
       cancelText: t("取消"),
       onOk: async () => {

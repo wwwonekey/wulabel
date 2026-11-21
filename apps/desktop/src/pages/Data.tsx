@@ -34,7 +34,7 @@ import {
   thumbUrl,
   VideoProgress,
 } from "../api";
-import { prefs, useApp } from "../store";
+import { prefs, useApp, useReview } from "../store";
 import { t } from "../i18n";
 import { xuntongEnabled } from "../features";
 import ImageViewer from "../components/ImageViewer";
@@ -62,7 +62,15 @@ const FILTERS = [
   { label: t("已审核"), value: "reviewed" },
 ];
 
+/** 一个人标注（不用审核）时：已审核算进已标注 */
+const SOLO_FILTERS = [
+  { label: t("全部"), value: "all" },
+  { label: t("未标注"), value: "todo" },
+  { label: t("已标注"), value: "done" },
+];
+
 export default function Data({ project }: { project: ProjectInfo }) {
+  const review = useReview();
   const { message, modal } = App.useApp();
   const refreshStats = useApp((s) => s.refreshStats);
   const annotateImage = useApp((s) => s.annotateImage);
@@ -447,7 +455,9 @@ export default function Data({ project }: { project: ProjectInfo }) {
         <div>
           <h1>{t("数据")}</h1>
           <p className="desc" style={{ margin: 0 }}>
-            {t("{total} 张图片 · 可训练 {n}（已标注 {labeled} + 已审核 {reviewed}）", { total: s.total, n: s.labeled + s.reviewed, labeled: s.labeled, reviewed: s.reviewed })}
+            {review
+              ? t("{total} 张图片 · 可训练 {n}（已标注 {labeled} + 已审核 {reviewed}）", { total: s.total, n: s.labeled + s.reviewed, labeled: s.labeled, reviewed: s.reviewed })
+              : t("{total} 张图片 · 已标注 {n}", { total: s.total, n: s.labeled + s.reviewed })}
           </p>
         </div>
         <div className="row">
@@ -554,18 +564,25 @@ export default function Data({ project }: { project: ProjectInfo }) {
         </div>
         <div className="card">
           <div className="muted">{t("已标注")}</div>
-          <div className="kpi">{s.labeled}</div>
+          <div className="kpi">{review ? s.labeled : s.labeled + s.reviewed}</div>
         </div>
-        <div className="card">
-          <div className="muted">{t("已审核")}</div>
-          <div className="kpi">{s.reviewed}</div>
-        </div>
+        {review ? (
+          <div className="card">
+            <div className="muted">{t("已审核")}</div>
+            <div className="kpi">{s.reviewed}</div>
+          </div>
+        ) : (
+          <div className="card">
+            <div className="muted">{t("已跳过")}</div>
+            <div className="kpi">{s.skipped}</div>
+          </div>
+        )}
       </div>
 
       <div className="row" style={{ marginBottom: 12, justifyContent: "space-between" }}>
         <Segmented
           value={filter}
-          options={FILTERS}
+          options={review ? FILTERS : SOLO_FILTERS}
           onChange={(v) => {
             setFilter(v as string);
             setPage(1);
@@ -620,8 +637,8 @@ export default function Data({ project }: { project: ProjectInfo }) {
               >
                 <img src={thumbUrl(project.path, it.id)} loading="lazy" alt={it.name} draggable={false} />
                 {selecting && <Checkbox className="pick" checked={selected.has(it.id)} />}
-                <Tag className="st" color={STATUS[it.status]?.color}>
-                  {STATUS[it.status]?.text ?? it.status}
+                <Tag className="st" color={STATUS[!review && it.status === "reviewed" ? "labeled" : it.status]?.color}>
+                  {STATUS[!review && it.status === "reviewed" ? "labeled" : it.status]?.text ?? it.status}
                 </Tag>
                 <span className="nm">{it.name}</span>
               </div>

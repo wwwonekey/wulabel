@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { api, EnvStatus, errText, ProjectInfo, RunDetail, RunInfo, RunStatus, SplitSummary, Task, TrainConfig, VersionInfo } from "../api";
-import { prefs, useApp } from "../store";
+import { prefs, useApp, useReview } from "../store";
 import { t } from "../i18n";
 import LineChart from "../components/LineChart";
 import RunCompare from "../components/RunCompare";
@@ -105,6 +105,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const { message, modal } = App.useApp();
   const setPage = useApp((s) => s.setPage);
   const task = project.task;
+  // 协作时才有审核；一个人标注时不出现「已审核」「只用已审核的图片」
+  const review = useReview();
   const models = MODELS.filter((m) => m.task === task);
   const mn = metricNames(task);
   const cfgKey = `trainConfig.${task}`;
@@ -240,7 +242,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
     setStarting(true);
     try {
       // 记住的版本可能已经被删掉了，那就用当前数据
-      const id = await api.startTraining({ ...cfg, version: useVersion ? cfg.version : null, baseRun: baseRun ? baseRun.id : null });
+      const id = await api.startTraining({ ...cfg, onlyReviewed: review && cfg.onlyReviewed, version: useVersion ? cfg.version : null, baseRun: baseRun ? baseRun.id : null });
       await loadRuns();
       setSel(id);
       setSplit(await api.splitSummary());
@@ -265,12 +267,19 @@ export default function Train({ project }: { project: ProjectInfo }) {
   );
   const baseRun = baseRuns.find((r) => r.id === cfg.baseRun) ?? null;
   const recommended = recommendModel(task, gpuMem);
-  const descText = {
-    detect: t("用已标注和已审核的图片训练检测模型。"),
-    segment: t("用已标注和已审核的图片训练实例分割模型。"),
-    pose: t("用已标注和已审核的图片训练关键点模型。"),
-    classify: t("用已标注和已审核的图片训练图像分类模型。"),
-  }[task];
+  const descText = (review
+    ? {
+        detect: t("用已标注和已审核的图片训练检测模型。"),
+        segment: t("用已标注和已审核的图片训练实例分割模型。"),
+        pose: t("用已标注和已审核的图片训练关键点模型。"),
+        classify: t("用已标注和已审核的图片训练图像分类模型。"),
+      }
+    : {
+        detect: t("用已标注的图片训练检测模型。"),
+        segment: t("用已标注的图片训练实例分割模型。"),
+        pose: t("用已标注的图片训练关键点模型。"),
+        classify: t("用已标注的图片训练图像分类模型。"),
+      })[task];
   const fewText =
     task === "classify"
       ? t("图片较少，建议每个类别至少标 100 张图再训练。")
@@ -349,7 +358,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                 {split.unset > 0 && ` · ${t("未划分 {n}（开始训练时按比例分配）", { n: split.unset })}`}
               </div>
             )}
-            {cfg.onlyReviewed && !useVersion && (
+            {review && cfg.onlyReviewed && !useVersion && (
               <div style={{ color: "var(--warn)", fontSize: 12, marginTop: 4 }}>
                 {t("高级设置里勾了「只用已审核的图片」，只标注、没审核的图这次不参与训练")}
               </div>
@@ -463,11 +472,13 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   <Radio value="cpu">{t("只用 CPU")}</Radio>
                 </Radio.Group>
               </Form.Item>
-              <Form.Item>
-                <Checkbox checked={cfg.onlyReviewed} onChange={(e) => update({ onlyReviewed: e.target.checked })}>
-                  {t("只用已审核的图片")}
-                </Checkbox>
-              </Form.Item>
+              {review && (
+                <Form.Item>
+                  <Checkbox checked={cfg.onlyReviewed} onChange={(e) => update({ onlyReviewed: e.target.checked })}>
+                    {t("只用已审核的图片")}
+                  </Checkbox>
+                </Form.Item>
+              )}
                 </>
               )}
               <Button
@@ -613,6 +624,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
       </div>
       <SplitModal
         project={project}
+        review={review}
         open={splitOpen}
         ratios={cfg.ratios}
         onRatios={(ratios) => update({ ratios })}

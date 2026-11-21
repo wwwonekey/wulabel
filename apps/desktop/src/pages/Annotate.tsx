@@ -45,7 +45,7 @@ import {
   ShareEvent,
   thumbUrl,
 } from "../api";
-import { prefs, useApp } from "../store";
+import { prefs, useApp, useReview } from "../store";
 import AnnotCanvas, { Box, Poly, RectXYWH, Tool } from "../components/AnnotCanvas";
 import AiRulesDrawer from "../components/AiRulesDrawer";
 import { t } from "../i18n";
@@ -57,6 +57,12 @@ const FILTERS = [
   { label: t("未标注"), value: "todo" },
   { label: t("已标注"), value: "labeled" },
   { label: t("已审核"), value: "reviewed" },
+];
+/** 一个人标注（不用审核）时的筛选：已标注包含已审核 */
+const SOLO_FILTERS = [
+  { label: t("全部"), value: "all" },
+  { label: t("未标注"), value: "todo" },
+  { label: t("已标注"), value: "done" },
 ];
 const STATUS_TEXT: Record<ImageStatus, { text: string; color?: string }> = {
   todo: { text: t("未标注") },
@@ -193,6 +199,8 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const isAnnotator = remote && team.me?.role === "annotator";
   const canReview = !remote || team.me?.role === "reviewer";
   const collab = remote || team.shareRunning;
+  // 协作时才有审核流程；一个人标注时标完就算数
+  const review = useReview();
   const canEditLabels = !remote || team.options.membersEditLabels;
   const aiAllowed = !remote || team.options.allowAi;
   /** 别人正在改这张图时是他的名字（只读） */
@@ -644,6 +652,18 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     } catch (e) {
       message.error(errText(e));
     }
+  };
+
+  /** 不用审核时的「完成并下一张」：有标注的图本来就算已标注，直接下一张；
+   *  没有目标的图记成「没有目标」（存为已审核，作为负样本参与训练） */
+  const finish = async () => {
+    if (review) return setStatus("reviewed", true);
+    const m = metaRef.current;
+    if (!m) return;
+    if (objects.length === 0 && !tag) return setStatus("reviewed", true);
+    if (m.status === "skipped") return setStatus("labeled", true);
+    await flush();
+    go(idx + 1);
   };
 
   // ---------- 编辑 ----------
@@ -1237,7 +1257,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     } else if (k === "delete" || k === "backspace") deleteBox(selected);
     else if (k === "d" || k === "arrowright") go(idx + 1);
     else if (k === "a" || k === "arrowleft") go(idx - 1);
-    else if (k === "enter") setStatus("reviewed", true);
+    else if (k === "enter") finish();
     else if (k === "f") setFitSignal((n) => n + 1);
     else if (k === "h") setShowNames((v) => !v);
     else if (k === "p") predictCurrent();
@@ -1302,11 +1322,14 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
   const selPose = poses.find((p) => p.key === selected) ?? null;
   const placingPose = placing ? poses.find((p) => p.key === placing.key) : null;
   const toolLabel = isSeg ? t("画多边形轮廓 (R)") : isPose ? t("画目标框，再逐个点关键点 (R)") : t("画矩形框 (R)");
+  const enterHint = review ? t("Enter 审核通过") : t("Enter 完成并下一张");
   const hint = isCls
-    ? t("1–9 选类别{auto} · A/D 翻图 · Enter 审核通过 · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张 · ? 全部快捷键", {
+    ? t("1–9 选类别{auto} · A/D 翻图 · {enter} · Del 清除类别 · P 模型预测 · Ctrl+D 沿用上一张 · ? 全部快捷键", {
         auto: autoNext ? t("（选完自动下一张）") : "",
+        enter: enterHint,
       })
-    : t("{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · Enter 审核通过 · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键", {
+    : t("{draw} · S 智能选取 · V 选择 · 1–9 切换类别 · Del 删除 · A/D 翻图 · {enter} · P 预标注 · 滚轮缩放 · 空格或右键拖动 · H 隐藏类别名 · ? 全部快捷键", {
+        enter: enterHint,
         draw: isSeg ? t("R 画轮廓（逐点点击，双击或 Enter 闭合，退格撤点）") : isPose ? t("R 画目标框后逐个点关键点") : t("R 画框"),
       });
   // 点名要加粗，先整句翻译再从 {name} 处分开
@@ -1326,7 +1349,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
     ...(isCls ? [] : [{ label: t("文本提示"), value: "text" }, ...(remote || !xuntongEnabled() ? [] : [{ label: t("巡瞳 AI"), value: "ai" }])]),
   ];
   const filterOpts = [
-    ...FILTERS.map((f) => (f.value === "all" && isAnnotator ? { ...f, label: t("我的全部") } : f)),
+    ...(review ? FILTERS : SOLO_FILTERS).map((f) => (f.value === "all" && isAnnotator ? { ...f, label: t("我的全部") } : f)),
     ...(collab ? [{ label: t("被打回"), value: "rejected" }] : []),
   ];
   const canPredict = aiSrc === "model" ? modelId != null : aiSrc === "ai" ? !!aiModel && !aiError : labels.length > 0;
@@ -1363,7 +1386,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           </span>
         </span>
         <Button size="small" icon={<RightOutlined />} disabled={!ids || idx >= ids.length - 1} onClick={() => go(idx + 1)} />
-        {meta && <Tag color={STATUS_TEXT[meta.status].color}>{STATUS_TEXT[meta.status].text}</Tag>}
+        {meta && (() => {
+          // 不用审核时：已审核的图显示成已标注；没有目标的显示「没有目标」
+          const st = review || meta.status !== "reviewed" ? STATUS_TEXT[meta.status] : objects.length || tag ? STATUS_TEXT.labeled : { text: t("没有目标"), color: undefined };
+          return <Tag color={st.color}>{st.text}</Tag>;
+        })()}
         <Segmented
           size="small"
           value={filter}
@@ -1582,11 +1609,11 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         {(
           [
             [
-              t("翻图和审核"),
+              review ? t("翻图和审核") : t("翻图"),
               [
                 ["A / ←", t("上一张")],
                 ["D / →", t("下一张")],
-                ["Enter", t("审核通过（并跳到下一张）")],
+                ["Enter", review ? t("审核通过（并跳到下一张）") : t("完成并下一张（没有目标的图记为负样本）")],
                 ["P", t("用选中的模型预测当前图")],
                 ["Ctrl + D", t("沿用上一张的标注")],
               ],
@@ -1960,10 +1987,10 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         )}
 
         <section>
-          <h3>{t("审核")}</h3>
+          <h3>{review ? t("审核") : t("完成")}</h3>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <Button size="small" icon={<CheckOutlined />} onClick={() => setStatus("reviewed", true)}>
-              {isAnnotator ? t("提交并下一张") : t("通过并下一张")}
+            <Button size="small" icon={<CheckOutlined />} onClick={finish}>
+              {!review ? t("完成并下一张") : isAnnotator ? t("提交并下一张") : t("通过并下一张")}
             </Button>
             {collab && canReview && meta && (meta.status === "labeled" || meta.status === "reviewed") && (
               <Button size="small" danger icon={<RollbackOutlined />} onClick={() => setRejecting("")}>
@@ -1973,7 +2000,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
             <Button size="small" icon={<StepForwardOutlined />} onClick={() => setStatus("skipped", true)}>
               {t("跳过")}
             </Button>
-            {meta && (meta.status === "reviewed" || meta.status === "skipped") && (
+            {meta && (meta.status === "skipped" || (meta.status === "reviewed" && (review || (objects.length === 0 && !tag)))) && (
               <Button size="small" onClick={() => setStatus(objects.length || tag ? "labeled" : "todo", false)}>
                 {t("撤回")}
               </Button>
@@ -1993,7 +2020,9 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
           <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
             {isAnnotator
               ? t("提交后等审核员审核；被打回的图会出现在「被打回」里，原因显示在图上方。")
-              : t("「跳过」的图不参与训练，可用于模糊、无关的图片。")}
+              : review
+                ? t("「跳过」的图不参与训练，可用于模糊、无关的图片。")
+                : t("标了目标的图自动算已标注，不用审核。确实没有目标的图点「完成」，会作为负样本参与训练；模糊、无关的图点「跳过」，不参与训练。")}
           </div>
         </section>
       </aside>

@@ -190,6 +190,15 @@ export default function App() {
     };
   }, [setTeam, project?.path]);
 
+  // 项目里有没有协作成员（没有就不用审核流程）
+  useEffect(() => {
+    if (!project || team.remote) return;
+    api
+      .teamMembers()
+      .then((m) => setTeam({ hasMembers: m.length > 0 }))
+      .catch(() => setTeam({ hasMembers: false }));
+  }, [setTeam, project?.path, team.remote]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const close = async () => {
     await api.closeProject();
     setProject(null);

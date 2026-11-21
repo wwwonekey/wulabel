@@ -8,6 +8,8 @@ export interface TeamState {
   me: Member | null;
   options: { allowAi: boolean; watermark: boolean; membersEditLabels: boolean };
   shareRunning: boolean;
+  /** 项目里加过协作成员 */
+  hasMembers: boolean;
 }
 
 export interface Highlight {
@@ -59,6 +61,7 @@ export const useApp = create<AppStore>((set, get) => ({
     me: null,
     options: { allowAi: true, watermark: false, membersEditLabels: true },
     shareRunning: false,
+    hasMembers: false,
   },
   setTeam: (t) => set({ team: { ...get().team, ...t } }),
   refreshStats: async () => {
@@ -68,6 +71,10 @@ export const useApp = create<AppStore>((set, get) => ({
     set({ project: { ...p, stats } });
   },
 }));
+
+/** 用不用审核流程：只有协作（有成员、正在共享、或是浏览器里的成员）时才审核；
+ *  一个人标注时标完就算数，界面上不出现「审核」，已审核的图也显示成已标注 */
+export const useReview = () => useApp((s) => s.team.remote || s.team.shareRunning || s.team.hasMembers);
 
 // 本机偏好，读写失败不影响使用
 export const prefs = {

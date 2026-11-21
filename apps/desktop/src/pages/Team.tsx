@@ -124,6 +124,7 @@ export default function Team({ project }: { project: ProjectInfo }) {
         api.teamActivity(100, null, withSaves),
       ]);
       setMembers(m);
+      setTeam({ hasMembers: m.length > 0 });
       setStats(st);
       setActs(a);
     } catch (e) {
