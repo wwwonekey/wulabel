@@ -71,6 +71,14 @@ pub fn run() {
             dlprogress::init(app.handle().clone());
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // 训练、安装等还在进行时关主窗口：先拦下，前端弹确认框
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && commands::intercept_close(window.app_handle()) {
+                    api.prevent_close();
+                }
+            }
+        })
         .register_asynchronous_uri_scheme_protocol("xl", protocol::handle)
         .invoke_handler(tauri::generate_handler![
             commands::create_project,
@@ -144,6 +152,11 @@ pub fn run() {
             commands::env_status,
             commands::save_settings,
             commands::env_install,
+            commands::env_repair,
+            commands::env_cancel,
+            commands::busy_tasks,
+            commands::close_ack,
+            commands::quit_app,
             commands::speed_test,
             commands::list_runs,
             commands::run_detail,

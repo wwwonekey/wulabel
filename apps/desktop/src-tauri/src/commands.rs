@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -163,6 +164,7 @@ pub async fn extract_video(
     let project = state.current()?;
     let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
     tauri::async_runtime::spawn_blocking(move || {
+        let _busy = BusyGuard::new(&BUSY_VIDEO);
         let rt = app.state::<Runtime>();
         let ext = app.state::<video::Extractor>();
         let a = app.clone();
@@ -210,6 +212,7 @@ pub async fn extract_stream(
 ) -> AppResult<video::ExtractResult> {
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _busy = BusyGuard::new(&BUSY_STREAM);
         let rt = app.state::<Runtime>();
         let ext = app.state::<video::Extractor>();
         let a = app.clone();
@@ -517,20 +520,49 @@ pub async fn save_settings(rt: State<'_, Runtime>, settings: Settings) -> AppRes
 
 #[tauri::command]
 pub async fn env_install(app: AppHandle, variant: String) -> AppResult<()> {
+    env_task(app, move |rt, log, progress, step| rt.install(&variant, log, progress, step)).await
+}
+
+/// 只补装环境里缺的组件
+#[tauri::command]
+pub async fn env_repair(app: AppHandle) -> AppResult<()> {
+    env_task(app, |rt, log, progress, step| rt.install_missing(log, progress, step)).await
+}
+
+/// 取消正在进行的安装
+#[tauri::command]
+pub async fn env_cancel(rt: State<'_, Runtime>) -> AppResult<()> {
+    rt.cancel_install();
+    Ok(())
+}
+
+type EnvLog<'a> = &'a (dyn Fn(String) + Sync);
+type EnvProgress<'a> = &'a (dyn Fn(&str, u64, u64, u64) + Sync);
+type EnvStep<'a> = &'a (dyn Fn(u32, u32, String) + Sync);
+
+/// 安装类任务：日志（env-log）、下载进度（env-progress）、第几步（env-step）推给设置页
+async fn env_task(
+    app: AppHandle,
+    f: impl FnOnce(&Runtime, EnvLog<'_>, EnvProgress<'_>, EnvStep<'_>) -> AppResult<()> + Send + 'static,
+) -> AppResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
         let rt = app.state::<Runtime>();
         let a = app.clone();
         let ap = app.clone();
-        rt.install(
-            &variant,
-            &move |line| {
+        let st = app.clone();
+        f(
+            rt.inner(),
+            &move |line: String| {
                 let _ = a.emit("env-log", line);
             },
-            &move |file, downloaded, total, speed| {
+            &move |file: &str, downloaded: u64, total: u64, speed: u64| {
                 let _ = ap.emit(
                     "env-progress",
                     serde_json::json!({ "file": file, "downloaded": downloaded, "total": total, "speed": speed }),
                 );
+            },
+            &move |step: u32, total: u32, text: String| {
+                let _ = st.emit("env-step", serde_json::json!({ "step": step, "total": total, "text": text }));
             },
         )
     })
@@ -675,6 +707,7 @@ pub async fn text_detect(app: AppHandle, state: State<'_, AppState>, image_id: i
 pub async fn text_prelabel_all(app: AppHandle, state: State<'_, AppState>, conf: f64) -> AppResult<PrelabelResult> {
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _busy = BusyGuard::new(&BUSY_PRELABEL);
         let log = assist_log(&app);
         let progress = progress_emitter(app.clone(), "prelabel-progress");
         assist::text_prelabel_all(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), conf, &progress, &log)
@@ -705,6 +738,7 @@ pub async fn ai_detect(app: AppHandle, state: State<'_, AppState>, image_id: i64
 pub async fn ai_prelabel_all(app: AppHandle, state: State<'_, AppState>, model: String, conf: f64) -> AppResult<PrelabelResult> {
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _busy = BusyGuard::new(&BUSY_PRELABEL);
         let log = assist_log(&app);
         let progress = progress_emitter(app.clone(), "prelabel-progress");
         ai::prelabel_all(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), &model, conf, &progress, &log)
@@ -717,6 +751,7 @@ pub async fn ai_prelabel_all(app: AppHandle, state: State<'_, AppState>, model: 
 pub async fn prelabel_all(app: AppHandle, state: State<'_, AppState>, run_id: i64, conf: f64) -> AppResult<PrelabelResult> {
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _busy = BusyGuard::new(&BUSY_PRELABEL);
         let progress = progress_emitter(app.clone(), "prelabel-progress");
         training::prelabel_all(&project, &app.state::<Runtime>(), &app.state::<Predictor>(), run_id, conf, &progress)
     })
@@ -755,12 +790,22 @@ pub async fn live_start(app: AppHandle, state: State<'_, AppState>, run_id: i64,
     let project = state.current()?;
     training::ensure_deployable(&project, run_id, training::Deploy::Live)?;
     tauri::async_runtime::spawn_blocking(move || {
+        // 这次实时验证的编号：进程结束（stopped）时只清掉自己的，不误清后来启动的
+        let live_no = LIVE_NEXT.fetch_add(1, Ordering::Relaxed) + 1;
+        LIVE_ON.store(live_no, Ordering::Relaxed);
         let a = app.clone();
         let sink: deploy::Sink = Arc::new(move |kind, data| {
+            if kind == "stopped" {
+                let _ = LIVE_ON.compare_exchange(live_no, 0, Ordering::Relaxed, Ordering::Relaxed);
+            }
             let _ = a.emit("live", serde_json::json!({ "kind": kind, "data": data }));
         });
         let live = app.state::<Arc<deploy::Live>>().inner().clone();
-        live.start(project, &app.state::<Runtime>(), run_id, &source, conf, sink)
+        let r = live.start(project, &app.state::<Runtime>(), run_id, &source, conf, sink);
+        if r.is_err() {
+            let _ = LIVE_ON.compare_exchange(live_no, 0, Ordering::Relaxed, Ordering::Relaxed);
+        }
+        r
     })
     .await
     .map_err(|e| msg(t!("启动实时验证异常：{e}", e = e)))?
@@ -769,6 +814,117 @@ pub async fn live_start(app: AppHandle, state: State<'_, AppState>, run_id: i64,
 #[tauri::command]
 pub async fn live_stop(live: State<'_, Arc<deploy::Live>>) -> AppResult<()> {
     live.stop();
+    LIVE_ON.store(0, Ordering::Relaxed);
+    Ok(())
+}
+
+// ---------- 关闭软件、更新前：看看有没有正在进行的任务 ----------
+
+static BUSY_STREAM: AtomicUsize = AtomicUsize::new(0);
+static BUSY_VIDEO: AtomicUsize = AtomicUsize::new(0);
+static BUSY_PRELABEL: AtomicUsize = AtomicUsize::new(0);
+/// 正在运行的实时验证的编号，0 表示没有
+static LIVE_ON: AtomicU64 = AtomicU64::new(0);
+static LIVE_NEXT: AtomicU64 = AtomicU64::new(0);
+
+/// 长任务进行中计数，结束（出错、panic 也算）时自动减一
+struct BusyGuard(&'static AtomicUsize);
+
+impl BusyGuard {
+    fn new(c: &'static AtomicUsize) -> Self {
+        c.fetch_add(1, Ordering::Relaxed);
+        BusyGuard(c)
+    }
+}
+
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusyTasks {
+    /// 正在训练的记录 id
+    pub training: Option<i64>,
+    /// 正在安装训练环境（或补装组件）
+    pub installing: bool,
+    /// 实时验证
+    pub live: bool,
+    /// 实时协作共享
+    pub share: bool,
+    /// 视频流采集
+    pub stream: bool,
+    /// 本地视频抽帧
+    pub video: bool,
+    /// 批量预标注
+    pub prelabel: bool,
+}
+
+impl BusyTasks {
+    pub fn any(&self) -> bool {
+        self.training.is_some() || self.installing || self.live || self.share || self.stream || self.video || self.prelabel
+    }
+}
+
+pub fn busy_of(app: &AppHandle) -> BusyTasks {
+    BusyTasks {
+        training: app.state::<Arc<Jobs>>().running(),
+        installing: *app.state::<Runtime>().installing.lock(),
+        live: LIVE_ON.load(Ordering::Relaxed) != 0,
+        share: app.state::<Share>().hub().is_some(),
+        stream: BUSY_STREAM.load(Ordering::Relaxed) > 0,
+        video: BUSY_VIDEO.load(Ordering::Relaxed) > 0,
+        prelabel: BUSY_PRELABEL.load(Ordering::Relaxed) > 0,
+    }
+}
+
+#[tauri::command]
+pub async fn busy_tasks(app: AppHandle) -> AppResult<BusyTasks> {
+    Ok(busy_of(&app))
+}
+
+/// 用户在确认框里点了「仍然关闭」
+static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
+/// 拦下关闭时发给前端的编号，前端收到后回 close_ack
+static CLOSE_SEQ: AtomicU64 = AtomicU64::new(0);
+static CLOSE_ACK: AtomicU64 = AtomicU64::new(0);
+
+/// 关主窗口时还有任务在跑：发 app-close-blocked 让前端弹确认框，返回 true 表示要拦下。
+/// 前端几秒内没回应（界面卡住、还没加载完）就直接退出，免得软件关不掉。
+pub fn intercept_close(app: &AppHandle) -> bool {
+    if QUIT_CONFIRMED.load(Ordering::Relaxed) {
+        return false;
+    }
+    let busy = busy_of(app);
+    if !busy.any() {
+        return false;
+    }
+    let seq = CLOSE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    let _ = app.emit("app-close-blocked", serde_json::json!({ "seq": seq, "busy": busy }));
+    let a = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        if CLOSE_ACK.load(Ordering::Relaxed) < seq {
+            a.exit(0);
+        }
+    });
+    true
+}
+
+/// 前端收到 app-close-blocked、已经弹出确认框
+#[tauri::command]
+pub async fn close_ack(seq: u64) -> AppResult<()> {
+    CLOSE_ACK.fetch_max(seq, Ordering::Relaxed);
+    Ok(())
+}
+
+/// 确认框里点了「仍然关闭」：退出软件（退出时会结束训练等后台进程）
+#[tauri::command]
+pub async fn quit_app(app: AppHandle) -> AppResult<()> {
+    QUIT_CONFIRMED.store(true, Ordering::Relaxed);
+    app.exit(0);
     Ok(())
 }
 

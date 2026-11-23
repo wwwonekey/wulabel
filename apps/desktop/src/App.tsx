@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { App as AntApp, Button, Space, Tooltip } from "antd";
 import {
   AimOutlined,
@@ -13,7 +13,7 @@ import {
   SettingOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { api, ShareStatus, taskName, UpdateInfo } from "./api";
+import { api, appApi, BusyTasks, busyList, OPEN_FEEDBACK_EVENT, ShareStatus, taskName, UpdateInfo } from "./api";
 import { listen } from "./transport";
 import { PageKey, prefs, useApp } from "./store";
 import Home from "./pages/Home";
@@ -57,7 +57,7 @@ const TITLES: Record<PageKey, string> = {
 
 export default function App() {
   const { project, page, setPage, setProject, setTeam, team, openRun } = useApp();
-  const { notification } = AntApp.useApp();
+  const { notification, modal } = AntApp.useApp();
   const [upd, setUpd] = useState<UpdateInfo | null>(null);
 
   // 启动时检查更新（设置里可关）。有新版本一天最多提醒一次，用户点了「不再提醒」的版本不再提。
@@ -138,6 +138,50 @@ export default function App() {
       setFbOpen(true);
     }
   };
+
+  // 别的页面（比如设置页安装失败）要打开反馈弹窗
+  const feedbackRef = useRef(openFeedback);
+  feedbackRef.current = openFeedback;
+  useEffect(() => {
+    const h = () => feedbackRef.current();
+    window.addEventListener(OPEN_FEEDBACK_EVENT, h);
+    return () => window.removeEventListener(OPEN_FEEDBACK_EVENT, h);
+  }, []);
+
+  // 训练、安装等还在进行时关窗口：后端先拦下，这里问一下要不要真的关
+  const closeAsking = useRef(false);
+  useEffect(() => {
+    const un = listen<{ seq: number; busy: BusyTasks }>("app-close-blocked", (e) => {
+      appApi.closeAck(e.payload.seq).catch(() => {});
+      if (closeAsking.current) return;
+      const busy = e.payload.busy;
+      const list = busyList(busy);
+      const onlyTraining = busy.training != null && list.length === 1;
+      closeAsking.current = true;
+      modal.confirm({
+        title: onlyTraining
+          ? t("训练还没结束，关闭软件会中断训练（之后可以选这次训练的模型「接着训」）。确定关闭吗？")
+          : t("还有任务在进行，关闭软件会中断它们。确定关闭吗？"),
+        content: onlyTraining ? undefined : (
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {list.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+        ),
+        okText: t("仍然关闭"),
+        okButtonProps: { danger: true },
+        cancelText: t("先不关"),
+        onOk: () => appApi.quitApp().catch(() => {}),
+        afterClose: () => {
+          closeAsking.current = false;
+        },
+      });
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [modal]);
 
   // 前端热重载后，从后端取回已打开的项目
   useEffect(() => {
