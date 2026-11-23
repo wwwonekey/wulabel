@@ -160,7 +160,7 @@ export default function App() {
       closeAsking.current = true;
       modal.confirm({
         title: onlyTraining
-          ? t("训练还没结束，关闭软件会中断训练（之后可以选这次训练的模型「接着训」）。确定关闭吗？")
+          ? t("训练还没结束，关闭软件会中断训练（之后可以在训练页点「继续训练」，从最后训完的一轮接着跑）。确定关闭吗？")
           : t("还有任务在进行，关闭软件会中断它们。确定关闭吗？"),
         content: onlyTraining ? undefined : (
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>

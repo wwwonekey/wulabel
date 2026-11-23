@@ -68,6 +68,8 @@ pub struct RunInfo {
     pub created_at: i64,
     pub has_weights: bool,
     pub has_onnx: bool,
+    /// 停止、中断或失败的训练，留有断点（resume.pt）：可以从最后一个完整的轮次接着训练
+    pub can_resume: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -115,16 +117,19 @@ fn row_to_info(p: &Project, r: &rusqlite::Row) -> rusqlite::Result<RunInfo> {
     let config: String = r.get(4)?;
     let engine: String = r.get(2)?;
     let external = engine == EXTERNAL;
+    let status: String = r.get(3)?;
+    let can_resume = !external && matches!(status.as_str(), "stopped" | "interrupted" | "failed") && abs.join("resume.pt").exists();
     Ok(RunInfo {
         id: r.get(0)?,
         name: dir.clone(),
         dir: abs.to_string_lossy().into_owned(),
-        status: r.get(3)?,
+        status,
         config: serde_json::from_str(&config).unwrap_or(serde_json::Value::Null),
         best_map50: r.get(5)?,
         created_at: r.get(6)?,
         has_weights: abs.join("best.pt").exists() || (external && abs.join("model.onnx").exists()),
         has_onnx: abs.join("model.onnx").exists(),
+        can_resume,
         engine,
     })
 }
@@ -325,6 +330,38 @@ pub fn start(
         conn.last_insert_rowid()
     };
 
+    launch(p, jobs, id, dir, cmd, sink)?;
+    Ok(id)
+}
+
+/// 从断点继续训练：同一条训练记录、同一份数据集副本，从最后一个完整的轮次接着跑（曲线、日志接在后面）
+pub fn resume(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, id: i64, sink: EventSink) -> AppResult<()> {
+    if jobs.running().is_some() {
+        return Err(msg(t!("已经有训练在进行中")));
+    }
+    let r = get_run(&p, id)?;
+    if !r.can_resume {
+        return Err(msg(t!("这次训练没有留下可以接着跑的进度")));
+    }
+    let dir = PathBuf::from(&r.dir);
+    let cfg_path = dir.join("config.json");
+    let mut cfg: serde_json::Value = serde_json::from_str(&fs::read_to_string(&cfg_path)?)?;
+    let ds = PathBuf::from(cfg["dataset"].as_str().unwrap_or(""));
+    if !ds.exists() {
+        return Err(msg(t!("这次训练用的数据集副本不见了，没法接着训，请重新开始训练")));
+    }
+    cfg["resume"] = serde_json::json!(true);
+    fs::write(&cfg_path, serde_json::to_string_pretty(&cfg)?)?;
+    let cmd = rt.worker(&["train"])?;
+    // 上次的出错信息、停止标记作废
+    let _ = fs::remove_file(dir.join("error.txt"));
+    let _ = fs::remove_file(dir.join("STOP"));
+    set_status(&p, id, "running");
+    launch(p, jobs, id, dir, cmd, sink)
+}
+
+/// 启动训练进程并接管它的输出（新开训练、从断点继续训练共用）
+fn launch(p: Arc<Project>, jobs: Arc<Jobs>, id: i64, dir: PathBuf, mut cmd: std::process::Command, sink: EventSink) -> AppResult<()> {
     cmd.arg(dir.join("config.json")).current_dir(&dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -445,7 +482,7 @@ pub fn start(
         *jobs.current.lock() = None;
         sink(id, serde_json::json!({ "type": "finished", "status": status }));
     });
-    Ok(id)
+    Ok(())
 }
 
 /// 请求停止：写 STOP 文件让训练在当前迭代后停下，60 秒还没退出就强制结束

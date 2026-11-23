@@ -199,6 +199,13 @@ class ZeroWatch:
         return False
 
 
+def save_resume(path: Path, state: dict) -> None:
+    """断点先写临时文件再改名，存到一半被强制结束也不会留下坏文件"""
+    tmp = path.with_name(path.name + ".tmp")
+    torch.save(state, tmp)
+    tmp.replace(path)
+
+
 def is_oom(e: BaseException) -> bool:
     """显卡（CUDA / Apple MPS）或内存不够"""
     if isinstance(e, (torch.cuda.OutOfMemoryError, MemoryError)):
@@ -229,7 +236,8 @@ def run(cfg: dict) -> None:
         new = max(1, batch // 2)
         log(tr("显存不够，批大小从 {batch} 自动调到 {new}，从头重新训练", batch=batch, new=new))
         emit("batch", batch=new, was=batch)
-        for f in ("metrics.jsonl", "best.pt", "last.pt", "eval.json"):
+        cfg["resume"] = False  # 批大小变了，断点作废，从头训
+        for f in ("metrics.jsonl", "best.pt", "last.pt", "eval.json", "resume.pt"):
             try:
                 (out / f).unlink(missing_ok=True)
             except OSError:
@@ -242,6 +250,11 @@ def run_once(cfg: dict) -> None:
     out = Path(cfg["out"])
     out.mkdir(parents=True, exist_ok=True)
     stop_file = out / "STOP"
+    # 从断点继续：上次每轮结束时存的模型、优化器、学习率进度等
+    resume_path = out / "resume.pt"
+    state = torch.load(resume_path, map_location="cpu", weights_only=False) if cfg.get("resume") and resume_path.exists() else None
+    if state is not None:
+        cfg["batch"] = int(state.get("batch", cfg.get("batch", 4)))  # 显存不够自动调小过的话，沿用调小后的
     classes: list[str] = cfg["classes"]
     epochs = int(cfg.get("epochs", 30))
     key = cfg.get("model", "frcnn_mobilenet")
@@ -284,9 +297,14 @@ def run_once(cfg: dict) -> None:
     )
     # 接着上次的模型训练时，预训练权重会被覆盖，没下载到也不用提示
     model = models.build(
-        key, len(classes), img_size, num_keypoints=int(cfg.get("num_keypoints", 17)), warn_missing=not cfg.get("init_weights")
+        key,
+        len(classes),
+        img_size,
+        pretrained=state is None,  # 接着断点训练时权重从断点读，不用再下预训练权重
+        num_keypoints=int(cfg.get("num_keypoints", 17)),
+        warn_missing=not cfg.get("init_weights"),
     ).to(device)
-    if cfg.get("init_weights"):
+    if cfg.get("init_weights") and state is None:
         models.load_init(model, key, cfg["init_weights"], classes)
     # 多尺度训练：输入尺寸在几档之间随机（评估时 torchvision 用最后一档，也就是原尺寸）
     scale = float((cfg.get("aug") or {}).get("scale") or 0)
@@ -331,7 +349,27 @@ def run_once(cfg: dict) -> None:
     zero = ZeroWatch(min(10, epochs))
     t0 = time.time()
     it = 0
-    for epoch in range(1, epochs + 1):
+    start_epoch = 1
+    if state is not None:
+        model.load_state_dict(state["model"])
+        opt.load_state_dict(state["opt"])
+        sched.load_state_dict(state["sched"])
+        if use_amp and state.get("scaler"):
+            scaler.load_state_dict(state["scaler"])
+        if hasattr(task, "load_resume"):
+            task.load_resume(state.get("task") or {}, model, state["epoch"] + 1)
+        it = int(state["it"])
+        best, best_epoch, best_map50 = state["best"], state["best_epoch"], state["best_map50"]
+        zero.streak, zero.fired = state.get("zero", (0, False))
+        t0 = time.time() - float(state.get("elapsed", 0))
+        start_epoch = int(state["epoch"]) + 1
+        # 上次存完这一轮的记录、还没来得及存断点就停了：多出来的轮次删掉，免得曲线重复
+        metrics_file.close()
+        kept = [ln for ln in (out / "metrics.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip() and json.loads(ln)["epoch"] < start_epoch]
+        (out / "metrics.jsonl").write_text("".join(ln + "\n" for ln in kept), encoding="utf-8")
+        metrics_file = (out / "metrics.jsonl").open("a", encoding="utf-8")
+        log(tr("从第 {epoch} 轮接着训练（共 {epochs} 轮）", epoch=start_epoch, epochs=epochs))
+    for epoch in range(start_epoch, epochs + 1):
         if hasattr(task, "on_epoch"):
             task.on_epoch(epoch, model)
         model.train()
@@ -411,6 +449,25 @@ def run_once(cfg: dict) -> None:
             )
             # 中文里 mAP50 两边要空格，别的语言会多出空格，合并掉
             warn("zero_metric", " ".join(text.split()))
+        # 断点：停止、关软件、崩溃后可以从这一轮之后接着训练
+        save_resume(
+            resume_path,
+            {
+                "epoch": epoch,
+                "batch": batch,
+                "model": model.state_dict(),
+                "opt": opt.state_dict(),
+                "sched": sched.state_dict(),
+                "scaler": scaler.state_dict() if use_amp else None,
+                "task": task.resume_state() if hasattr(task, "resume_state") else None,
+                "it": it,
+                "best": best,
+                "best_epoch": best_epoch,
+                "best_map50": best_map50,
+                "zero": (zero.streak, zero.fired),
+                "elapsed": time.time() - t0,
+            },
+        )
     metrics_file.close()
 
     if not (out / "best.pt").exists():
@@ -428,4 +485,7 @@ def run_once(cfg: dict) -> None:
         r = task.evaluate(model, ds, device, batch, len(classes), thresholds=True)
         report["splits"][split] = split_report(r, classes, len(ds))
     (out / "eval.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    if not stopped:
+        # 训完了，断点用不上了（大模型的断点有几百 MB）
+        resume_path.unlink(missing_ok=True)
     emit("done", stopped=stopped, bestMap50=best_map50, bestEpoch=best_epoch)

@@ -125,5 +125,6 @@
   "下载中断（{e}），{n} 秒后接着下…": "Téléchargement interrompu ({e}), reprise dans {n} s…",
   "下载完成：{name}（{size}）": "Téléchargé : {name} ({size})",
   "这张显卡需要 CUDA 12.8 版的 PyTorch，请改选后重新安装": "Ce GPU nécessite PyTorch pour CUDA 12.8 ; sélectionnez-le puis réinstallez",
-  "显卡和装的 PyTorch 版本不匹配，请换一个 CUDA 版本重新安装": "Le GPU ne correspond pas à la version de PyTorch installée ; réinstallez avec une autre version de CUDA"
+  "显卡和装的 PyTorch 版本不匹配，请换一个 CUDA 版本重新安装": "Le GPU ne correspond pas à la version de PyTorch installée ; réinstallez avec une autre version de CUDA",
+  "从第 {epoch} 轮接着训练（共 {epochs} 轮）": "Reprise à l'époque {epoch} (sur {epochs})"
 }

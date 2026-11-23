@@ -283,6 +283,25 @@ class YoloxTask:
     def eval_model(self, model: YoloxDetector) -> YoloxDetector:
         return self.ema.ema if self.ema is not None else model
 
+    def resume_state(self) -> dict:
+        """存进断点：EMA 权重和更新次数、多尺度计数"""
+        return {
+            "ema": self.ema.ema.state_dict() if self.ema is not None else None,
+            "updates": self.ema.updates if self.ema is not None else 0,
+            "it": self._it,
+        }
+
+    def load_resume(self, state: dict, model: YoloxDetector, start_epoch: int):
+        """从断点接着训练：恢复 EMA；已经过了关掉强增强的那一轮，就直接按收尾阶段训练"""
+        if self.ema is not None and state.get("ema") is not None:
+            self.ema.ema.load_state_dict(state["ema"])
+            self.ema.updates = int(state.get("updates", 0))
+        self._it = int(state.get("it", 0))
+        if self.no_aug_epochs and start_epoch > self.epochs - self.no_aug_epochs + 1:
+            if self.train_set is not None:
+                self.train_set.close()
+            model.net.head.use_l1 = True
+
     def loss(self, model: YoloxDetector, batch, device):
         imgs, targets = batch
         imgs = imgs.to(device, non_blocking=True)
