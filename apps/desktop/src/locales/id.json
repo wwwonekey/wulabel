@@ -1539,5 +1539,11 @@
   "勾选两次以上可以对比，也可以一起删除": "Pilih dua atau lebih untuk dibandingkan, atau dihapus sekaligus",
   "最多同时对比 8 次训练": "Maksimal 8 pelatihan bisa dibandingkan sekaligus",
   "删除所选（{n}）": "Hapus yang dipilih ({n})",
-  "删除所选": "Hapus yang dipilih"
+  "删除所选": "Hapus yang dipilih",
+  "中断的训练可以从断点继续：停止、关掉软件或出错后，点「继续训练」从最后训完的一轮接着跑，曲线和日志接在后面。训练记录可以勾选后一起删除。": "Pelatihan yang terhenti bisa dilanjutkan: setelah dihentikan, aplikasi ditutup, atau terjadi error, klik \"Lanjutkan pelatihan\" untuk melanjutkan dari epoch terakhir yang selesai, grafik dan log bersambung dari sebelumnya. Catatan pelatihan juga bisa dipilih lalu dihapus sekaligus.",
+  "训练还在进行时关闭软件或更新软件，会先提示，避免误把训练中断。": "Menutup atau memperbarui aplikasi saat pelatihan berjalan kini meminta konfirmasi, agar pelatihan tidak terhenti tanpa sengaja.",
+  "要等待的操作都有进度条：下载模型（断了会接着下）、开始训练前准备数据、重新评估、导出模型和推理服务包、现场回流导入、合并分包、批量删除图片等。": "Semua yang perlu ditunggu kini punya bilah progres: unduhan model (dilanjutkan jika terputus), persiapan data sebelum pelatihan, evaluasi ulang, ekspor model dan paket layanan inferensi, impor gambar lapangan, penggabungan paket, penghapusan gambar massal, dan lainnya.",
+  "安装训练环境更稳：PyTorch 下载断了能接着下、网慢也不会半小时后失败；缺组件时会提示并能一键补装；安装可以取消；选的 CUDA 版本和显卡、驱动不匹配会先提醒；非中文界面默认用官方下载源。": "Pemasangan lingkungan pelatihan lebih andal: unduhan PyTorch dilanjutkan setelah terputus dan tidak lagi gagal setelah 30 menit di jaringan lambat; komponen yang kurang ditampilkan dan bisa dipasang dengan satu klik; pemasangan bisa dibatalkan; ada peringatan sebelum memasang versi CUDA yang tidak cocok dengan GPU atau driver; antarmuka selain bahasa Mandarin memakai sumber unduhan resmi secara default.",
+  "大项目更顺：一次导入几万张图不再卡住，也能中途停止；数据体检可以停止，分阶段显示进度，查重结果会缓存。": "Proyek besar lebih lancar: mengimpor puluhan ribu gambar tidak lagi membuat aplikasi macet dan bisa dihentikan; pemeriksaan data bisa dihentikan, menampilkan progres per tahap, dan menyimpan cache hasil cek duplikat.",
+  "修复：分类项目没选类别按 Enter 被记成负样本、批量预标注写到刚标好的图上、点图去标注打开的是别的图、翻页后选择被清空、推理服务包依赖装失败后起不来、OpenVINO 装不上导致整个导出失败等问题。": "Perbaikan: di proyek klasifikasi, menekan Enter tanpa kelas menandai gambar sebagai sampel negatif; pra-anotasi massal bisa menulis ke gambar yang baru dianotasi manual; membuka gambar untuk dianotasi malah membuka gambar lain; pilihan hilang saat pindah halaman; paket layanan inferensi tidak bisa dijalankan setelah pemasangan dependensi gagal; gagal memasang OpenVINO membuat seluruh ekspor gagal; dan lainnya."
 }

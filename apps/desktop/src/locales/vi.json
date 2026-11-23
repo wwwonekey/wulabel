@@ -1539,5 +1539,11 @@
   "勾选两次以上可以对比，也可以一起删除": "Chọn từ hai lần trở lên để so sánh, hoặc xóa cùng lúc",
   "最多同时对比 8 次训练": "Chỉ so sánh tối đa 8 lần huấn luyện cùng lúc",
   "删除所选（{n}）": "Xóa mục đã chọn ({n})",
-  "删除所选": "Xóa mục đã chọn"
+  "删除所选": "Xóa mục đã chọn",
+  "中断的训练可以从断点继续：停止、关掉软件或出错后，点「继续训练」从最后训完的一轮接着跑，曲线和日志接在后面。训练记录可以勾选后一起删除。": "Huấn luyện bị gián đoạn có thể chạy tiếp: sau khi dừng, đóng phần mềm hoặc gặp lỗi, nhấn \"Tiếp tục huấn luyện\" để chạy tiếp từ epoch đã xong cuối cùng, biểu đồ và nhật ký nối tiếp phía sau. Có thể chọn nhiều lần huấn luyện để xóa cùng lúc.",
+  "训练还在进行时关闭软件或更新软件，会先提示，避免误把训练中断。": "Đóng hoặc cập nhật phần mềm khi đang huấn luyện sẽ được hỏi trước, tránh vô tình làm gián đoạn huấn luyện.",
+  "要等待的操作都有进度条：下载模型（断了会接着下）、开始训练前准备数据、重新评估、导出模型和推理服务包、现场回流导入、合并分包、批量删除图片等。": "Mọi thao tác phải chờ đều có thanh tiến độ: tải mô hình (bị ngắt sẽ tải tiếp), chuẩn bị dữ liệu trước khi huấn luyện, đánh giá lại, xuất mô hình và gói dịch vụ suy luận, nhập ảnh hiện trường, gộp gói, xóa ảnh hàng loạt, v.v.",
+  "安装训练环境更稳：PyTorch 下载断了能接着下、网慢也不会半小时后失败；缺组件时会提示并能一键补装；安装可以取消；选的 CUDA 版本和显卡、驱动不匹配会先提醒；非中文界面默认用官方下载源。": "Cài đặt môi trường huấn luyện ổn định hơn: tải PyTorch bị ngắt có thể tải tiếp, mạng chậm cũng không còn thất bại sau 30 phút; thiếu thành phần sẽ được liệt kê và cài bổ sung bằng một nút; có thể hủy cài đặt; chọn phiên bản CUDA không hợp với card đồ họa hoặc driver sẽ được cảnh báo trước; giao diện không phải tiếng Trung mặc định dùng nguồn tải chính thức.",
+  "大项目更顺：一次导入几万张图不再卡住，也能中途停止；数据体检可以停止，分阶段显示进度，查重结果会缓存。": "Dự án lớn mượt hơn: nhập hàng chục nghìn ảnh một lúc không còn bị treo và có thể dừng giữa chừng; kiểm tra dữ liệu có thể dừng, hiển thị tiến độ theo giai đoạn và lưu đệm kết quả tìm trùng.",
+  "修复：分类项目没选类别按 Enter 被记成负样本、批量预标注写到刚标好的图上、点图去标注打开的是别的图、翻页后选择被清空、推理服务包依赖装失败后起不来、OpenVINO 装不上导致整个导出失败等问题。": "Sửa lỗi: dự án phân loại chưa chọn lớp mà nhấn Enter bị ghi thành mẫu âm; gán nhãn trước hàng loạt có thể ghi vào ảnh vừa gán nhãn tay; mở ảnh để gán nhãn lại mở ảnh khác; chuyển trang thì mất lựa chọn; gói dịch vụ suy luận không khởi động được sau khi cài phụ thuộc thất bại; không cài được OpenVINO làm cả lần xuất thất bại; và các lỗi khác."
 }

@@ -1539,5 +1539,11 @@
   "勾选两次以上可以对比，也可以一起删除": "Selecione dois ou mais para comparar ou excluir juntos",
   "最多同时对比 8 次训练": "É possível comparar até 8 treinos de uma vez",
   "删除所选（{n}）": "Excluir selecionados ({n})",
-  "删除所选": "Excluir selecionados"
+  "删除所选": "Excluir selecionados",
+  "中断的训练可以从断点继续：停止、关掉软件或出错后，点「继续训练」从最后训完的一轮接着跑，曲线和日志接在后面。训练记录可以勾选后一起删除。": "Treinos interrompidos podem ser retomados: depois de parar, fechar o app ou um erro, clique em \"Retomar treino\" para continuar da última época concluída, com os gráficos e o log seguindo de onde pararam. Também é possível selecionar e excluir vários treinos de uma vez.",
+  "训练还在进行时关闭软件或更新软件，会先提示，避免误把训练中断。": "Fechar ou atualizar o app durante um treino agora pede confirmação, para não interromper o treino sem querer.",
+  "要等待的操作都有进度条：下载模型（断了会接着下）、开始训练前准备数据、重新评估、导出模型和推理服务包、现场回流导入、合并分包、批量删除图片等。": "Tudo que exige espera agora tem barra de progresso: download de modelos (que continua se cair), preparação dos dados antes do treino, reavaliação, exportação de modelos e pacotes de serviço de inferência, importação de imagens de campo, mesclagem de pacotes, exclusão de imagens em lote e mais.",
+  "安装训练环境更稳：PyTorch 下载断了能接着下、网慢也不会半小时后失败；缺组件时会提示并能一键补装；安装可以取消；选的 CUDA 版本和显卡、驱动不匹配会先提醒；非中文界面默认用官方下载源。": "Instalação do ambiente de treino mais confiável: o download do PyTorch continua depois de quedas e não falha mais após 30 minutos em redes lentas; componentes que faltam são listados e podem ser instalados com um clique; a instalação pode ser cancelada; o app avisa antes de instalar uma versão do CUDA que não combina com a GPU ou o driver; interfaces que não estão em chinês usam as fontes oficiais de download por padrão.",
+  "大项目更顺：一次导入几万张图不再卡住，也能中途停止；数据体检可以停止，分阶段显示进度，查重结果会缓存。": "Projetos grandes mais fluidos: importar dezenas de milhares de imagens não trava mais o app e pode ser interrompido; a verificação de saúde pode ser parada, mostra o progresso por etapa e guarda em cache os resultados de duplicadas.",
+  "修复：分类项目没选类别按 Enter 被记成负样本、批量预标注写到刚标好的图上、点图去标注打开的是别的图、翻页后选择被清空、推理服务包依赖装失败后起不来、OpenVINO 装不上导致整个导出失败等问题。": "Correções: em projetos de classificação, apertar Enter sem classe marcava a imagem como amostra negativa; a pré-anotação em lote podia escrever em imagens recém-anotadas à mão; abrir uma imagem para anotar abria outra; a seleção era limpa ao mudar de página; o pacote de serviço de inferência não iniciava após falha na instalação das dependências; se o OpenVINO não instalasse, toda a exportação falhava; e mais."
 }

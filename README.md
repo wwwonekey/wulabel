@@ -28,14 +28,14 @@
 
 ## 下载
 
-最新版 **v0.6.0**（Windows 10 / 11 64 位、macOS 11 及以上、Linux x86_64 和 ARM64；Mac 版 Apple 芯片和 Intel 通用）：
+最新版 **v0.6.1**（Windows 10 / 11 64 位、macOS 11 及以上、Linux x86_64 和 ARM64；Mac 版 Apple 芯片和 Intel 通用）：
 
 | 系统 | 官网下载（国内推荐） | GitHub 下载 |
 |---|---|---|
-| Windows | [Wulabel_0.6.0_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.0_x64-setup.exe) | [Wulabel_0.6.0_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.0/Wulabel_0.6.0_x64-setup.exe) |
-| macOS | [Wulabel_0.6.0_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.0_universal.dmg) | [Wulabel_0.6.0_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.0/Wulabel_0.6.0_universal.dmg) |
-| Linux（Ubuntu、Debian、统信 UOS、麒麟等） | [Wulabel_0.6.0_amd64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.0_amd64.deb) · [Wulabel_0.6.0_amd64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.0_amd64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.0/Wulabel_0.6.0_amd64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.0/Wulabel_0.6.0_amd64.AppImage) |
-| Linux ARM64（飞腾、鲲鹏等） | [Wulabel_0.6.0_arm64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.0_arm64.deb) · [Wulabel_0.6.0_aarch64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.0_aarch64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.0/Wulabel_0.6.0_arm64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.0/Wulabel_0.6.0_aarch64.AppImage) |
+| Windows | [Wulabel_0.6.1_x64-setup.exe](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.1_x64-setup.exe) | [Wulabel_0.6.1_x64-setup.exe](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.1/Wulabel_0.6.1_x64-setup.exe) |
+| macOS | [Wulabel_0.6.1_universal.dmg](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.1_universal.dmg) | [Wulabel_0.6.1_universal.dmg](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.1/Wulabel_0.6.1_universal.dmg) |
+| Linux（Ubuntu、Debian、统信 UOS、麒麟等） | [Wulabel_0.6.1_amd64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.1_amd64.deb) · [Wulabel_0.6.1_amd64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.1_amd64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.1/Wulabel_0.6.1_amd64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.1/Wulabel_0.6.1_amd64.AppImage) |
+| Linux ARM64（飞腾、鲲鹏等） | [Wulabel_0.6.1_arm64.deb](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.1_arm64.deb) · [Wulabel_0.6.1_aarch64.AppImage](https://wulabel.xiaowuiot.com/download/Wulabel_0.6.1_aarch64.AppImage) | [.deb](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.1/Wulabel_0.6.1_arm64.deb) · [.AppImage](https://github.com/xiaowu-iot/wulabel/releases/download/v0.6.1/Wulabel_0.6.1_aarch64.AppImage) |
 
 历史版本：[GitHub Releases](https://github.com/xiaowu-iot/wulabel/releases) · [Gitee 发行版](https://gitee.com/xiaowu-iot/wulabel/releases) · [官网](https://wulabel.xiaowuiot.com/#download)
 
@@ -43,7 +43,7 @@
 
 - **Windows**：双击安装。弹出「Windows 已保护你的电脑」时，点「更多信息」→「仍要运行」（安装包还没有代码签名）。
 - **macOS**：打开 .dmg，把 Wulabel 拖进「应用程序」。提示「无法验证开发者」时，在「应用程序」里右键 Wulabel →「打开」；macOS 15 以后到「系统设置 → 隐私与安全性」点「仍要打开」。提示「已损坏」的话，在终端执行 `xattr -cr /Applications/Wulabel.app`。
-- **Linux**：.deb 用 `sudo apt install ./Wulabel_0.6.0_amd64.deb` 安装，装好后在应用菜单里找 Wulabel；也可以用 .AppImage：`chmod +x Wulabel_0.6.0_amd64.AppImage` 后双击运行，不用安装。ARM 电脑（飞腾、鲲鹏）下载文件名带 arm64 / aarch64 的，用法一样。
+- **Linux**：.deb 用 `sudo apt install ./Wulabel_0.6.1_amd64.deb` 安装，装好后在应用菜单里找 Wulabel；也可以用 .AppImage：`chmod +x Wulabel_0.6.1_amd64.AppImage` 后双击运行，不用安装。ARM 电脑（飞腾、鲲鹏）下载文件名带 arm64 / aarch64 的，用法一样。
 - 装好后到「设置」页点「一键安装训练环境」。只标注、不训练可以跳过。
 
 ## 功能一览
@@ -65,6 +65,7 @@
 
 | 版本 | 日期 | 主要内容 |
 |---|---|---|
+| [v0.6.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.6.1) | 2026-11-23 | 中断的训练可以从断点继续，训练记录可以批量删除；训练中关闭或更新软件会先提示；所有等待的操作都有进度条，下载模型断了接着下；训练环境安装更稳（断点续传、缺组件一键补装、可取消、CUDA 版本检查）；大项目导入和体检不再卡住、可以停止；修复 0.6.0 的十来个问题 |
 | [v0.6.0](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.6.0) | 2026-11-21 | 实时验证和推理服务包支持分割、关键点、分类，视频流支持 HTTP-FLV、HLS、MP4；训练页能查看和调整训练/验证/测试集；一个人标注不用审核；训练前检查步数，指标一直为 0 或没下到预训练权重时提示原因；评估页给结论，推荐阈值带到部署页；标注页、数据页、体检多处易用性改进 |
 | [v0.5.2](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.5.2) | 2026-11-20 | 教程和官网链接按界面语言打开，服务端提示跟随界面语言；非中文界面默认隐藏巡瞳 AI（设置里可打开）；修正几处译文；Linux 抽帧自动下载 ffmpeg |
 | [v0.5.1](https://github.com/xiaowu-iot/wulabel/releases/tag/v0.5.1) | 2026-11-20 | 浅色主题（默认跟随系统，设置里可切换）；窄窗口和外文界面下首页新手引导、左侧导航不再挤在一起 |
