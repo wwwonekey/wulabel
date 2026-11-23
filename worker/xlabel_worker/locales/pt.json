@@ -123,5 +123,7 @@
   "下载 {name}：{url}": "Baixando {name}: {url}",
   "连接断开，只收到 {got} / {total}": "Conexão perdida após receber {got} de {total}",
   "下载中断（{e}），{n} 秒后接着下…": "Download interrompido ({e}); retomando em {n} s…",
-  "下载完成：{name}（{size}）": "Baixado {name} ({size})"
+  "下载完成：{name}（{size}）": "Baixado {name} ({size})",
+  "这张显卡需要 CUDA 12.8 版的 PyTorch，请改选后重新安装": "Esta GPU precisa do PyTorch para CUDA 12.8; selecione-o e reinstale",
+  "显卡和装的 PyTorch 版本不匹配，请换一个 CUDA 版本重新安装": "A GPU não é compatível com a versão do PyTorch instalada; reinstale com outra versão do CUDA"
 }

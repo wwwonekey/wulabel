@@ -4,6 +4,8 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,9 @@ pub struct Settings {
     /// "china" 用国内镜像，"official" 用官方源
     #[serde(default = "default_mirror")]
     pub mirror: String,
+    /// 下载源是用户自己选的；没选过时跟着界面语言走（简体中文用国内镜像，其他语言用官方源）
+    #[serde(default)]
+    pub mirror_chosen: bool,
     /// 训练环境安装位置（Python、PyTorch、预训练权重），为空用系统默认的本机数据目录
     #[serde(default)]
     pub env_root: Option<String>,
@@ -40,9 +45,23 @@ fn default_mirror() -> String {
     "china".into()
 }
 
+/// 没选过下载源时的默认值：界面是简体中文用国内镜像，其他语言用官方源
+fn auto_mirror() -> String {
+    if crate::i18n::lang() == "zh" { "china".into() } else { "official".into() }
+}
+
 impl Default for Settings {
     fn default() -> Self {
-        Settings { python: None, uv: None, mirror: default_mirror(), env_root: None, ffmpeg: None, ai_url: None, ai_key: None }
+        Settings {
+            python: None,
+            uv: None,
+            mirror: default_mirror(),
+            mirror_chosen: false,
+            env_root: None,
+            ffmpeg: None,
+            ai_url: None,
+            ai_key: None,
+        }
     }
 }
 
@@ -70,14 +89,40 @@ pub struct EnvStatus {
     pub error: Option<String>,
     pub settings: Settings,
     pub env_dir: String,
+    /// 环境里缺的组件（pip 包名），可以在设置里「补装」
+    pub missing: Vec<String>,
+    /// 装的是显卡版 PyTorch，但显卡用不了，现在用 CPU 训练
+    pub cpu_fallback: bool,
+    /// 有 NVIDIA 显卡但驱动太旧、只能装 CPU 版时，要更新到的驱动版本
+    pub min_driver: Option<String>,
 }
+
+/// 训练环境需要的 Python 组件：(模块名, pip 包名, 用户自己的环境也必须有)
+const PACKAGES: [(&str, &str, bool); 5] = [
+    ("numpy", "numpy", true),
+    ("PIL", "pillow", true),
+    ("onnx", "onnx", false),
+    ("onnxruntime", "onnxruntime", false),
+    ("cv2", "opencv-python-headless", false),
+];
 
 pub struct Runtime {
     pub config_dir: PathBuf,
     pub data_dir: PathBuf,
     pub worker_dir: PathBuf,
     pub installing: Mutex<bool>,
+    /// 点了「取消」：停掉正在下载的文件和 uv 子进程
+    cancel: AtomicBool,
     check_cache: Mutex<Option<(String, serde_json::Value)>>,
+}
+
+/// 安装日志（<环境目录>/install.log）：每行带时间，追加写
+type LogFile = Mutex<Option<fs::File>>;
+
+fn write_log(f: &LogFile, line: &str) {
+    if let Some(f) = f.lock().as_mut() {
+        let _ = writeln!(f, "[{}] {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), line);
+    }
 }
 
 /// macOS / Linux 上常见的程序目录。从访达、Dock 启动的应用拿不到终端里的 PATH，Homebrew 装的 ffmpeg、uv 要单独找
@@ -102,21 +147,107 @@ pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
 
 impl Runtime {
     pub fn new(config_dir: PathBuf, data_dir: PathBuf, worker_dir: PathBuf) -> Self {
-        Runtime { config_dir, data_dir, worker_dir, installing: Mutex::new(false), check_cache: Mutex::new(None) }
+        Runtime {
+            config_dir,
+            data_dir,
+            worker_dir,
+            installing: Mutex::new(false),
+            cancel: AtomicBool::new(false),
+            check_cache: Mutex::new(None),
+        }
     }
 
     pub fn settings(&self) -> Settings {
-        fs::read_to_string(self.config_dir.join("settings.json"))
+        let mut s: Settings = fs::read_to_string(self.config_dir.join("settings.json"))
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if !s.mirror_chosen {
+            // 旧版本默认就是 china，存着 official 说明是用户自己改的
+            if s.mirror == "official" {
+                s.mirror_chosen = true;
+            } else {
+                s.mirror = auto_mirror();
+            }
+        }
+        s
     }
 
     pub fn save_settings(&self, s: &Settings) -> AppResult<()> {
+        let mut s = s.clone();
+        // 下载源和现在的不一样，就是用户选过了，以后不再跟着界面语言变
+        let cur = self.settings();
+        s.mirror_chosen = cur.mirror_chosen || s.mirror != cur.mirror;
         fs::create_dir_all(&self.config_dir)?;
-        fs::write(self.config_dir.join("settings.json"), serde_json::to_string_pretty(s)?)?;
+        fs::write(self.config_dir.join("settings.json"), serde_json::to_string_pretty(&s)?)?;
         *self.check_cache.lock() = None;
         Ok(())
+    }
+
+    pub fn install_log_path(&self) -> PathBuf {
+        self.root().join("install.log")
+    }
+
+    fn open_install_log(&self) -> LogFile {
+        let path = self.install_log_path();
+        let _ = fs::create_dir_all(self.root());
+        // 太大就重新开始记
+        if fs::metadata(&path).map(|m| m.len() > 2 * 1024 * 1024).unwrap_or(false) {
+            let _ = fs::remove_file(&path);
+        }
+        Mutex::new(fs::OpenOptions::new().create(true).append(true).open(&path).ok())
+    }
+
+    /// 取消正在进行的安装（下载停下、uv 进程结束）
+    pub fn cancel_install(&self) {
+        if *self.installing.lock() {
+            self.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn check_cancel(&self) -> AppResult<()> {
+        if self.cancel.load(Ordering::Relaxed) {
+            Err(msg(t!("已取消安装")))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 运行安装命令：点了取消会结束这个进程
+    fn run_step(&self, c: Command, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
+        let r = run_cancellable(c, log, Some(&self.cancel));
+        self.check_cancel()?;
+        r
+    }
+
+    /// 安装类任务的公共部分：同一时间只能装一个、可取消、日志同时写到 install.log
+    fn guarded(
+        &self,
+        title: &str,
+        log: &(dyn Fn(String) + Sync),
+        f: impl FnOnce(&(dyn Fn(String) + Sync)) -> AppResult<()>,
+    ) -> AppResult<()> {
+        {
+            let mut g = self.installing.lock();
+            if *g {
+                return Err(msg(t!("已经在安装了")));
+            }
+            *g = true;
+        }
+        self.cancel.store(false, Ordering::Relaxed);
+        let file = self.open_install_log();
+        write_log(&file, &format!("===== {title} · Wulabel {} =====", env!("CARGO_PKG_VERSION")));
+        let logf = |line: String| {
+            write_log(&file, &line);
+            log(line);
+        };
+        let r = f(&logf);
+        if let Err(e) = &r {
+            write_log(&file, &format!("ERROR: {e}"));
+        }
+        *self.installing.lock() = false;
+        *self.check_cache.lock() = None;
+        r
     }
 
     /// 训练环境根目录：下面有 env（虚拟环境）、python（解释器）、torch（预训练权重）、bin（uv）
@@ -248,9 +379,22 @@ impl Runtime {
             },
             None => (None, None),
         };
-        let ready = info.as_ref().map(|v| v.get("torch").is_some() && v.get("error").is_none()).unwrap_or(false);
+        let managed = settings.python.as_deref().map(str::trim).unwrap_or("").is_empty();
+        let missing = info.as_ref().map(missing_packages).unwrap_or_default();
+        // 缺必需的组件也不算就绪（软件自己装的环境，装的那几个都要齐）
+        let required_missing = PACKAGES.iter().any(|(_, pkg, must)| (*must || managed) && missing.iter().any(|m| m == pkg));
+        let ready = info.as_ref().map(|v| v.get("torch").is_some() && v.get("error").is_none()).unwrap_or(false) && !required_missing;
+        // 显卡版 PyTorch（torch.version.cuda 有值）却用不了显卡
+        let cpu_fallback = info
+            .as_ref()
+            .map(|v| v["cuda"] == false && v["cudaVersion"].as_str().is_some_and(|s| !s.is_empty()))
+            .unwrap_or(false);
+        let min_driver = (gpu.is_some() && variant == "cpu").then(|| oldest_cuda_driver().to_string());
         EnvStatus {
-            managed: settings.python.as_deref().map(str::trim).unwrap_or("").is_empty(),
+            managed,
+            missing,
+            cpu_fallback,
+            min_driver,
             python: python.map(|p| p.to_string_lossy().into_owned()),
             ready,
             info,
@@ -264,7 +408,8 @@ impl Runtime {
         }
     }
 
-    /// 确保环境里有某个 Python 包，没有就用 uv 装上（OpenCV、OpenVINO 等按需安装）
+    /// 确保环境里有某个 Python 包，没有就用 uv 装上（OpenCV、OpenVINO 等按需安装）。
+    /// 安装时右下角显示「安装组件 xxx」，输出也写到 install.log
     pub fn ensure_package(&self, module: &str, package: &str, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
         let py = self.python().ok_or_else(|| msg(t!("还没有训练环境，请先到「设置」里安装")))?;
         let ok = command(&py).args(["-c", &format!("import {module}")]).output().map(|o| o.status.success()).unwrap_or(false);
@@ -273,33 +418,74 @@ impl Runtime {
         }
         let uv = self.uv().ok_or_else(|| msg(t!("缺少 {package}，并且没有找到 uv，无法自动安装", package = package)))?;
         log(t!("首次使用，正在安装 {package}…", package = package));
+        let name = t!("安装组件 {package}", package = package);
+        crate::dlprogress::forward(&serde_json::json!({ "type": "download", "name": &name, "done": 0, "total": 0, "speed": 0 }));
         let mut c = command(&uv);
         c.args(["pip", "install", "--python"]).arg(&py).arg(package);
         if self.settings().mirror == "china" {
             c.args(["--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple"]);
         }
-        run_logged(c, log)
+        let file = self.open_install_log();
+        write_log(&file, &format!("===== pip install {package} ====="));
+        let r = run_logged(c, &|line: String| {
+            write_log(&file, &line);
+            log(line);
+        });
+        if let Err(e) = &r {
+            write_log(&file, &format!("ERROR: {e}"));
+        }
+        let mut ev = serde_json::json!({ "type": "download", "name": &name, "done": 0, "total": 0, "speed": 0 });
+        ev[if r.is_ok() { "finished" } else { "failed" }] = serde_json::Value::Bool(true);
+        crate::dlprogress::forward(&ev);
+        r
     }
 
     /// 安装训练环境：uv → Python → PyTorch → 其他依赖 → 自检。
-    /// log 收到每一行输出；progress 收到大文件下载进度（文件名、已下载字节、总字节、瞬时速度 字节/秒）。
+    /// log 收到每一行输出；progress 收到大文件下载进度（文件名、已下载字节、总字节、瞬时速度 字节/秒）；
+    /// step 收到当前第几步（第几步、共几步、这一步在做什么）。
     pub fn install(
         &self,
         variant: &str,
         log: &(dyn Fn(String) + Sync),
         progress: &(dyn Fn(&str, u64, u64, u64) + Sync),
+        step: &(dyn Fn(u32, u32, String) + Sync),
     ) -> AppResult<()> {
-        {
-            let mut g = self.installing.lock();
-            if *g {
-                return Err(msg(t!("已经在安装了")));
+        self.guarded(&format!("install {variant}"), log, |log| self.install_inner(variant, log, progress, step))
+    }
+
+    /// 只补装环境里缺的组件（numpy、pillow、onnx、opencv 等），不动 PyTorch
+    pub fn install_missing(
+        &self,
+        log: &(dyn Fn(String) + Sync),
+        progress: &(dyn Fn(&str, u64, u64, u64) + Sync),
+        step: &(dyn Fn(u32, u32, String) + Sync),
+    ) -> AppResult<()> {
+        self.guarded("install missing", log, |log| {
+            *self.check_cache.lock() = None;
+            let info = self.check(true)?;
+            let pkgs = missing_packages(&info);
+            if pkgs.is_empty() {
+                log(t!("组件都齐了，不用补装"));
+                return Ok(());
             }
-            *g = true;
-        }
-        let r = self.install_inner(variant, log, progress);
-        *self.installing.lock() = false;
-        *self.check_cache.lock() = None;
-        r
+            let py = self.python().ok_or_else(|| msg(t!("还没有训练环境，请先到「设置」里安装")))?;
+            step(1, 2, t!("安装 {pkgs}", pkgs = pkgs.join("、")));
+            let uv = match self.uv() {
+                Some(u) => u,
+                None => download_uv(&self.root().join("bin"), self.settings().mirror == "china", log, progress, &self.cancel)?,
+            };
+            let mut c = command(&uv);
+            c.args(["pip", "install", "--python"]).arg(&py).args(&pkgs);
+            if self.settings().mirror == "china" {
+                c.args(["--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple"]);
+            }
+            self.run_step(c, log)?;
+            step(2, 2, t!("检查环境"));
+            *self.check_cache.lock() = None;
+            let v = self.check(true)?;
+            log(t!("完成：{v}", v = v));
+            Ok(())
+        })
     }
 
     fn install_inner(
@@ -307,15 +493,19 @@ impl Runtime {
         variant: &str,
         log: &(dyn Fn(String) + Sync),
         progress: &(dyn Fn(&str, u64, u64, u64) + Sync),
+        step: &(dyn Fn(u32, u32, String) + Sync),
     ) -> AppResult<()> {
         let china = self.settings().mirror == "china";
+        step(1, 5, t!("准备 uv（Python 环境管理工具）"));
         log(t!("【1/5】准备 uv（Python 环境管理工具）"));
         let uv = match self.uv() {
             Some(u) => u,
-            None => download_uv(&self.root().join("bin"), log)?,
+            None => download_uv(&self.root().join("bin"), china, log, progress, &self.cancel)?,
         };
         log(t!("使用 {path}", path = uv.display()));
+        self.check_cancel()?;
 
+        step(2, 5, t!("创建 Python 3.11 环境"));
         log(t!("【2/5】创建 Python 3.11 环境（首次需要下载约 30MB）"));
         let env = self.env_dir();
         let mut c = command(&uv);
@@ -324,7 +514,7 @@ impl Runtime {
         if china {
             c.env("UV_PYTHON_INSTALL_MIRROR", "https://registry.npmmirror.com/-/binary/python-build-standalone");
         }
-        run_logged(c, log)?;
+        self.run_step(c, log)?;
         let py = self.managed_python();
 
         let size = match variant {
@@ -332,6 +522,7 @@ impl Runtime {
             "mps" => "300MB",
             _ => "3GB",
         };
+        step(3, 5, t!("安装 PyTorch（{variant}，约 {size}，耗时最长）", variant = variant, size = size));
         log(t!("【3/5】安装 PyTorch（{variant}，约 {size}，耗时最长）", variant = variant, size = size));
         let pypi = if china { "https://mirrors.aliyun.com/pypi/simple" } else { "https://pypi.org/simple" };
         let official = format!("https://download.pytorch.org/whl/{variant}");
@@ -340,12 +531,12 @@ impl Runtime {
             let mut c = command(&uv);
             c.args(["pip", "install", "--python"]).arg(&py);
             c.args(["torch", "torchvision", "--index-url", pypi]);
-            run_logged(c, log)?;
+            self.run_step(c, log)?;
         } else if variant == "cpu" {
             let mut c = command(&uv);
             c.args(["pip", "install", "--python"]).arg(&py);
             c.args(["torch", "torchvision", "--index-url"]).arg(&official).args(["--extra-index-url", pypi]);
-            run_logged(c, log)?;
+            self.run_step(c, log)?;
         } else {
             // 精确指定带 +cuXXX 的版本，避免装成同版本号的 CPU 包
             let page = http_get_text(&format!("{official}/torch/"))
@@ -368,18 +559,19 @@ impl Runtime {
                 }
                 official.clone()
             };
-            // 先把两个大 wheel 自己下下来（带进度条），再本地安装；任何环节出错则退回 uv 直接装
+            // 先把两个大 wheel 自己下下来（带进度条、断线续传），再本地安装；下不下来再退回 uv 直接装
             match self.download_wheels(&base, &torch_v, &vision_v, variant, log, progress) {
                 Ok((torch_whl, vision_whl)) => {
                     log(t!("下载完成，正在安装…"));
                     let mut c = command(&uv);
                     c.args(["pip", "install", "--python"]).arg(&py).arg(&torch_whl).arg(&vision_whl);
                     c.args(["--index-url", pypi]);
-                    run_logged(c, log)?;
+                    self.run_step(c, log)?;
                     let _ = fs::remove_dir_all(self.root().join("wheels"));
                 }
                 Err(e) => {
-                    log(t!("自带下载不可用（{e}），改用 uv 下载", e = e));
+                    self.check_cancel()?;
+                    log(t!("自带下载没成功（{e}），改用 uv 下载。uv 会从头重新下载、没有进度条，请耐心等", e = e));
                     let mut c = command(&uv);
                     c.args(["pip", "install", "--python"]).arg(&py);
                     c.arg(format!("torch=={torch_v}+{variant}")).arg(format!("torchvision=={vision_v}+{variant}"));
@@ -388,7 +580,9 @@ impl Runtime {
                     } else {
                         c.args(["--index-url"]).arg(&official).args(["--extra-index-url", pypi]);
                     }
-                    run_logged(c, log)?;
+                    self.run_step(c, log)?;
+                    // 装好了，没下完的 .part 不用留着
+                    let _ = fs::remove_dir_all(self.root().join("wheels"));
                 }
             }
         }
@@ -396,18 +590,24 @@ impl Runtime {
             return Err(msg(t!("装好的 PyTorch 不是显卡版本，请改用「官方源」后重新安装")));
         }
 
+        step(4, 5, t!("安装 numpy、pillow、onnx、opencv 等组件"));
         log(t!("【4/5】安装其他依赖"));
         let mut c = command(&uv);
         c.args(["pip", "install", "--python"]).arg(&py).args(["numpy", "pillow", "onnx", "onnxruntime", "opencv-python-headless"]);
         if china {
             c.args(["--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple"]);
         }
-        run_logged(c, log)?;
+        self.run_step(c, log)?;
 
+        step(5, 5, t!("检查环境"));
         log(t!("【5/5】检查环境"));
         *self.check_cache.lock() = None;
         let v = self.check(true)?;
         log(t!("完成：{v}", v = v));
+        // 新显卡配旧 CUDA 版本等问题，envcheck 会给出说明
+        if let Some(e) = v.get("error").and_then(|e| e.as_str()) {
+            return Err(msg(e.to_string()));
+        }
         if variant.starts_with("cu") && v["cuda"] != true {
             return Err(msg(t!("PyTorch 已安装，但显卡不可用。请更新 NVIDIA 驱动后重新安装，或改用 CPU 版本")));
         }
@@ -429,9 +629,9 @@ impl Runtime {
         let torch_whl = dir.join(format!("torch-{torch_v}+{variant}{}", wheel_suffix()));
         let vision_whl = dir.join(format!("torchvision-{vision_v}+{variant}{}", wheel_suffix()));
         log(t!("下载 torch（{torch_v}+{variant}）", torch_v = torch_v, variant = variant));
-        download_file(&wheel_url(base, "torch", torch_v, variant), &torch_whl, &|d, t, s| progress("torch", d, t, s))?;
+        download_file(&wheel_url(base, "torch", torch_v, variant), &torch_whl, log, &|d, t, s| progress("torch", d, t, s), &self.cancel)?;
         log(t!("下载 torchvision（{vision_v}+{variant}）", vision_v = vision_v, variant = variant));
-        download_file(&wheel_url(base, "torchvision", vision_v, variant), &vision_whl, &|d, t, s| progress("torchvision", d, t, s))?;
+        download_file(&wheel_url(base, "torchvision", vision_v, variant), &vision_whl, log, &|d, t, s| progress("torchvision", d, t, s), &self.cancel)?;
         Ok((torch_whl, vision_whl))
     }
 }
@@ -441,42 +641,161 @@ fn wheel_url(base: &str, pkg: &str, version: &str, variant: &str) -> String {
     format!("{base}/{pkg}-{version}%2B{variant}{}", wheel_suffix())
 }
 
-/// 流式下载到文件，边下边回调（已下载字节、总字节、瞬时速度 字节/秒）
-fn download_file(url: &str, dest: &Path, progress: &(dyn Fn(u64, u64, u64) + Sync)) -> AppResult<()> {
-    let resp = ureq::get(url).timeout(std::time::Duration::from_secs(1800)).call().map_err(|e| msg(e.to_string()))?;
-    let total: u64 = resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0);
+/// 下载用的 HTTP 客户端：不限总时长（大文件、慢网络也能下完），连不上 20 秒、一分钟收不到数据才算断了
+fn agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(20))
+        .timeout_read(Duration::from_secs(60))
+        .timeout_write(Duration::from_secs(60))
+        .build()
+}
+
+/// Content-Range（bytes 100-199/1000 或 bytes */1000）里的总大小
+fn range_total(h: Option<&str>) -> Option<u64> {
+    h?.rsplit('/').next()?.trim().parse().ok()
+}
+
+/// 下载断了最多连续重试几次（这次有进展就重新计数）
+const DOWNLOAD_RETRIES: u32 = 5;
+
+/// 流式下载到文件，边下边回调（已下载字节（含续传的部分）、总字节、瞬时速度 字节/秒）。
+/// 先写到 .part，断了用 Range 从断点接着下（上次没下完的也接着下），没进展的失败最多连续重试 5 次；
+/// 服务器不支持断点续传时不重试，直接报错，由调用方换别的方式。cancel 置位时尽快停下。
+fn download_file(
+    url: &str,
+    dest: &Path,
+    log: &(dyn Fn(String) + Sync),
+    progress: &(dyn Fn(u64, u64, u64) + Sync),
+    cancel: &AtomicBool,
+) -> AppResult<()> {
     if let Some(p) = dest.parent() {
         fs::create_dir_all(p)?;
     }
     let tmp = dest.with_extension("part");
-    let mut file = fs::File::create(&tmp)?;
-    let mut reader = resp.into_reader();
-    let mut buf = vec![0u8; 256 * 1024];
-    let mut downloaded: u64 = 0;
+    // 上次下完了、但后面的步骤失败：当成断点续传，服务器会告诉我们已经齐了
+    if dest.is_file() && !tmp.exists() {
+        let _ = fs::rename(dest, &tmp);
+    }
+    fn size(p: &Path) -> u64 {
+        fs::metadata(p).map(|m| m.len()).unwrap_or(0)
+    }
+    let agent = agent();
     let start = std::time::Instant::now();
-    let mut last = std::time::Instant::now();
-    let mut last_bytes: u64 = 0;
+    let start_bytes = size(&tmp);
+    let mut fails = 0u32;
     loop {
-        let n = reader.read(&mut buf)?;
-        if n == 0 {
-            break;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(msg(t!("已取消安装")));
         }
-        file.write_all(&buf[..n])?;
-        downloaded += n as u64;
-        if last.elapsed() >= std::time::Duration::from_millis(300) {
-            let dt = last.elapsed().as_secs_f64().max(0.001);
-            let speed = ((downloaded - last_bytes) as f64 / dt) as u64;
-            progress(downloaded, total, speed);
-            last = std::time::Instant::now();
-            last_bytes = downloaded;
+        let before = size(&tmp);
+        match download_once(&agent, url, &tmp, before, progress, cancel) {
+            Ok(total) => {
+                let got = size(&tmp);
+                let avg = (got.saturating_sub(start_bytes) as f64 / start.elapsed().as_secs_f64().max(0.001)) as u64;
+                progress(got, total.max(got), avg);
+                fs::rename(&tmp, dest)?;
+                return Ok(());
+            }
+            Err((e, retry)) => {
+                if cancel.load(Ordering::Relaxed) {
+                    return Err(msg(t!("已取消安装")));
+                }
+                if !retry {
+                    return Err(msg(e));
+                }
+                // 这次下到了 1MB 以上就算有进展，重新计数
+                if size(&tmp) > before + 1024 * 1024 {
+                    fails = 0;
+                } else {
+                    fails += 1;
+                }
+                if fails >= DOWNLOAD_RETRIES {
+                    return Err(msg(t!("重试 {n} 次还是没下下来：{e}", n = DOWNLOAD_RETRIES, e = e)));
+                }
+                let wait = 2 * (fails as u64 + 1);
+                log(t!("下载中断（{e}），{s} 秒后从断点接着下…", e = e, s = wait));
+                for _ in 0..wait * 10 {
+                    if cancel.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
         }
     }
-    file.flush()?;
-    drop(file);
-    let avg = (downloaded as f64 / start.elapsed().as_secs_f64().max(0.001)) as u64;
-    progress(downloaded, total.max(downloaded), avg);
-    fs::rename(&tmp, dest)?;
-    Ok(())
+}
+
+/// 一次下载尝试，从 have 字节处接着下。成功返回总大小（不知道时为 0）；失败返回（原因, 值不值得重试）
+fn download_once(
+    agent: &ureq::Agent,
+    url: &str,
+    tmp: &Path,
+    have: u64,
+    progress: &(dyn Fn(u64, u64, u64) + Sync),
+    cancel: &AtomicBool,
+) -> Result<u64, (String, bool)> {
+    let mut req = agent.get(url);
+    if have > 0 {
+        req = req.set("Range", &format!("bytes={have}-"));
+    }
+    let resp = match req.call() {
+        Ok(r) => r,
+        Err(ureq::Error::Status(416, r)) if have > 0 => {
+            // 续传的起点已经是文件末尾：其实已经下完了
+            if range_total(r.header("Content-Range")) == Some(have) {
+                return Ok(have);
+            }
+            let _ = fs::remove_file(tmp);
+            return Err(("HTTP 416".to_string(), true));
+        }
+        // 服务器忙、限流可以重试；404 之类的直接失败
+        Err(ureq::Error::Status(code, _)) => return Err((format!("HTTP {code}"), code == 408 || code == 429 || code >= 500)),
+        Err(e) => return Err((e.to_string(), true)),
+    };
+    let partial = resp.status() == 206;
+    // 能不能断点续传：这次就是续传的，或者服务器声明支持 Range
+    let resumable = partial || resp.header("Accept-Ranges").is_some_and(|v| v.contains("bytes"));
+    let total: u64 = if partial {
+        range_total(resp.header("Content-Range")).unwrap_or(0)
+    } else {
+        resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0)
+    };
+    // 服务器不认 Range、返回了整个文件：从头写
+    let opened = if partial { fs::OpenOptions::new().append(true).open(tmp) } else { fs::File::create(tmp) };
+    let mut file = opened.map_err(|e| (e.to_string(), false))?;
+    let mut done = if partial { have } else { 0 };
+    progress(done, total, 0);
+    let mut reader = resp.into_reader();
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut last = std::time::Instant::now();
+    let mut last_bytes = done;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            return Err((t!("已取消安装"), false));
+        }
+        let n = match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => return Err((e.to_string(), resumable)),
+        };
+        file.write_all(&buf[..n]).map_err(|e| (e.to_string(), false))?;
+        done += n as u64;
+        if last.elapsed() >= Duration::from_millis(300) {
+            let dt = last.elapsed().as_secs_f64().max(0.001);
+            progress(done, total, ((done - last_bytes) as f64 / dt) as u64);
+            last = std::time::Instant::now();
+            last_bytes = done;
+        }
+    }
+    file.flush().map_err(|e| (e.to_string(), false))?;
+    // 核对大小：连接提前断开时 read 也可能返回 0
+    if total > 0 && done != total {
+        if done > total {
+            let _ = fs::remove_file(tmp);
+        }
+        return Err((t!("下载不完整（{done} / {total} 字节）", done = done, total = total), resumable));
+    }
+    Ok(total)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -532,6 +851,11 @@ fn measure_speed(url: &str) -> Option<f64> {
         return None;
     }
     Some(got as f64 / (1024.0 * 1024.0) / secs)
+}
+
+/// 环境检查结果里缺的组件（pip 包名）。旧版 worker 没报的模块不算缺
+fn missing_packages(info: &serde_json::Value) -> Vec<String> {
+    PACKAGES.iter().filter(|(m, _, _)| info[*m] == false).map(|(_, pkg, _)| pkg.to_string()).collect()
 }
 
 /// 装好的 torch 是不是想要的 CUDA 版本（镜像有时会装成 CPU 版）
@@ -605,7 +929,12 @@ fn last_lines(s: &str, n: usize) -> String {
 }
 
 /// 运行命令，stdout 和 stderr 逐行回调；失败时带上最后几行输出
-pub fn run_logged(mut c: Command, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
+pub fn run_logged(c: Command, log: &(dyn Fn(String) + Sync)) -> AppResult<()> {
+    run_cancellable(c, log, None)
+}
+
+/// 同 run_logged；cancel 置位时结束这个进程
+fn run_cancellable(mut c: Command, log: &(dyn Fn(String) + Sync), cancel: Option<&AtomicBool>) -> AppResult<()> {
     c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = c.spawn().map_err(|e| msg(t!("无法启动 {prog}：{e}", prog = format!("{:?}", c.get_program()), e = e)))?;
     let out = child.stdout.take().unwrap();
@@ -629,11 +958,20 @@ pub fn run_logged(mut c: Command, log: &(dyn Fn(String) + Sync)) -> AppResult<()
             log(line);
         }
     };
-    std::thread::scope(|s| {
+    let status = std::thread::scope(|s| {
         s.spawn(|| pump(Box::new(out)));
         s.spawn(|| pump(Box::new(err)));
-    });
-    let status = child.wait()?;
+        // 等进程结束；点了取消就结束它
+        loop {
+            if let Some(st) = child.try_wait()? {
+                return Ok::<_, std::io::Error>(st);
+            }
+            if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                let _ = child.kill();
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    })?;
     if !status.success() {
         return Err(msg(t!("命令失败（{status}）：{tail}", status = status, tail = tail.lock().join("\n"))));
     }
@@ -665,6 +1003,17 @@ pub fn detect_gpu() -> Option<Gpu> {
     Some(Gpu { name: parts[0].into(), vram_mb: parts[1].parse().unwrap_or(0), driver: parts[2].into(), cuda })
 }
 
+/// 能装最老的 CUDA 版 PyTorch（cu118；ARM64 Linux 是 cu128）所需的 NVIDIA 驱动版本
+fn oldest_cuda_driver() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "570"
+    } else if cfg!(windows) {
+        "522.06"
+    } else {
+        "520.61"
+    }
+}
+
 /// 按驱动支持的 CUDA 版本选 PyTorch 安装包。macOS 用 PyPI 上自带 MPS（Apple 芯片加速）的版本
 pub fn torch_variant(gpu: Option<&Gpu>) -> &'static str {
     if cfg!(target_os = "macos") {
@@ -690,8 +1039,15 @@ pub fn torch_variant(gpu: Option<&Gpu>) -> &'static str {
     }
 }
 
-/// 下载 uv：先 GitHub，失败再从 PyPI 下载 wheel（wheel 也是 zip，里面带 uv.exe）
-fn download_uv(bin: &Path, log: &(dyn Fn(String) + Sync)) -> AppResult<PathBuf> {
+/// 下载 uv（带进度）。国内镜像：先清华、阿里云的 PyPI 镜像，再 GitHub、PyPI；官方源：先 GitHub，再 PyPI。
+/// PyPI 上的 uv wheel 也是 zip，里面带 uv.exe
+fn download_uv(
+    bin: &Path,
+    china: bool,
+    log: &(dyn Fn(String) + Sync),
+    progress: &(dyn Fn(&str, u64, u64, u64) + Sync),
+    cancel: &AtomicBool,
+) -> AppResult<PathBuf> {
     fs::create_dir_all(bin)?;
     let exe = if cfg!(windows) { "uv.exe" } else { "uv" };
     let arm = cfg!(target_arch = "aarch64");
@@ -704,38 +1060,113 @@ fn download_uv(bin: &Path, log: &(dyn Fn(String) + Sync)) -> AppResult<PathBuf> 
     } else {
         "x86_64-unknown-linux-gnu"
     };
+    let tag = if cfg!(windows) {
+        "win_amd64"
+    } else if cfg!(target_os = "macos") {
+        if arm { "macosx_11_0_arm64" } else { "macosx_10_12_x86_64" }
+    } else if arm {
+        "manylinux_2_17_aarch64"
+    } else {
+        "manylinux_2_17_x86_64"
+    };
+    let sources: &[&str] = if china { &["tuna", "aliyun", "github", "pypi"] } else { &["github", "pypi"] };
+    let tmp = bin.join("uv-download.zip");
     let mut errors = Vec::new();
-    let github = format!("https://github.com/astral-sh/uv/releases/latest/download/uv-{target}.zip");
-    log(t!("下载 uv：{github}", github = github));
-    match http_get(&github).and_then(|b| extract_exe(&b, exe, &bin.join(exe))) {
-        Ok(p) => return Ok(p),
-        Err(e) => {
-            log(t!("GitHub 下载失败：{e}", e = e));
-            errors.push(e.to_string());
+    for src in sources {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(msg(t!("已取消安装")));
+        }
+        let url = match *src {
+            "tuna" => simple_index_wheel("https://pypi.tuna.tsinghua.edu.cn/simple/uv/", tag),
+            "aliyun" => simple_index_wheel("https://mirrors.aliyun.com/pypi/simple/uv/", tag),
+            "github" => Ok(format!("https://github.com/astral-sh/uv/releases/latest/download/uv-{target}.zip")),
+            _ => pypi_uv_wheel(tag),
+        };
+        // 每个源的文件不一样，不能拿别的源下了一半的接着下
+        let _ = fs::remove_file(&tmp);
+        let _ = fs::remove_file(tmp.with_extension("part"));
+        let r = url.and_then(|url| {
+            log(t!("下载 uv：{github}", github = url));
+            download_file(&url, &tmp, log, &|d, t, s| progress("uv", d, t, s), cancel)?;
+            let bytes = fs::read(&tmp)?;
+            extract_exe(&bytes, exe, &bin.join(exe))
+        });
+        let _ = fs::remove_file(&tmp);
+        match r {
+            Ok(p) => return Ok(p),
+            Err(e) => {
+                log(t!("下载失败：{e}", e = e));
+                errors.push(e.to_string());
+            }
         }
     }
-    log(t!("改从 PyPI 下载 uv…"));
-    let r = (|| -> AppResult<PathBuf> {
-        let meta: serde_json::Value = serde_json::from_slice(&http_get("https://pypi.org/pypi/uv/json")?)?;
-        let tag = if cfg!(windows) {
-            "win_amd64"
-        } else if cfg!(target_os = "macos") {
-            if arm { "macosx_11_0_arm64" } else { "macosx_10_12_x86_64" }
-        } else if arm {
-            "manylinux_2_17_aarch64"
-        } else {
-            "manylinux_2_17_x86_64"
-        };
-        let url = meta["urls"]
-            .as_array()
-            .and_then(|a| a.iter().find(|u| u["filename"].as_str().is_some_and(|f| f.ends_with(".whl") && f.contains(tag))))
-            .and_then(|u| u["url"].as_str())
-            .ok_or_else(|| msg(t!("PyPI 上没有找到对应的 uv 安装包")))?
-            .to_string();
-        log(t!("下载 {url}", url = url));
-        extract_exe(&http_get(&url)?, exe, &bin.join(exe))
-    })();
-    r.map_err(|e| msg(t!("下载 uv 失败：{errors}；{e}。可以手动安装 uv 后在设置里指定路径", errors = errors.join("；"), e = e)))
+    Err(msg(t!("下载 uv 失败：{errors}。可以手动安装 uv 后在设置里指定路径", errors = errors.join("；"))))
+}
+
+/// PyPI 官方：从 JSON 接口找最新的 uv wheel
+fn pypi_uv_wheel(tag: &str) -> AppResult<String> {
+    let meta: serde_json::Value = serde_json::from_slice(&http_get("https://pypi.org/pypi/uv/json")?)?;
+    meta["urls"]
+        .as_array()
+        .and_then(|a| a.iter().find(|u| u["filename"].as_str().is_some_and(|f| f.ends_with(".whl") && f.contains(tag))))
+        .and_then(|u| u["url"].as_str())
+        .map(str::to_string)
+        .ok_or_else(|| msg(t!("PyPI 上没有找到对应的 uv 安装包")))
+}
+
+/// PyPI 镜像：从简单索引页（/simple/uv/）里找最新版本的 uv wheel
+fn simple_index_wheel(index: &str, tag: &str) -> AppResult<String> {
+    let page = http_get_text(index)?;
+    pick_wheel(&page, index, "uv", tag).ok_or_else(|| msg(t!("PyPI 上没有找到对应的 uv 安装包")))
+}
+
+/// 索引页里 pkg 的、文件名含 tag 的 wheel，取版本最高的正式版，返回完整地址
+fn pick_wheel(page: &str, base: &str, pkg: &str, tag: &str) -> Option<String> {
+    let prefix = format!("{pkg}-");
+    let mut best: Option<(Vec<u32>, String)> = None;
+    for part in page.split("href=\"").skip(1) {
+        let href = part.split('"').next().unwrap_or("");
+        let path = href.split('#').next().unwrap_or("");
+        let name = path.rsplit('/').next().unwrap_or("");
+        if !name.ends_with(".whl") || !name.contains(tag) {
+            continue;
+        }
+        let Some(ver) = name.strip_prefix(&prefix).and_then(|r| r.split('-').next()) else { continue };
+        if ver.is_empty() || !ver.chars().all(|c| c.is_ascii_digit() || c == '.') {
+            continue;
+        }
+        let v = parse_version(ver);
+        if best.as_ref().is_none_or(|(b, _)| v > *b) {
+            best = Some((v, resolve_url(base, path)));
+        }
+    }
+    best.map(|(_, u)| u)
+}
+
+/// 把页面里的相对链接（../../packages/…、/packages/…）拼成完整地址
+fn resolve_url(base: &str, href: &str) -> String {
+    if href.starts_with("http://") || href.starts_with("https://") {
+        return href.to_string();
+    }
+    let (scheme, rest) = base.split_once("://").unwrap_or(("https", base));
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    if let Some(abs) = href.strip_prefix('/') {
+        return format!("{scheme}://{host}/{abs}");
+    }
+    let mut segs: Vec<&str> = path.split('/').collect();
+    // 去掉最后一段（文件名，或者末尾 / 后面的空串），剩下的是目录
+    segs.pop();
+    for s in href.split('/') {
+        match s {
+            ".." => {
+                segs.pop();
+            }
+            "." | "" => {}
+            s => segs.push(s),
+        }
+    }
+    segs.retain(|s| !s.is_empty());
+    format!("{scheme}://{host}/{}", segs.join("/"))
 }
 
 /// 下载 ffmpeg 静态版并解压出可执行文件。
@@ -769,7 +1200,9 @@ fn download_ffmpeg(
     let mut errors = Vec::new();
     for url in sources {
         log(t!("下载 ffmpeg：{url}", url = url));
-        let r = download_file(url, &zip, &|d, t, s| progress("ffmpeg", d, t, s))
+        // 换了下载源，上一个源没下完的不能接着用
+        let _ = fs::remove_file(zip.with_extension("part"));
+        let r = download_file(url, &zip, log, &|d, t, s| progress("ffmpeg", d, t, s), &AtomicBool::new(false))
             .and_then(|_| {
                 let bytes = fs::read(&zip)?;
                 extract_exe(&bytes, exe, &out)
@@ -811,7 +1244,8 @@ fn download_ffmpeg_linux(
     for url in sources {
         log(t!("下载 ffmpeg：{url}", url = url));
         let _ = fs::remove_dir_all(&tmp);
-        let r = download_file(url, &pkg, &|d, t, s| progress("ffmpeg", d, t, s)).and_then(|_| {
+        let _ = fs::remove_file(pkg.with_extension("part"));
+        let r = download_file(url, &pkg, log, &|d, t, s| progress("ffmpeg", d, t, s), &AtomicBool::new(false)).and_then(|_| {
             fs::create_dir_all(&tmp)?;
             let st = command("tar")
                 .arg("-xJf")
@@ -862,7 +1296,7 @@ fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 fn http_get(url: &str) -> AppResult<Vec<u8>> {
-    let resp = ureq::get(url).timeout(std::time::Duration::from_secs(300)).call().map_err(|e| msg(e.to_string()))?;
+    let resp = agent().get(url).call().map_err(|e| msg(e.to_string()))?;
     let mut buf = Vec::new();
     resp.into_reader().take(200 * 1024 * 1024).read_to_end(&mut buf)?;
     Ok(buf)
@@ -910,7 +1344,8 @@ mod tests {
         }
         let variant =std::env::var("XLABEL_VARIANT").unwrap_or_else(|_| torch_variant(detect_gpu().as_ref()).to_string());
         eprintln!("安装 {variant}");
-        rt.install(&variant, &|l| eprintln!("{l}"), &|f, d, t, s| eprintln!("{f}: {d}/{t} {s}B/s")).unwrap();
+        rt.install(&variant, &|l| eprintln!("{l}"), &|f, d, t, s| eprintln!("{f}: {d}/{t} {s}B/s"), &|n, all, s| eprintln!("[{n}/{all}] {s}"))
+            .unwrap();
         eprintln!("{:?}", rt.check(true).unwrap());
     }
 
@@ -944,6 +1379,32 @@ mod tests {
         assert!(best_version_matching(&page, "torch", "cu128", "2.12.0").is_none());
         assert_eq!(torchvision_for("2.11.0"), "0.26.0");
         assert_eq!(torchvision_for("2.9.1"), "0.24.1");
+    }
+
+    #[test]
+    fn uv_wheel_from_simple_index() {
+        let base = "https://pypi.tuna.tsinghua.edu.cn/simple/uv/";
+        let page = r#"<a href="../../packages/aa/bb/uv-0.9.5-py3-none-win_amd64.whl#sha256=1">uv-0.9.5-py3-none-win_amd64.whl</a>
+            <a href="../../packages/cc/dd/uv-0.10.1-py3-none-win_amd64.whl#sha256=2">x</a>
+            <a href="../../packages/ee/ff/uv-0.11.0rc1-py3-none-win_amd64.whl">预发布版</a>
+            <a href="../../packages/gg/hh/uv-0.12.0-py3-none-win_arm64.whl">其他平台</a>
+            <a href="../../packages/ii/jj/uv-0.12.0.tar.gz">源码包</a>"#;
+        assert_eq!(
+            pick_wheel(page, base, "uv", "win_amd64").as_deref(),
+            Some("https://pypi.tuna.tsinghua.edu.cn/packages/cc/dd/uv-0.10.1-py3-none-win_amd64.whl")
+        );
+        assert!(pick_wheel(page, base, "uv", "macosx_11_0_arm64").is_none());
+        assert_eq!(resolve_url(base, "/a/b.whl"), "https://pypi.tuna.tsinghua.edu.cn/a/b.whl");
+        assert_eq!(resolve_url(base, "https://x.org/b.whl"), "https://x.org/b.whl");
+        assert_eq!(range_total(Some("bytes 100-199/1000")), Some(1000));
+        assert_eq!(range_total(Some("bytes */1000")), Some(1000));
+        assert_eq!(range_total(Some("bytes 0-1/*")), None);
+    }
+
+    #[test]
+    fn missing_from_check() {
+        let v = serde_json::json!({ "torch": "2.11.0", "numpy": true, "PIL": false, "onnx": true, "onnxruntime": false });
+        assert_eq!(missing_packages(&v), vec!["pillow", "onnxruntime"]);
     }
 
     #[test]

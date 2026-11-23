@@ -8,7 +8,7 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
-import { api, EnvStatus, errText, ProjectInfo, RunDetail, RunInfo, RunStatus, SplitSummary, Task, TrainConfig, VersionInfo } from "../api";
+import { api, EnvStatus, errText, ImportProgress, ProjectInfo, RunDetail, RunInfo, RunStatus, SplitSummary, Task, TrainConfig, VersionInfo } from "../api";
 import { prefs, useApp, useReview } from "../store";
 import { t } from "../i18n";
 import LineChart from "../components/LineChart";
@@ -153,6 +153,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [prog, setProg] = useState<ProgressEv | null>(null);
   const [starting, setStarting] = useState(false);
+  /** 开始训练前准备数据（导出数据集副本）的进度 */
+  const [prep, setPrep] = useState<ImportProgress | null>(null);
   // 高级设置（输入尺寸、批大小、数据增强、设备）默认收起，记住用户上次的选择
   const [advOpen, setAdvOpen] = useState(prefs.get("trainAdv", "0") === "1");
   const toggleAdv = (v: boolean) => {
@@ -160,6 +162,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
     prefs.set("trainAdv", v ? "1" : "0");
   };
   const [exporting, setExporting] = useState(false);
+  /** 导出 ONNX 时 worker 报的最新一行 */
+  const [onnxMsg, setOnnxMsg] = useState("");
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [comparing, setComparing] = useState(false);
@@ -293,6 +297,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
 
   const doStart = async () => {
     setStarting(true);
+    setPrep({ done: 0, total: 0 });
+    const un = await listen<ImportProgress>("train-prepare", (e) => setPrep(e.payload));
     try {
       // 记住的版本可能已经被删掉了，那就用当前数据
       const id = await api.startTraining({ ...cfg, onlyReviewed: review && cfg.onlyReviewed, version: useVersion ? cfg.version : null, baseRun: baseRun ? baseRun.id : null });
@@ -303,6 +309,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
     } catch (e) {
       modal.error({ title: t("没能开始训练"), content: errText(e) });
     } finally {
+      un();
+      setPrep(null);
       setStarting(false);
     }
   };
@@ -392,6 +400,8 @@ export default function Train({ project }: { project: ProjectInfo }) {
   const doExport = async () => {
     if (!run) return;
     setExporting(true);
+    setOnnxMsg(t("正在导出 ONNX…"));
+    const un = await listen<string>("onnx-log", (e) => setOnnxMsg(e.payload));
     try {
       const p = await api.exportOnnx(run.id);
       await loadRuns();
@@ -404,6 +414,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
     } catch (e) {
       message.error(errText(e));
     } finally {
+      un();
       setExporting(false);
     }
   };
@@ -600,6 +611,14 @@ export default function Train({ project }: { project: ProjectInfo }) {
               >
                 {running ? t("已有训练在进行") : t("开始训练")}
               </Button>
+              {starting && prep && (
+                <div style={{ marginTop: 8 }}>
+                  <Progress size="small" percent={prep.total ? Math.floor((prep.done / prep.total) * 100) : 0} status="active" />
+                  <div className="dim" style={{ fontSize: 12 }}>
+                    {prep.total ? t("正在准备训练数据 {done}/{total}", { done: prep.done, total: prep.total }) : t("正在准备训练数据…")}
+                  </div>
+                </div>
+              )}
             </Form>
           </div>
         </div>
@@ -684,6 +703,13 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     {run.status !== "running" && <Button size="small" icon={<DeleteOutlined />} onClick={remove} />}
                   </Space>
                 </div>
+                {exporting && (
+                  <div style={{ marginTop: 12 }}>
+                    {/* 导出没有分步，进度条只表示还在进行 */}
+                    <Progress size="small" percent={100} status="active" showInfo={false} />
+                    <div className="dim" style={{ fontSize: 12 }}>{onnxMsg}</div>
+                  </div>
+                )}
                 {run.status === "running" && (
                   <div style={{ marginTop: 12 }}>
                     <Progress

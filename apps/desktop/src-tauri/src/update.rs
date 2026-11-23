@@ -170,8 +170,12 @@ pub async fn install_update(app: tauri::AppHandle, url: String, sha256: String) 
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         use sha2::{Digest, Sha256};
 
-        let resp = ureq::get(&url)
-            .timeout(Duration::from_secs(1800))
+        // 不限总时长（慢网络也能下完），只在连不上、一分钟没收到数据时报错
+        let resp = ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(20))
+            .timeout_read(Duration::from_secs(60))
+            .build()
+            .get(&url)
             .call()
             .map_err(|e| t!("下载失败：{e}", e = e))?;
         let total: u64 = resp.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(0);

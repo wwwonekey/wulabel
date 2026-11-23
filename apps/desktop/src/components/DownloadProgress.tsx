@@ -58,7 +58,7 @@ export default function DownloadProgress() {
   return (
     <div className="dl-float">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
-        <span className="muted">{t("正在下载模型（只需下载一次）")}</span>
+        <span className="muted">{t("正在下载、安装（只需一次）")}</span>
         {/* 只是收起这个提示，下载照常在后台进行 */}
         <Button size="small" type="text" icon={<CloseOutlined />} title={t("关闭")} onClick={() => setItems({})} />
       </div>
@@ -67,7 +67,7 @@ export default function DownloadProgress() {
           <div className="row" style={{ justifyContent: "space-between", gap: 8, fontSize: 12 }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
             <span className="dim" style={{ whiteSpace: "nowrap" }}>
-              {d.failed ? t("下载失败") : d.finished ? t("已下载") : downloadText(d)}
+              {d.failed ? t("失败") : d.finished ? t("完成") : !d.total && !d.done ? t("正在安装…") : downloadText(d)}
             </span>
           </div>
           <Progress

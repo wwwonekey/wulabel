@@ -174,6 +174,9 @@ fn check_out(out: &Path) -> AppResult<()> {
     Ok(())
 }
 
+/// step：步骤进度 (已完成几步, 共几步, 当前步骤)，共 0 步表示还不知道有几步。
+/// worker 报的步骤名是格式（onnx、openvino 等），界面换成格式名显示
+#[allow(clippy::too_many_arguments)]
 pub fn export_formats(
     p: &Project,
     rt: &Runtime,
@@ -182,6 +185,7 @@ pub fn export_formats(
     size: u32,
     out: &Path,
     log: &(dyn Fn(String) + Sync),
+    step: &(dyn Fn(usize, usize, String) + Sync),
 ) -> AppResult<Vec<FormatResult>> {
     if formats.is_empty() {
         return Err(msg(t!("至少选一种格式")));
@@ -190,6 +194,7 @@ pub fn export_formats(
     let mut skipped = Vec::new();
     let mut formats: Vec<String> = formats.to_vec();
     if formats.iter().any(|f| f == "openvino") {
+        step(0, 0, t!("检查 OpenVINO 组件…"));
         if let Err(e) = rt.ensure_package("openvino", "openvino", log) {
             let note = t!("OpenVINO 组件没装上，这次没导出：{e}", e = e);
             log(note.clone());
@@ -206,11 +211,17 @@ pub fn export_formats(
     fs::write(&cfg, serde_json::json!({ "weights": w, "out": out, "formats": formats, "size": size }).to_string())?;
     let mut c = rt.worker(&["export-formats"])?;
     c.arg(&cfg);
+    step(0, 0, t!("正在加载模型…"));
     let results = Mutex::new(Vec::new());
     let r = crate::runtime::run_logged(c, &|line| {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
             match v["type"].as_str() {
                 Some("log") => log(v["msg"].as_str().unwrap_or("").to_string()),
+                Some("progress") => step(
+                    v["step"].as_u64().unwrap_or(0) as usize,
+                    v["total"].as_u64().unwrap_or(0) as usize,
+                    v["name"].as_str().unwrap_or("").to_string(),
+                ),
                 Some("format") => {
                     if let Ok(f) = serde_json::from_value::<FormatResult>(v.clone()) {
                         log(t!("{name}：{result}", name = f.format, result = if f.ok { t!("完成") } else { f.note.clone() }));
@@ -241,7 +252,10 @@ pub fn build_service(
     config: &serde_json::Value,
     out: &Path,
     log: &(dyn Fn(String) + Sync),
+    step: &(dyn Fn(usize, usize, String) + Sync),
 ) -> AppResult<String> {
+    // 三步：导出 ONNX → 复制服务程序和说明 → 写配置
+    const STEPS: usize = 3;
     let w = weights(p, run_id)?;
     let template = rt.worker_dir.join("service");
     for f in SERVICE_FILES {
@@ -251,6 +265,7 @@ pub fn build_service(
     }
     check_out(out)?;
     log(t!("导出模型（ONNX）…"));
+    step(0, STEPS, t!("导出模型（ONNX）…"));
     let mut c = rt.worker(&["export"])?;
     c.arg(&w).arg(out.join("model.onnx"));
     crate::runtime::run_logged(c, &|line| {
@@ -260,6 +275,7 @@ pub fn build_service(
             }
         }
     })?;
+    step(1, STEPS, t!("复制服务程序和说明…"));
     for f in SERVICE_FILES {
         fs::copy(template.join(f), out.join(f))?;
     }
@@ -279,6 +295,7 @@ pub fn build_service(
             fs::copy(src, out.join("locale.json"))?;
         }
     }
+    step(2, STEPS, t!("写入配置…"));
     let mut cfg = config.clone();
     cfg["model"] = serde_json::json!("model.onnx");
     // 关键点模型：告警截图按项目的骨架连线画
@@ -287,6 +304,7 @@ pub fn build_service(
     }
     fs::write(out.join("config.json"), serde_json::to_string_pretty(&cfg)?)?;
     log(t!("服务包已生成"));
+    step(STEPS, STEPS, t!("服务包已生成"));
     Ok(out.to_string_lossy().into_owned())
 }
 

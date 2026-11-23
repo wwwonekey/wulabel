@@ -1,0 +1,70 @@
+# 桌面端自动检查：推送前端或 Rust 代码后，跑 TypeScript 类型检查、前端打包和 Rust 单元测试。
+# 开发机上不编译，靠这里尽早发现编译错误。出错的行会写成注释，不登录也能在运行页面看到。
+name: desktop-check
+
+on:
+  push:
+    paths: ["apps/desktop/**", ".github/workflows/desktop-check.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 安装 Linux 编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: 安装前端依赖
+        working-directory: apps/desktop
+        run: npm install --no-audit --no-fund
+
+      - name: 前端类型检查和打包
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          npm run build 2>&1 | tee fe.txt
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            grep -E "error TS|error " fe.txt | head -30 | while read -r l; do echo "::error title=前端::$l"; done
+          fi
+          exit "$status"
+
+      - name: Rust 编译和单元测试
+        working-directory: apps/desktop/src-tauri
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          cargo test 2>&1 | tee rs.txt
+          status=$?
+          set -e
+          echo "::notice title=Rust 测试::$(grep -E '^test result:' rs.txt | tr '\n' ' ')"
+          if [ "$status" -ne 0 ]; then
+            # 编译错误：error[E…] 和下一行的位置；测试失败：失败的测试名和 panicked 行
+            grep -A1 -E "^error(\[E[0-9]+\])?:" rs.txt | grep -vE "^--$" | head -40 | while read -r l; do echo "::error title=Rust::$l"; done
+            grep -E "^test .* FAILED$|panicked at" rs.txt | head -20 | while read -r l; do echo "::error title=Rust 测试::$l"; done
+          fi
+          exit "$status"

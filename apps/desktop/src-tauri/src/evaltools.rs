@@ -308,8 +308,15 @@ pub fn anonymize(
 
 // ---------- 重新评估 ----------
 
-/// 用现在的数据（已标注、已审核的验证集 / 测试集）重新评估一个模型，结果覆盖这次训练的 eval.json
-pub fn evaluate_run(p: &Project, rt: &Runtime, run_id: i64, log: &(dyn Fn(String) + Sync)) -> AppResult<f64> {
+/// 用现在的数据（已标注、已审核的验证集 / 测试集）重新评估一个模型，结果覆盖这次训练的 eval.json。
+/// progress(阶段, 完成, 总数)：阶段 export 导出数据、load 加载模型（总数 0）、val / test 评估验证集 / 测试集
+pub fn evaluate_run(
+    p: &Project,
+    rt: &Runtime,
+    run_id: i64,
+    log: &(dyn Fn(String) + Sync),
+    progress: &(dyn Fn(&str, usize, usize) + Sync),
+) -> AppResult<f64> {
     let run = training::get_run(p, run_id)?;
     let weights = training::weights_of(p, run_id)?;
     let dir = PathBuf::from(&run.dir);
@@ -317,7 +324,9 @@ pub fn evaluate_run(p: &Project, rt: &Runtime, run_id: i64, log: &(dyn Fn(String
     let _ = fs::remove_dir_all(&ds);
     let format = if p.meta.task == "classify" { Format::Cls } else { Format::Coco };
     log(t!("导出当前数据…"));
-    let res = dataset::export(p, &ExportOptions { format, out_dir: ds.clone(), only_reviewed: false, ratios: [0.8, 0.2, 0.0], copy_files: false }, &|_, _| {})?;
+    let opts = ExportOptions { format, out_dir: ds.clone(), only_reviewed: false, ratios: [0.8, 0.2, 0.0], copy_files: false };
+    let res = dataset::export(p, &opts, &|done, total| progress("export", done, total))?;
+    progress("load", 0, 0);
     let cfg = serde_json::json!({ "dataset": ds, "out": dir, "weights": weights, "classes": res.classes });
     let cfg_path = dir.join("eval_config.json");
     fs::write(&cfg_path, serde_json::to_string_pretty(&cfg)?)?;
@@ -325,7 +334,11 @@ pub fn evaluate_run(p: &Project, rt: &Runtime, run_id: i64, log: &(dyn Fn(String
     let mut map50 = 0.0;
     let r = worker_events(rt, &["evaluate", cfg_arg.as_str()], &mut |v| match v["type"].as_str() {
         Some("log") => log(v["msg"].as_str().unwrap_or("").to_string()),
-        Some("progress") => log(t!("评估中 {done}/{total}", done = v["done"], total = v["total"])),
+        Some("progress") => progress(
+            v["split"].as_str().unwrap_or("val"),
+            v["done"].as_u64().unwrap_or(0) as usize,
+            v["total"].as_u64().unwrap_or(0) as usize,
+        ),
         Some("done") => map50 = v["map50"].as_f64().unwrap_or(0.0),
         _ => {}
     }, None);

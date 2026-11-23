@@ -211,8 +211,15 @@ fn now_name() -> String {
 /// 训练过程中的事件，发给前端
 pub type EventSink = Arc<dyn Fn(i64, serde_json::Value) + Send + Sync>;
 
-/// 准备数据集并启动训练进程，立即返回训练记录 id
-pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, sink: EventSink) -> AppResult<i64> {
+/// 准备数据集并启动训练进程，立即返回训练记录 id。prepare：准备数据（导出数据集副本）的进度
+pub fn start(
+    p: Arc<Project>,
+    rt: &Runtime,
+    jobs: Arc<Jobs>,
+    cfg: TrainConfig,
+    sink: EventSink,
+    prepare: &dyn Fn(usize, usize),
+) -> AppResult<i64> {
     if jobs.running().is_some() {
         return Err(msg(t!("已经有训练在进行中")));
     }
@@ -256,8 +263,8 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
     let format = if p.meta.task == "classify" { Format::Cls } else { Format::Coco };
     let opts = ExportOptions { format, out_dir: ds.clone(), only_reviewed: cfg.only_reviewed, ratios: cfg.ratios, copy_files: false };
     let res = match cfg.version {
-        Some(v) => dataset::export_version(&p, v, &opts, &|_, _| {}),
-        None => dataset::export(&p, &opts, &|_, _| {}),
+        Some(v) => dataset::export_version(&p, v, &opts, prepare),
+        None => dataset::export(&p, &opts, prepare),
     }
     .inspect_err(|_| {
         let _ = fs::remove_dir_all(&dir);
@@ -893,8 +900,8 @@ mod tests {
             base_run: None,
             aug: None,
         };
-        let id = start(p.clone(), &rt, jobs.clone(), cfg, Arc::new(move |_, e| ev2.lock().push(e))).unwrap();
-        assert!(start(p.clone(), &rt, jobs.clone(), TrainConfig { epochs: 1, ..serde_json::from_value(get_run(&p, id).unwrap().config).unwrap() }, Arc::new(|_, _| {})).is_err(), "同时只能一个训练");
+        let id = start(p.clone(), &rt, jobs.clone(), cfg, Arc::new(move |_, e| ev2.lock().push(e)), &|_, _| {}).unwrap();
+        assert!(start(p.clone(), &rt, jobs.clone(), TrainConfig { epochs: 1, ..serde_json::from_value(get_run(&p, id).unwrap().config).unwrap() }, Arc::new(|_, _| {}), &|_, _| {}).is_err(), "同时只能一个训练");
         for _ in 0..600 {
             if jobs.running().is_none() {
                 break;
@@ -927,11 +934,11 @@ mod tests {
 
         // 部署：服务包、多格式导出、实时验证
         let svc = base.join("服务包");
-        crate::deploy::build_service(&p, &rt, id, &serde_json::json!({ "port": 8090, "streams": [] }), &svc, &|l| eprintln!("{l}")).unwrap();
+        crate::deploy::build_service(&p, &rt, id, &serde_json::json!({ "port": 8090, "streams": [] }), &svc, &|l| eprintln!("{l}"), &|_, _, _| {}).unwrap();
         for f in ["model.onnx", "model.json", "service.py", "config.json", "run.bat", "README.md"] {
             assert!(svc.join(f).exists(), "服务包缺少 {f}");
         }
-        let fmts = crate::deploy::export_formats(&p, &rt, id, &["onnx_static".into(), "openvino".into(), "rknn".into()], 224, &base.join("导出"), &|l| eprintln!("{l}")).unwrap();
+        let fmts = crate::deploy::export_formats(&p, &rt, id, &["onnx_static".into(), "openvino".into(), "rknn".into()], 224, &base.join("导出"), &|l| eprintln!("{l}"), &|_, _, _| {}).unwrap();
         eprintln!("导出：{fmts:?}");
         assert!(fmts.iter().all(|f| f.ok), "{fmts:?}");
         if let Ok(video) = std::env::var("XLABEL_TEST_VIDEO") {

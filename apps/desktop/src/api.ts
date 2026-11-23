@@ -759,6 +759,9 @@ export const api = {
   openUrl: (url: string) => invoke<void>("open_url", { url }),
   xtPullAlarms: (options: { days: number; model: string | null; max: number; withBoxes: boolean }) =>
     invoke<XtPullResult>("xt_pull_alarms", { options }),
+  /** 正在跑的体检进度，没在跑是 null（离开体检页再回来时用） */
+  healthStatus: () => invoke<HealthProgress | null>("health_status"),
+  healthStop: () => invoke<void>("health_stop"),
 };
 
 export interface XtAccount {
@@ -973,3 +976,91 @@ export const imageUrl = (projectPath: string, id: number) =>
   isRemote ? `api/image/${id}?t=${encodeURIComponent(getToken())}` : `${BASE}/image/${id}?p=${projectKey(projectPath)}`;
 
 export const errText = (e: unknown) => (typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
+
+// ---------- 等待中的进度（训练准备、重新评估、部署） ----------
+
+/** 部署页导出、生成服务包的步骤（deploy-progress）；total 为 0 表示还不知道有几步 */
+export interface DeployStep {
+  done: number;
+  total: number;
+  /** 当前步骤：多格式导出时是格式（onnx、openvino 等），其他是说明文字 */
+  name: string;
+}
+
+/** 重新评估的进度（eval-progress）：stage 是 export 导出数据 / load 加载模型 / val / test */
+export interface EvalProgress {
+  stage: string;
+  done: number;
+  total: number;
+}
+
+/** 最近一次导入的那批图的 id（现场回流导入后去标注这批） */
+export const lastImportIds = () => invoke<number[]>("last_import_ids");
+
+/** 体检进度。stage：空 准备中 / hash 计算指纹 / compare 两两比对 / model 模型检查 */
+export interface HealthProgress {
+  stage: "" | "hash" | "compare" | "model";
+  done: number;
+  total: number;
+  /** 已经点了停止，正在停 */
+  stopping: boolean;
+}
+
+// ---------- 训练环境补装、取消安装；关闭软件、更新前看看有没有任务在跑 ----------
+
+/** 和上面的 EnvStatus 合并：缺的组件、显卡版用不了显卡、驱动太旧 */
+export interface EnvStatus {
+  /** 环境里缺的组件（pip 包名），可以「补装」 */
+  missing: string[];
+  /** 装的是显卡版 PyTorch，但显卡用不了，现在用 CPU 训练 */
+  cpuFallback: boolean;
+  /** 有 NVIDIA 显卡但驱动太旧、只能装 CPU 版时，要更新到的驱动版本 */
+  minDriver: string | null;
+}
+
+/** 安装进行到第几步（事件名 env-step） */
+export interface EnvStep {
+  step: number;
+  total: number;
+  text: string;
+}
+
+/** 正在进行的任务 */
+export interface BusyTasks {
+  /** 正在训练的记录 id */
+  training: number | null;
+  installing: boolean;
+  live: boolean;
+  share: boolean;
+  stream: boolean;
+  video: boolean;
+  prelabel: boolean;
+}
+
+/** 正在进行的任务，给用户看的说明；没有就是空数组 */
+export function busyList(b: BusyTasks): string[] {
+  const out: string[] = [];
+  if (b.training != null) out.push(t("正在训练（之后可以选这次训练的模型「接着训」）"));
+  if (b.installing) out.push(t("正在安装训练环境"));
+  if (b.prelabel) out.push(t("正在批量预标注（已标好的会保留）"));
+  if (b.stream) out.push(t("正在采集视频流"));
+  if (b.video) out.push(t("正在视频抽帧"));
+  if (b.live) out.push(t("正在实时验证"));
+  if (b.share) out.push(t("实时协作开着，成员会断开连接"));
+  return out;
+}
+
+/** 让 App 打开反馈弹窗（window 事件） */
+export const OPEN_FEEDBACK_EVENT = "wulabel-open-feedback";
+
+export const appApi = {
+  busyTasks: () => invoke<BusyTasks>("busy_tasks"),
+  /** 收到 app-close-blocked 后回一下，后端就不会因为界面没反应而直接退出 */
+  closeAck: (seq: number) => invoke<void>("close_ack", { seq }),
+  /** 确认关闭：退出软件 */
+  quitApp: () => invoke<void>("quit_app"),
+  /** 只补装缺的组件 */
+  envRepair: () => invoke<void>("env_repair"),
+  /** 取消正在进行的安装 */
+  envCancel: () => invoke<void>("env_cancel"),
+};

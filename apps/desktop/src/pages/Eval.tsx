@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, App, Button, Empty, Segmented, Select, Space, Table, Tooltip } from "antd";
+import { Alert, App, Button, Empty, Progress, Segmented, Select, Space, Table, Tooltip } from "antd";
 import { FileTextOutlined, ReloadOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
-import { api, ClassEval, errText, ProjectInfo, RunDetail, RunInfo, thumbUrl } from "../api";
+import { api, ClassEval, errText, EvalProgress, ProjectInfo, RunDetail, RunInfo, thumbUrl } from "../api";
 import { useApp } from "../store";
 import { fmtTime, metricNames, modelName, rateMetric } from "./Train";
 import { FpTestPanel, ThresholdPanel } from "../components/EvalTools";
@@ -61,6 +61,7 @@ export default function Eval({ project }: { project: ProjectInfo }) {
   // 用现在的数据重新评估（导入的外部模型第一次评估也走这里）
   const [evaluating, setEvaluating] = useState(false);
   const [evalLog, setEvalLog] = useState("");
+  const [evalProg, setEvalProg] = useState<EvalProgress | null>(null);
 
   /** 导出交付报告（HTML，浏览器打开后可以打印成 PDF） */
   const exportReport = async () => {
@@ -90,7 +91,9 @@ export default function Eval({ project }: { project: ProjectInfo }) {
     if (sel == null) return;
     setEvaluating(true);
     setEvalLog("");
+    setEvalProg(null);
     const un = await listen<string>("eval-log", (e) => setEvalLog(e.payload));
+    const unProg = await listen<EvalProgress>("eval-progress", (e) => setEvalProg(e.payload));
     try {
       await api.evaluateRun(sel);
       await loadDetail(sel);
@@ -100,8 +103,19 @@ export default function Eval({ project }: { project: ProjectInfo }) {
       message.error(errText(e));
     } finally {
       un();
+      unProg();
       setEvaluating(false);
     }
+  };
+  /** 重新评估进度条下面的一行字：导出数据 → 加载模型 → 逐张评估 */
+  const evalText = () => {
+    const p = evalProg;
+    if (!p) return evalLog || t("导出当前数据…");
+    if (p.stage === "export") return t("正在整理评估数据 {done}/{total}", { done: p.done, total: p.total });
+    if (p.stage === "load") return t("加载模型…");
+    return p.stage === "test"
+      ? t("正在评估测试集 {done}/{total} 张", { done: p.done, total: p.total })
+      : t("正在评估验证集 {done}/{total} 张", { done: p.done, total: p.total });
   };
 
   const ev = detail?.eval?.splits?.[split];
@@ -182,7 +196,16 @@ export default function Eval({ project }: { project: ProjectInfo }) {
         </div>
       </div>
 
-      {evaluating && evalLog && <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>{evalLog}</div>}
+      {evaluating && (
+        <div style={{ marginBottom: 8 }}>
+          <Progress
+            size="small"
+            percent={evalProg && evalProg.total ? Math.floor((evalProg.done / evalProg.total) * 100) : 0}
+            status="active"
+          />
+          <div className="dim" style={{ fontSize: 12 }}>{evalText()}</div>
+        </div>
+      )}
       {!ev ? (
         <div className="card" style={{ padding: 48 }}>
           <Empty
