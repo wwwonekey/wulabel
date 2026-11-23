@@ -3,7 +3,7 @@ import { Alert, App, Button, Descriptions, Input, Modal, Progress, Radio, Select
 import { CheckCircleOutlined, FolderOpenOutlined, ReloadOutlined, ThunderboltOutlined, ToolOutlined, UserOutlined } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { AiModel, api, EnvStatus, errText, SpeedResult, UpdateInfo, XtAccount } from "../api";
+import { AiModel, api, appApi, EnvStatus, EnvStep, errText, OPEN_FEEDBACK_EVENT, SpeedResult, UpdateInfo, XtAccount } from "../api";
 import { prefs, useApp } from "../store";
 import UpdateModal from "../components/UpdateModal";
 import { LANGS, langSetting, setLangSetting, systemLang, t, type Lang } from "../i18n";
@@ -145,6 +145,20 @@ const fmtEta = (p: DlProgress) => {
   return s >= 60 ? ` · ${t("剩余约 {m} 分 {s} 秒", { m: Math.floor(s / 60), s: s % 60 })}` : ` · ${t("剩余约 {s} 秒", { s })}`;
 };
 
+/** cu128 → [12, 8]；不是 CUDA 版返回 null */
+const cudaOf = (v: string): [number, number] | null => {
+  const m = /^cu(\d+)(\d)$/.exec(v);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+};
+
+/** 驱动报的「CUDA Version: 12.4」→ [12, 4] */
+const driverCuda = (s: string): [number, number] => {
+  const [a, b] = s.split(".").map((x) => Number(x) || 0);
+  return [a ?? 0, b ?? 0];
+};
+
+const newer = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+
 const VARIANTS = [
   { value: "cu130", label: t("CUDA 13.0（需要较新的驱动）") },
   { value: "cu128", label: t("CUDA 12.8（RTX 50 系列等新显卡）") },
@@ -167,7 +181,13 @@ export default function Settings() {
   const [variant, setVariant] = useState<string | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const [progress, setProgress] = useState<DlProgress | null>(null);
+  // 安装进行到第几步
+  const [step, setStep] = useState<EnvStep | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const cancelled = useRef(false);
   const [python, setPython] = useState("");
+  const [uvPath, setUvPath] = useState("");
+  const [ffmpegPath, setFfmpegPath] = useState("");
   const [root, setRoot] = useState("");
   const [speed, setSpeed] = useState<SpeedResult | null>(null);
   const [testing, setTesting] = useState(false);
@@ -187,6 +207,8 @@ export default function Settings() {
         const s = await api.envStatus(refresh);
         setSt(s);
         setPython(s.settings.python ?? "");
+        setUvPath(s.settings.uv ?? "");
+        setFfmpegPath(s.settings.ffmpeg ?? "");
         setRoot(s.settings.envRoot ?? "");
         setAiUrl(s.settings.aiUrl ?? "");
         setAiKey(s.settings.aiKey ?? "");
@@ -225,31 +247,106 @@ export default function Settings() {
       requestAnimationFrame(() => logBox.current?.scrollTo(0, logBox.current.scrollHeight));
     });
     const up = listen<DlProgress>("env-progress", (e) => setProgress(e.payload));
+    // 换到下一步时，上一步的下载进度条就不用显示了
+    const us = listen<EnvStep>("env-step", (e) => {
+      setStep(e.payload);
+      setProgress(null);
+    });
     return () => {
       un.then((f) => f());
       up.then((f) => f());
+      us.then((f) => f());
     };
   }, []);
 
-  const install = async () => {
-    const v = variant ?? st?.variant ?? "cpu";
+  /** 安装失败：显示原因，可以直接反馈（反馈会带上安装日志） */
+  const showInstallError = (e: unknown) => {
+    if (cancelled.current) {
+      message.info(t("已取消安装"));
+      return;
+    }
+    const m = modal.error({
+      title: t("安装没有完成"),
+      width: 640,
+      content: (
+        <div>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{errText(e)}</pre>
+          <Button
+            size="small"
+            onClick={() => {
+              m.destroy();
+              window.dispatchEvent(new Event(OPEN_FEEDBACK_EVENT));
+            }}
+          >
+            {t("反馈这个问题")}
+          </Button>
+        </div>
+      ),
+    });
+  };
+
+  /** 选的版本可能用不了显卡时先确认 */
+  const confirmVariant = (v: string): Promise<boolean> => {
+    const want = cudaOf(v);
+    if (!want || !st) return Promise.resolve(true);
+    let warn: string | null = null;
+    if (!st.gpu) {
+      warn = t("没有检测到 NVIDIA 显卡，装显卡版也用不上，建议选 CPU 版。");
+    } else if (st.gpu.cuda && newer(want, driverCuda(st.gpu.cuda))) {
+      warn = t("显卡驱动只支持 CUDA {cuda}，装 {variant} 版很可能用不了显卡。建议选推荐的版本，或者先更新显卡驱动。", { cuda: st.gpu.cuda, variant: v });
+    } else if (/RTX\s*50\d\d/i.test(st.gpu.name) && newer([12, 8], want)) {
+      warn = t("这张显卡需要 CUDA 12.8 版的 PyTorch，请改选后重新安装");
+    }
+    if (!warn) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) =>
+      modal.confirm({
+        title: t("确定装这个版本？"),
+        content: warn,
+        okText: t("仍然安装"),
+        cancelText: t("取消"),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      }),
+    );
+  };
+
+  /** 安装、补装共用：日志、进度、第几步都清空，结束后刷新状态 */
+  const runInstall = async (task: () => Promise<void>, ok: string) => {
     mine.current = true;
+    cancelled.current = false;
     setInstalling(true);
     setInstalled(false);
     setLines([]);
     setProgress(null);
+    setStep(null);
     try {
-      await api.envInstall(v);
-      message.success(t("训练环境安装完成"));
+      await task();
+      message.success(ok);
       setInstalled(true);
     } catch (e) {
-      modal.error({ title: t("安装没有完成"), content: <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{errText(e)}</pre>, width: 640 });
+      showInstallError(e);
     } finally {
       mine.current = false;
       setInstalling(false);
+      setCancelling(false);
       setProgress(null);
+      setStep(null);
       load(true);
     }
+  };
+
+  const install = async () => {
+    const v = variant ?? st?.variant ?? "cpu";
+    if (!(await confirmVariant(v))) return;
+    await runInstall(() => api.envInstall(v), t("训练环境安装完成"));
+  };
+
+  const repair = () => runInstall(() => appApi.envRepair(), t("缺的组件已经补装好了"));
+
+  const cancelInstall = async () => {
+    cancelled.current = true;
+    setCancelling(true);
+    await appApi.envCancel().catch(() => {});
   };
 
   const runSpeedTest = async () => {
@@ -441,6 +538,42 @@ export default function Settings() {
               )}
             </Descriptions>
 
+            {st.gpu && st.minDriver && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginTop: 12 }}
+                message={t("现在推荐装 CPU 版")}
+                description={
+                  st.gpu.cuda
+                    ? t("显卡驱动只支持 CUDA {cuda}，更新驱动到 {ver} 以上就能用显卡训练", { cuda: st.gpu.cuda, ver: st.minDriver })
+                    : t("显卡驱动太旧，更新驱动到 {ver} 以上就能用显卡训练", { ver: st.minDriver })
+                }
+              />
+            )}
+            {st.cpuFallback && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginTop: 12 }}
+                message={t("显卡不可用，现在用 CPU 训练")}
+                description={t("装的是显卡版 PyTorch，但现在用不了显卡（会慢很多）。可以更新 NVIDIA 驱动，或者换一个 CUDA 版本重新安装。")}
+              />
+            )}
+            {!!info?.torch && st.missing.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginTop: 12 }}
+                message={t("训练环境缺组件：{list}", { list: st.missing.join("、") })}
+                action={
+                  <Button size="small" type="primary" loading={installing} onClick={repair}>
+                    {t("补装缺的组件")}
+                  </Button>
+                }
+              />
+            )}
+
             {st.managed && (
               <div style={{ marginTop: 16 }}>
                 <div className="row" style={{ marginBottom: 8 }}>
@@ -494,6 +627,20 @@ export default function Settings() {
                   ) : undefined
                 }
               />
+            )}
+            {installing && (
+              <div style={{ marginTop: 12 }}>
+                <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap" }}>
+                  <span>{step ? t("第 {n}/{total} 步：{text}", { n: step.step, total: step.total, text: step.text }) : t("正在安装…")}</span>
+                  <Button danger size="small" loading={cancelling} onClick={cancelInstall}>
+                    {t("取消")}
+                  </Button>
+                </div>
+                {/* 没有下载进度时（uv 装包、检查环境）显示整体进度，条纹动画表示还在进行 */}
+                {step && !(progress && progress.total > 0) && (
+                  <Progress percent={Math.round(((step.step - 1) / step.total) * 100)} status="active" showInfo={false} />
+                )}
+              </div>
             )}
             {installing && progress && progress.total > 0 && (
               <div style={{ marginTop: 12 }}>
@@ -712,6 +859,40 @@ export default function Settings() {
         {st && !st.managed && (
           <Alert style={{ marginTop: 10 }} type="info" showIcon message={t("正在使用你指定的 Python 环境。清空后保存可改回软件自己管理的环境。")} />
         )}
+      </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2 style={{ fontSize: 15, marginTop: 0 }}>{t("uv 和 ffmpeg（高级）")}</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          {t("一般不用填，软件会自动查找、下载。自动下载不下来时，可以自己装好后在这里指定位置。")}
+        </p>
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Space.Compact style={{ width: "100%" }}>
+            <Input addonBefore="uv" value={uvPath} placeholder={t("uv 程序的位置，例如 D:\\tools\\uv.exe（留空自动查找、下载）")} onChange={(e) => setUvPath(e.target.value)} />
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={async () => {
+                const f = await open({ title: t("选择 uv 程序"), filters: [{ name: "uv", extensions: ["exe", ""] }] });
+                if (typeof f === "string") setUvPath(f);
+              }}
+            />
+            <Button disabled={!st || (uvPath.trim() || null) === (st.settings.uv || null)} onClick={() => saveSettings({ uv: uvPath.trim() || null })}>
+              {t("保存")}
+            </Button>
+          </Space.Compact>
+          <Space.Compact style={{ width: "100%" }}>
+            <Input addonBefore="ffmpeg" value={ffmpegPath} placeholder={t("ffmpeg 程序或它所在的文件夹（留空自动查找、下载）")} onChange={(e) => setFfmpegPath(e.target.value)} />
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={async () => {
+                const f = await open({ title: t("选择 ffmpeg 程序"), filters: [{ name: "ffmpeg", extensions: ["exe", ""] }] });
+                if (typeof f === "string") setFfmpegPath(f);
+              }}
+            />
+            <Button disabled={!st || (ffmpegPath.trim() || null) === (st.settings.ffmpeg || null)} onClick={() => saveSettings({ ffmpeg: ffmpegPath.trim() || null })}>
+              {t("保存")}
+            </Button>
+          </Space.Compact>
+        </Space>
       </div>
       <LanguageCard />
       <ThemeCard />

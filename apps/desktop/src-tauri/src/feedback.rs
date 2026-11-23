@@ -218,9 +218,13 @@ pub async fn feedback_logs(app: tauri::AppHandle) -> Result<String, String> {
         let mut s = String::new();
         let _ = writeln!(s, "Wulabel {} · {} {}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
 
-        let env = app.state::<crate::runtime::Runtime>().status(false);
+        let rt = app.state::<crate::runtime::Runtime>();
+        let env = rt.status(false);
         let _ = writeln!(s, "\n## 训练环境");
         let _ = writeln!(s, "托管环境：{}，可用：{}，推荐 PyTorch：{}", env.managed, env.ready, env.variant);
+        if !env.missing.is_empty() {
+            let _ = writeln!(s, "缺的组件：{}", env.missing.join(", "));
+        }
         if let Some(g) = &env.gpu {
             let _ = writeln!(s, "显卡：{}", serde_json::to_string(g).unwrap_or_default());
         }
@@ -229,6 +233,9 @@ pub async fn feedback_logs(app: tauri::AppHandle) -> Result<String, String> {
         }
         if let Some(e) = &env.error {
             let _ = writeln!(s, "环境错误：{e}");
+        }
+        if let Ok(l) = std::fs::read_to_string(rt.install_log_path()) {
+            let _ = writeln!(s, "\n### 安装日志（最后 150 行）\n{}", tail(&l, 150));
         }
 
         if let Some(p) = app.state::<crate::state::AppState>().try_current() {
