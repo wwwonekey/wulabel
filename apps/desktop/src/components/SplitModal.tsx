@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { App, Button, Empty, InputNumber, Modal, Pagination, Segmented, Space, Tag } from "antd";
 import { api, errText, ImageItem, ProjectInfo, SplitSummary, thumbUrl } from "../api";
 import { useApp } from "../store";
+import { statusTag } from "../status";
 import { t } from "../i18n";
 
 type SplitKey = "train" | "val" | "test" | "unset";
@@ -177,8 +178,8 @@ export default function SplitModal({
                 title={`${it.name}  ${it.width}×${it.height}\n${t("单击选择，双击打开标注")}`}
               >
                 <img src={thumbUrl(project.path, it.id)} loading="lazy" alt={it.name} draggable={false} />
-                <Tag className="st" color={review && it.status === "reviewed" ? "success" : "processing"}>
-                  {review && it.status === "reviewed" ? t("已审核") : t("已标注")}
+                <Tag className="st" color={statusTag(it.status, review).color}>
+                  {statusTag(it.status, review).text}
                 </Tag>
                 <span className="nm">{it.name}</span>
               </div>

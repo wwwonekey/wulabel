@@ -50,8 +50,8 @@ const ACTIONS: Record<string, string> = {
   label: t("类别"),
   assign: t("分配任务"),
   todo: t("改为未标注"),
-  labeled: t("改为已标注"),
-  reviewed: t("改为已审核"),
+  labeled: t("改为待审核"),
+  reviewed: t("改为已通过"),
   skipped: t("跳过"),
 };
 
@@ -609,7 +609,7 @@ export default function Team({ project }: { project: ProjectInfo }) {
           <Radio.Group value={scope} onChange={(e) => setScope(e.target.value)}>
             <Radio value="unassigned">{t("还没分给人的未标注图")}</Radio>
             <Radio value="todo">{t("全部未标注图（已分配的重新分）")}</Radio>
-            <Radio value="unreviewed">{t("未审核的图（未标注 + 已标注）")}</Radio>
+            <Radio value="unreviewed">{t("没审核过的图（未标注 + 待审核）")}</Radio>
           </Radio.Group>
           <Space>
             <InputNumber

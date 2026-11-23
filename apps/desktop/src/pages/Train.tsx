@@ -514,7 +514,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
             )}
             {review && cfg.onlyReviewed && !useVersion && (
               <div style={{ color: "var(--warn)", fontSize: 12, marginTop: 4 }}>
-                {t("高级设置里勾了「只用已审核的图片」，只标注、没审核的图这次不参与训练")}
+                {t("高级设置里勾了「只用审核通过的图片」，待审核的图这次不参与训练")}
               </div>
             )}
             {trainable > 0 && trainable < 50 && (
@@ -629,7 +629,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
               {review && (
                 <Form.Item>
                   <Checkbox checked={cfg.onlyReviewed} onChange={(e) => update({ onlyReviewed: e.target.checked })}>
-                    {t("只用已审核的图片")}
+                    {t("只用审核通过的图片")}
                   </Checkbox>
                 </Form.Item>
               )}

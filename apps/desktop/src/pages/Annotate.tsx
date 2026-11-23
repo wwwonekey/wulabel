@@ -46,6 +46,7 @@ import {
   thumbUrl,
 } from "../api";
 import { prefs, useApp, useReview } from "../store";
+import { statusTag } from "../status";
 import AnnotCanvas, { Box, Poly, RectXYWH, Tool } from "../components/AnnotCanvas";
 import AiRulesDrawer from "../components/AiRulesDrawer";
 import { t } from "../i18n";
@@ -55,8 +56,9 @@ const PALETTE = ["#3d8bfd", "#e5534b", "#2fb67c", "#e7a33e", "#9b7bf2", "#14b8a6
 const FILTERS = [
   { label: t("全部"), value: "all" },
   { label: t("未标注"), value: "todo" },
-  { label: t("已标注"), value: "labeled" },
-  { label: t("已审核"), value: "reviewed" },
+  // 只在团队协作（审核流程）时用：标注员提交的待审核，审核员通过的已通过
+  { label: t("待审核"), value: "labeled" },
+  { label: t("已通过"), value: "reviewed" },
   { label: t("已跳过"), value: "skipped" },
 ];
 /** 一个人标注（不用审核）时的筛选：已标注包含已审核 */
@@ -66,12 +68,6 @@ const SOLO_FILTERS = [
   { label: t("已标注"), value: "done" },
   { label: t("已跳过"), value: "skipped" },
 ];
-const STATUS_TEXT: Record<ImageStatus, { text: string; color?: string }> = {
-  todo: { text: t("未标注") },
-  labeled: { text: t("已标注"), color: "processing" },
-  reviewed: { text: t("已审核"), color: "success" },
-  skipped: { text: t("已跳过") },
-};
 const SOURCE_TEXT: Record<string, string> = { manual: t("手工"), model: t("模型"), sam: "SAM", ai: t("巡瞳"), text: t("文本"), interp: t("插值"), track: t("跟踪") };
 const HISTORY_MAX = 200;
 // 底部缩略图条高度（像素）
@@ -1625,7 +1621,7 @@ export default function Annotate({ project }: { project: ProjectInfo }) {
         <Button size="small" icon={<RightOutlined />} disabled={!ids || idx >= ids.length - 1} onClick={() => go(idx + 1)} />
         {meta && (() => {
           // 不用审核时：已审核的图显示成已标注；没有目标的显示「没有目标」
-          const st = review || meta.status !== "reviewed" ? STATUS_TEXT[meta.status] : objects.length || tag ? STATUS_TEXT.labeled : { text: t("没有目标"), color: undefined };
+          const st = review || meta.status !== "reviewed" || objects.length || tag ? statusTag(meta.status, review) : { text: t("没有目标"), color: undefined };
           return <Tag color={st.color}>{st.text}</Tag>;
         })()}
         <Segmented

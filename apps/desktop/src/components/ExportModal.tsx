@@ -196,7 +196,7 @@ export default function ExportModal({
         >
           {review ? (
             <Checkbox checked={onlyReviewed} onChange={(e) => setOnlyReviewed(e.target.checked)}>
-              {t("只导出已审核的图片")}
+              {t("只导出审核通过的图片")}
             </Checkbox>
           ) : (
             <span className="muted">{t("已标注的图片")}</span>
