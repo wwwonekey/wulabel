@@ -1546,5 +1546,7 @@
   "改为已通过": "Set to approved",
   "没审核过的图（未标注 + 待审核）": "Images not yet reviewed (unlabeled + pending review)",
   "高级设置里勾了「只用审核通过的图片」，待审核的图这次不参与训练": "\"Use approved images only\" is checked in the advanced settings, so images pending review won't be used this time",
-  "只用审核通过的图片": "Use approved images only"
+  "只用审核通过的图片": "Use approved images only",
+  "修复：团队协作时，标注员用浏览器打开标注页看不到大图（缩略图正常）。": "Fix: in team collaboration, annotators opening the annotation page in a browser couldn't see the full image (thumbnails were fine).",
+  "团队协作时图片状态改叫「待审核」和「已通过」，一眼能看出哪些还等着审核；一个人标注时不变。": "In team collaboration, image statuses are now called \"Pending review\" and \"Approved\", so you can see at a glance what is still waiting for review; solo projects are unchanged."
 }

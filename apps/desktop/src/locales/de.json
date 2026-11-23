@@ -1546,5 +1546,7 @@
   "改为已通过": "Auf „freigegeben“ setzen",
   "没审核过的图（未标注 + 待审核）": "Noch nicht geprüfte Bilder (nicht annotiert + wartet auf Prüfung)",
   "高级设置里勾了「只用审核通过的图片」，待审核的图这次不参与训练": "In den erweiterten Einstellungen ist „Nur freigegebene Bilder verwenden“ aktiviert, daher werden Bilder, die auf Prüfung warten, diesmal nicht verwendet",
-  "只用审核通过的图片": "Nur freigegebene Bilder verwenden"
+  "只用审核通过的图片": "Nur freigegebene Bilder verwenden",
+  "修复：团队协作时，标注员用浏览器打开标注页看不到大图（缩略图正常）。": "Behoben: Bei der Teamarbeit sahen Annotatoren, die die Annotationsseite im Browser öffneten, das große Bild nicht (Vorschaubilder waren in Ordnung).",
+  "团队协作时图片状态改叫「待审核」和「已通过」，一眼能看出哪些还等着审核；一个人标注时不变。": "Bei der Teamarbeit heißen die Bildstatus jetzt „Wartet auf Prüfung“ und „Freigegeben“, damit man auf einen Blick sieht, was noch geprüft werden muss; allein arbeitende Projekte bleiben unverändert."
 }

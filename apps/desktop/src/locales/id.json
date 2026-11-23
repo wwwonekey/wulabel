@@ -1546,5 +1546,7 @@
   "改为已通过": "Ubah ke disetujui",
   "没审核过的图（未标注 + 待审核）": "Gambar yang belum ditinjau (belum dianotasi + menunggu tinjauan)",
   "高级设置里勾了「只用审核通过的图片」，待审核的图这次不参与训练": "\"Pakai hanya gambar yang disetujui\" dicentang di pengaturan lanjutan, jadi gambar yang menunggu tinjauan tidak dipakai kali ini",
-  "只用审核通过的图片": "Pakai hanya gambar yang disetujui"
+  "只用审核通过的图片": "Pakai hanya gambar yang disetujui",
+  "修复：团队协作时，标注员用浏览器打开标注页看不到大图（缩略图正常）。": "Perbaikan: dalam kolaborasi tim, anotator yang membuka halaman anotasi di browser tidak bisa melihat gambar besar (thumbnail normal).",
+  "团队协作时图片状态改叫「待审核」和「已通过」，一眼能看出哪些还等着审核；一个人标注时不变。": "Dalam kolaborasi tim, status gambar kini bernama \"Menunggu tinjauan\" dan \"Disetujui\", sehingga langsung terlihat mana yang masih menunggu tinjauan; saat menganotasi sendiri tidak berubah."
 }

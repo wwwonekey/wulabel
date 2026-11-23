@@ -1546,5 +1546,7 @@
   "改为已通过": "Chuyển sang đã được duyệt",
   "没审核过的图（未标注 + 待审核）": "Ảnh chưa duyệt (chưa gán nhãn + chờ duyệt)",
   "高级设置里勾了「只用审核通过的图片」，待审核的图这次不参与训练": "Đã bật \"Chỉ dùng ảnh đã được duyệt\" trong cài đặt nâng cao, nên ảnh đang chờ duyệt sẽ không dùng lần này",
-  "只用审核通过的图片": "Chỉ dùng ảnh đã được duyệt"
+  "只用审核通过的图片": "Chỉ dùng ảnh đã được duyệt",
+  "修复：团队协作时，标注员用浏览器打开标注页看不到大图（缩略图正常）。": "Sửa lỗi: khi cộng tác nhóm, người gán nhãn mở trang gán nhãn bằng trình duyệt không thấy ảnh lớn (ảnh thu nhỏ vẫn bình thường).",
+  "团队协作时图片状态改叫「待审核」和「已通过」，一眼能看出哪些还等着审核；一个人标注时不变。": "Khi cộng tác nhóm, trạng thái ảnh nay gọi là \"Chờ duyệt\" và \"Đã được duyệt\", nhìn là biết ảnh nào còn chờ duyệt; khi gán nhãn một mình thì không đổi."
 }
