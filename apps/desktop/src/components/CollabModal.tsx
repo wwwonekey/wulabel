@@ -40,6 +40,7 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
   const [overwrite, setOverwrite] = useState(false);
   const [importNew, setImportNew] = useState(true);
   const [merging, setMerging] = useState(false);
+  const [mergeProg, setMergeProg] = useState<ImportProgress | null>(null);
   const [result, setResult] = useState<MergeResult | null>(null);
 
   const load = useCallback(() => api.listPackages().then(setList).catch(() => {}), []);
@@ -93,6 +94,8 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
     if (!dir) return;
     setMerging(true);
     setResult(null);
+    setMergeProg({ done: 0, total: 0 });
+    const un = await listen<ImportProgress>("merge-progress", (e) => setMergeProg(e.payload));
     try {
       const r = await api.mergePackage({ dir, overwrite, importNew });
       setResult(r);
@@ -101,7 +104,9 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
     } catch (e) {
       message.error(errText(e));
     } finally {
+      un();
       setMerging(false);
+      setMergeProg(null);
     }
   };
 
@@ -179,6 +184,16 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
                   <Button type="primary" disabled={!mergeDir} loading={merging} onClick={() => merge()}>
                     {t("合并")}
                   </Button>
+                  {mergeProg && (
+                    <>
+                      <Progress size="small" percent={mergeProg.total ? Math.floor((mergeProg.done / mergeProg.total) * 100) : 0} />
+                      <div className="dim" style={{ fontSize: 12 }}>
+                        {mergeProg.total
+                          ? t("正在合并标注、导入新图 {done} / {total} 张", { done: mergeProg.done, total: mergeProg.total })
+                          : t("正在读取标注包…")}
+                      </div>
+                    </>
+                  )}
                 </Space>
               </>
             ),

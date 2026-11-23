@@ -759,6 +759,9 @@ export const api = {
   openUrl: (url: string) => invoke<void>("open_url", { url }),
   xtPullAlarms: (options: { days: number; model: string | null; max: number; withBoxes: boolean }) =>
     invoke<XtPullResult>("xt_pull_alarms", { options }),
+  /** 正在跑的体检进度，没在跑是 null（离开体检页再回来时用） */
+  healthStatus: () => invoke<HealthProgress | null>("health_status"),
+  healthStop: () => invoke<void>("health_stop"),
 };
 
 export interface XtAccount {
@@ -993,3 +996,12 @@ export interface EvalProgress {
 
 /** 最近一次导入的那批图的 id（现场回流导入后去标注这批） */
 export const lastImportIds = () => invoke<number[]>("last_import_ids");
+
+/** 体检进度。stage：空 准备中 / hash 计算指纹 / compare 两两比对 / model 模型检查 */
+export interface HealthProgress {
+  stage: "" | "hash" | "compare" | "model";
+  done: number;
+  total: number;
+  /** 已经点了停止，正在停 */
+  stopping: boolean;
+}

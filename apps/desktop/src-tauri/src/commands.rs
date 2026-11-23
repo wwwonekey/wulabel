@@ -320,11 +320,14 @@ pub async fn list_packages(state: State<'_, AppState>) -> AppResult<Vec<collab::
 }
 
 #[tauri::command]
-pub async fn merge_package(state: State<'_, AppState>, options: collab::MergeOptions) -> AppResult<collab::MergeResult> {
+pub async fn merge_package(app: AppHandle, state: State<'_, AppState>, options: collab::MergeOptions) -> AppResult<collab::MergeResult> {
     let project = state.current()?;
-    tauri::async_runtime::spawn_blocking(move || collab::merge(&project, &options))
-        .await
-        .map_err(|e| msg(t!("合并异常：{e}", e = e)))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let progress = progress_emitter(app, "merge-progress");
+        collab::merge(&project, &options, &progress)
+    })
+    .await
+    .map_err(|e| msg(t!("合并异常：{e}", e = e)))?
 }
 
 #[tauri::command]
@@ -481,7 +484,7 @@ pub async fn last_import(state: State<'_, AppState>) -> AppResult<Option<LastImp
 
 /// scope: "ids"（配合 ids）/ "last"（上次导入）/ "all"（全部）
 #[tauri::command]
-pub async fn delete_images(state: State<'_, AppState>, scope: String, ids: Option<Vec<i64>>) -> AppResult<usize> {
+pub async fn delete_images(app: AppHandle, state: State<'_, AppState>, scope: String, ids: Option<Vec<i64>>) -> AppResult<usize> {
     let project = state.current()?;
     let scope = match scope.as_str() {
         "ids" => DeleteScope::Ids(ids.unwrap_or_default()),
@@ -489,9 +492,12 @@ pub async fn delete_images(state: State<'_, AppState>, scope: String, ids: Optio
         "all" => DeleteScope::All,
         s => return Err(msg(t!("不支持的删除范围：{s}", s = s))),
     };
-    tauri::async_runtime::spawn_blocking(move || images::delete(&project, scope))
-        .await
-        .map_err(|e| msg(t!("删除任务异常：{e}", e = e)))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let progress = progress_emitter(app, "delete-progress");
+        images::delete_with(&project, scope, &progress)
+    })
+    .await
+    .map_err(|e| msg(t!("删除任务异常：{e}", e = e)))?
 }
 
 // ---------- 训练环境 ----------
@@ -843,24 +849,50 @@ pub async fn health_load(state: State<'_, AppState>) -> AppResult<Option<HealthR
     health::load(&*state.current()?)
 }
 
-/// run_id 为空只做规则检查
+/// run_id 为空只做规则检查。同一时间只跑一个；进度推 health-progress，结束推 health-done（是否成功）
 #[tauri::command]
 pub async fn health_run(app: AppHandle, state: State<'_, AppState>, run_id: Option<i64>) -> AppResult<HealthReport> {
     let project = state.current()?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let progress = progress_emitter(app.clone(), "health-progress");
+    let guard = health::begin(&project)?;
+    let done_app = app.clone();
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        let prog_app = app.clone();
+        let progress = move |stage: &str, done: usize, total: usize| {
+            if let Some(pg) = health::note(stage, done, total) {
+                let _ = prog_app.emit("health-progress", pg);
+            }
+        };
         let run = match run_id {
             Some(id) => Some((id, training::get_run(&project, id)?.name)),
             None => None,
         };
         let rt = app.state::<Runtime>();
         let pr = app.state::<Predictor>();
-        let predict = |ids: &[i64]| training::predict_many(&project, &rt, &pr, run_id.unwrap(), ids, 0.05, &progress);
-        let predict_ref: Option<&dyn Fn(&[i64]) -> AppResult<_>> = if run_id.is_some() { Some(&predict) } else { None };
-        health::run(&project, run, predict_ref, &progress)
+        let predict = |ids: &[i64], prog: &(dyn Fn(usize, usize) + Sync)| {
+            training::predict_many(&project, &rt, &pr, run_id.unwrap(), ids, 0.05, prog)
+        };
+        let predict_ref: Option<&health::Predict<'_>> = if run_id.is_some() { Some(&predict) } else { None };
+        health::run_with(&project, run, predict_ref, &health::STOP_HEALTH, &progress)
     })
     .await
-    .map_err(|e| msg(t!("体检任务异常：{e}", e = e)))?
+    .map_err(|e| msg(t!("体检任务异常：{e}", e = e)))
+    .and_then(|r| r);
+    let _ = done_app.emit("health-done", res.is_ok());
+    res
+}
+
+/// 正在跑的体检进度（离开体检页再回来时用），没在跑返回 null
+#[tauri::command]
+pub async fn health_status(state: State<'_, AppState>) -> AppResult<Option<health::HealthProgress>> {
+    Ok(health::status(&*state.current()?))
+}
+
+/// 停止正在跑的体检，不保存报告
+#[tauri::command]
+pub async fn health_stop() -> AppResult<()> {
+    health::stop();
+    Ok(())
 }
 
 #[tauri::command]
