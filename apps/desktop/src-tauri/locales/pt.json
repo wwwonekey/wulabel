@@ -457,5 +457,7 @@
   "重试 {n} 次还是没下下来：{e}": "Não foi possível baixar após {n} tentativas: {e}",
   "下载中断（{e}），{s} 秒后从断点接着下…": "Download interrompido ({e}); retomando de onde parou em {s} s…",
   "下载不完整（{done} / {total} 字节）": "Download incompleto ({done} / {total} bytes)",
-  "下载 uv 失败：{errors}。可以手动安装 uv 后在设置里指定路径": "Falha ao baixar o uv: {errors}. Você pode instalar o uv manualmente e informar o caminho em Configurações"
+  "下载 uv 失败：{errors}。可以手动安装 uv 后在设置里指定路径": "Falha ao baixar o uv: {errors}. Você pode instalar o uv manualmente e informar o caminho em Configurações",
+  "这次训练没有留下可以接着跑的进度": "Este treino não deixou um ponto salvo para retomar",
+  "这次训练用的数据集副本不见了，没法接着训，请重新开始训练": "A cópia do conjunto de dados deste treino sumiu, então não dá para retomar. Comece um novo treino."
 }

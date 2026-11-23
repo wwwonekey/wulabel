@@ -340,6 +340,8 @@ export interface RunInfo {
   createdAt: number;
   hasWeights: boolean;
   hasOnnx: boolean;
+  /** 停止、中断或失败的训练留有断点：可以从最后训完的一轮接着训练 */
+  canResume: boolean;
 }
 
 export interface Metric {
@@ -602,6 +604,8 @@ export const api = {
   runDetail: (id: number) => invoke<RunDetail>("run_detail", { id }),
   runningRun: () => invoke<number | null>("running_run"),
   startTraining: (config: TrainConfig) => invoke<number>("start_training", { config }),
+  /** 从断点继续训练（同一条记录） */
+  resumeTraining: (runId: number) => invoke<void>("resume_training", { runId }),
   stopTraining: (id: number) => invoke<void>("stop_training", { id }),
   deleteRun: (id: number) => invoke<void>("delete_run", { id }),
   exportOnnx: (id: number) => invoke<string>("export_onnx", { id }),
@@ -1040,7 +1044,7 @@ export interface BusyTasks {
 /** 正在进行的任务，给用户看的说明；没有就是空数组 */
 export function busyList(b: BusyTasks): string[] {
   const out: string[] = [];
-  if (b.training != null) out.push(t("正在训练（之后可以选这次训练的模型「接着训」）"));
+  if (b.training != null) out.push(t("正在训练（之后可以「继续训练」接着跑）"));
   if (b.installing) out.push(t("正在安装训练环境"));
   if (b.prelabel) out.push(t("正在批量预标注（已标好的会保留）"));
   if (b.stream) out.push(t("正在采集视频流"));

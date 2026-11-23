@@ -419,6 +419,47 @@ export default function Train({ project }: { project: ProjectInfo }) {
     }
   };
 
+  /** 从断点继续训练：同一条记录，从最后训完的一轮接着跑 */
+  const [resuming, setResuming] = useState(false);
+  const resume = async () => {
+    if (!run) return;
+    setResuming(true);
+    try {
+      await api.resumeTraining(run.id);
+      await loadRuns();
+      await loadDetail(run.id);
+      message.success(t("已从断点继续训练"));
+    } catch (e) {
+      modal.error({ title: t("没能继续训练"), content: errText(e) });
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  /** 删除勾选的几条训练记录（训练中的不能选） */
+  const removeSelected = () => {
+    const ids = compareIds.filter((id) => runs.some((r) => r.id === id && r.status !== "running"));
+    if (!ids.length) return;
+    modal.confirm({
+      title: t("删除选中的 {n} 条训练记录？", { n: ids.length }),
+      content: t("这些训练的模型文件、日志和数据集副本都会删除，无法恢复。"),
+      okText: t("删除"),
+      okButtonProps: { danger: true },
+      cancelText: t("取消"),
+      onOk: async () => {
+        let failed = 0;
+        for (const id of ids) {
+          await api.deleteRun(id).catch(() => failed++);
+        }
+        setCompareIds([]);
+        const rs = await loadRuns();
+        if (sel != null && ids.includes(sel)) setSel(rs[0]?.id ?? null);
+        if (failed) message.warning(t("有 {n} 条没删掉，可能正在使用", { n: failed }));
+        else message.success(t("已删除 {n} 条训练记录", { n: ids.length }));
+      },
+    });
+  };
+
   const remove = () => {
     if (!run) return;
     modal.confirm({
@@ -675,7 +716,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
                   <Space>
                     {run.status === "running" && (
                       <Popconfirm
-                        title={t("停止训练？目前最好的模型会保留，之后可以选它“接着训”")}
+                        title={t("停止训练？训完的轮次会保留，之后可以点「继续训练」从这里接着跑")}
                         okText={t("停止")}
                         cancelText={t("取消")}
                         okButtonProps={{ danger: true }}
@@ -685,6 +726,13 @@ export default function Train({ project }: { project: ProjectInfo }) {
                           {t("停止")}
                         </Button>
                       </Popconfirm>
+                    )}
+                    {run.canResume && !running && (
+                      <Tooltip title={t("从最后训完的一轮接着训练，曲线和日志接在后面")}>
+                        <Button size="small" type="primary" icon={<CaretRightOutlined />} loading={resuming} onClick={resume}>
+                          {t("继续训练")}
+                        </Button>
+                      </Tooltip>
                     )}
                     {run.hasWeights && (
                       <>
@@ -814,7 +862,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
           )}
           <div className="card">
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-              <span className="muted">{t("训练记录")} <span className="dim">· {t("勾选两次以上可以对比")}</span></span>
+              <span className="muted">{t("训练记录")} <span className="dim">· {t("勾选两次以上可以对比，也可以一起删除")}</span></span>
               <Space>
                 {task === "detect" && (
                   <Tooltip title={t("导入别处训好的 YOLO 等 ONNX 模型，用来预标注、评估、误报测试")}>
@@ -823,8 +871,13 @@ export default function Train({ project }: { project: ProjectInfo }) {
                     </Button>
                   </Tooltip>
                 )}
-                <Button size="small" disabled={compareIds.length < 2} onClick={() => setComparing(true)}>
-                  {compareIds.length >= 2 ? t("对比所选（{n}）", { n: compareIds.length }) : t("对比所选")}
+                <Tooltip title={compareIds.length > 8 ? t("最多同时对比 8 次训练") : undefined}>
+                  <Button size="small" disabled={compareIds.length < 2 || compareIds.length > 8} onClick={() => setComparing(true)}>
+                    {compareIds.length >= 2 ? t("对比所选（{n}）", { n: compareIds.length }) : t("对比所选")}
+                  </Button>
+                </Tooltip>
+                <Button size="small" danger icon={<DeleteOutlined />} disabled={compareIds.length === 0} onClick={removeSelected}>
+                  {compareIds.length ? t("删除所选（{n}）", { n: compareIds.length }) : t("删除所选")}
                 </Button>
               </Space>
             </div>
@@ -835,7 +888,7 @@ export default function Train({ project }: { project: ProjectInfo }) {
               pagination={false}
               rowSelection={{
                 selectedRowKeys: compareIds,
-                onChange: (keys) => setCompareIds((keys as number[]).slice(0, 8)),
+                onChange: (keys) => setCompareIds(keys as number[]),
                 getCheckboxProps: (r) => ({ disabled: r.status === "running" }),
               }}
               onRow={(r) => ({ onClick: () => setSel(r.id), style: { cursor: "pointer", background: r.id === sel ? "rgba(61,139,253,.12)" : undefined } })}

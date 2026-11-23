@@ -125,5 +125,6 @@
   "下载中断（{e}），{n} 秒后接着下…": "Download interrupted ({e}); resuming in {n} s…",
   "下载完成：{name}（{size}）": "Downloaded {name} ({size})",
   "这张显卡需要 CUDA 12.8 版的 PyTorch，请改选后重新安装": "This GPU needs the CUDA 12.8 build of PyTorch; select it and reinstall",
-  "显卡和装的 PyTorch 版本不匹配，请换一个 CUDA 版本重新安装": "The GPU doesn't match the installed PyTorch build; reinstall with a different CUDA version"
+  "显卡和装的 PyTorch 版本不匹配，请换一个 CUDA 版本重新安装": "The GPU doesn't match the installed PyTorch build; reinstall with a different CUDA version",
+  "从第 {epoch} 轮接着训练（共 {epochs} 轮）": "Resuming from epoch {epoch} (of {epochs})"
 }

@@ -457,5 +457,7 @@
   "重试 {n} 次还是没下下来：{e}": "Thử lại {n} lần vẫn chưa tải được: {e}",
   "下载中断（{e}），{s} 秒后从断点接着下…": "Tải bị gián đoạn ({e}), sau {s} giây sẽ tải tiếp từ chỗ dừng…",
   "下载不完整（{done} / {total} 字节）": "Tải xuống chưa đầy đủ ({done} / {total} byte)",
-  "下载 uv 失败：{errors}。可以手动安装 uv 后在设置里指定路径": "Tải uv thất bại: {errors}. Có thể tự cài uv rồi chỉ định đường dẫn trong Cài đặt"
+  "下载 uv 失败：{errors}。可以手动安装 uv 后在设置里指定路径": "Tải uv thất bại: {errors}. Có thể tự cài uv rồi chỉ định đường dẫn trong Cài đặt",
+  "这次训练没有留下可以接着跑的进度": "Lần huấn luyện này không có điểm lưu để chạy tiếp",
+  "这次训练用的数据集副本不见了，没法接着训，请重新开始训练": "Bản sao tập dữ liệu của lần huấn luyện này không còn, không thể chạy tiếp. Hãy bắt đầu huấn luyện mới."
 }

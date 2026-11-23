@@ -599,18 +599,37 @@ pub async fn running_run(jobs: State<'_, Arc<Jobs>>) -> AppResult<Option<i64>> {
 pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: TrainConfig) -> AppResult<i64> {
     let project = state.current()?;
     let jobs = app.state::<Arc<Jobs>>().inner().clone();
-    let a = app.clone();
-    let sink: training::EventSink = Arc::new(move |id, ev| {
-        if ev["type"] == "finished" {
-            notify_training(&a, ev["status"].as_str().unwrap_or(""));
-        }
-        let _ = a.emit("train-event", serde_json::json!({ "runId": id, "event": ev }));
-    });
+    let sink = train_sink(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let rt = app.state::<Runtime>();
         // 开始前要导出一份数据集副本，图多时要一会儿，给界面推进度
         let prepare = progress_emitter(app.clone(), "train-prepare");
         training::start(project, &rt, jobs, config, sink, &prepare)
+    })
+    .await
+    .map_err(|e| msg(t!("启动训练异常：{e}", e = e)))?
+}
+
+/// 训练进程的事件转给前端（train-event），结束时发系统通知
+fn train_sink(app: &AppHandle) -> training::EventSink {
+    let a = app.clone();
+    Arc::new(move |id, ev| {
+        if ev["type"] == "finished" {
+            notify_training(&a, ev["status"].as_str().unwrap_or(""));
+        }
+        let _ = a.emit("train-event", serde_json::json!({ "runId": id, "event": ev }));
+    })
+}
+
+/// 从断点继续训练（停止、中断、失败的训练，留有每轮的断点）
+#[tauri::command]
+pub async fn resume_training(app: AppHandle, state: State<'_, AppState>, run_id: i64) -> AppResult<()> {
+    let project = state.current()?;
+    let jobs = app.state::<Arc<Jobs>>().inner().clone();
+    let sink = train_sink(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        let rt = app.state::<Runtime>();
+        training::resume(project, &rt, jobs, run_id, sink)
     })
     .await
     .map_err(|e| msg(t!("启动训练异常：{e}", e = e)))?

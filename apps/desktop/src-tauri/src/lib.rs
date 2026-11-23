@@ -162,6 +162,7 @@ pub fn run() {
             commands::run_detail,
             commands::running_run,
             commands::start_training,
+            commands::resume_training,
             commands::stop_training,
             commands::delete_run,
             commands::export_onnx,
