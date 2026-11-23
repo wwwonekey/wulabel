@@ -299,9 +299,19 @@ def run_formats(cfg: dict) -> None:
     static = out / "onnx_static" / "model_static.onnx"
     need_dyn = any(f in formats for f in ("onnx", "openvino"))
     need_static = any(f in formats for f in ("onnx_static", "tensorrt", "rknn"))
+    # 步骤进度：动态 ONNX、固定 ONNX 各一步，后面每个格式一步（名字用格式，界面换成格式名）
+    steps = (["onnx"] if need_dyn else []) + (["onnx_static"] if need_static else [])
+    steps += [f for f in ("openvino", "tensorrt", "rknn") if f in formats]
+    passed = []
+
+    def stage(name):
+        emit("progress", step=len(passed), total=len(steps), name=name)
+        passed.append(name)
+
     # 分类模型只有固定尺寸一种（批大小可变），「动态」和「固定」导出的是同一个模型
     cls_input = tr("image: float32 [N, 3, {size}, {size}]，RGB，0~1；原图直接缩放到 {size}×{size}（模型内部已做归一化）", size=size)
     if need_dyn:
+        stage("onnx")
         log(tr("导出 ONNX（动态尺寸）…"))
         dyn.parent.mkdir(parents=True, exist_ok=True)
         if cls:
@@ -315,6 +325,7 @@ def run_formats(cfg: dict) -> None:
         if "onnx" in formats:
             done("onnx", dyn)
     if need_static:
+        stage("onnx_static")
         log(tr("导出 ONNX（固定尺寸 {size}×{size}）…", size=size))
         static.parent.mkdir(parents=True, exist_ok=True)
         static_meta = dict(meta)
@@ -339,6 +350,7 @@ def run_formats(cfg: dict) -> None:
             done("onnx_static", static)
 
     if "openvino" in formats:
+        stage("openvino")
         try:
             os.environ.setdefault("OPENVINO_TELEMETRY", "0")
             import openvino as ov
@@ -373,6 +385,7 @@ def run_formats(cfg: dict) -> None:
     ):
         if fmt not in formats:
             continue
+        stage(fmt)
         d = out / fmt
         d.mkdir(parents=True, exist_ok=True)
         shutil.copy(static, d / "model_static.onnx")
@@ -387,4 +400,5 @@ def run_formats(cfg: dict) -> None:
         shutil.rmtree(static.parent, ignore_errors=True)
     if "onnx" not in formats and dyn.parent.exists() and "openvino" in formats:
         shutil.rmtree(dyn.parent, ignore_errors=True)
+    emit("progress", step=len(steps), total=len(steps), name="")
     emit("done", results=results)

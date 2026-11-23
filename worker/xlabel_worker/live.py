@@ -2,6 +2,7 @@
 
 配置（JSON）：source（视频流地址或视频文件路径）、weights、conf、max_fps、preview_width
 输出事件：
+    {"type": "stage", "step": "model" / "open"}   启动阶段：加载模型、连接视频源
     {"type": "open", "width", "height", "fps", "frames", "classes", "task"}
     {"type": "frame", "jpg": base64, "w", "h", "boxes": [[x, y, w, h, 类别序号, 分数]], "ms", "fps", "pos",
      "polys": 分割模型每个框的多边形 [x1, y1, ...]（和 boxes 一一对应，没有时为 []），
@@ -152,8 +153,11 @@ def run(cfg: dict) -> None:
     device = torch.device(
         "cuda" if torch.cuda.is_available() else "mps" if (mps is not None and mps.is_available()) else "cpu"
     )
+    # 启动阶段告诉界面在做什么：加载模型、连接视频源（连 RTSP 可能要好几秒）
+    emit("stage", step="model")
     model, ck = models.load(Path(cfg["weights"]), device)
 
+    emit("stage", step="open")
     g = Grabber(src)
     if not g.opened():
         emit("error", msg=tr("打不开视频源：{src}。视频流请检查地址、账号密码和网络；视频文件请检查路径和格式。", src=src))

@@ -40,13 +40,16 @@ def _det_splits(root: Path, classes: list[str], predict) -> dict:
             continue
         ds = CocoDetection(root, split, train=False)
         preds, gts = [], []
+        n = len(ds.images)
+        emit("progress", split=split, done=0, total=n)
         for i, im in enumerate(ds.images):
             boxes, scores, labels = predict(load_image(ds.dir / im["file_name"]))
             preds.append(ImagePred(boxes=boxes, scores=scores, labels=labels))
             t = ds.target(i)
             gts.append(ImageGt(boxes=t["boxes"].numpy(), labels=t["labels"].numpy() - 1, image_id=int(im["id"])))
-            if i % 20 == 0:
-                emit("progress", split=split, done=i + 1, total=len(ds.images))
+            # 每 10 张和最后一张报一次进度
+            if (i + 1) % 10 == 0 or i + 1 == n:
+                emit("progress", split=split, done=i + 1, total=n)
         r = evaluate(preds, gts, len(classes))
         r.thresholds = threshold_curve(preds, gts, len(classes))
         out[split] = split_report(r, classes, len(ds.images))
@@ -95,6 +98,7 @@ def run(cfg: dict) -> None:
                 ds = ClsFolder(root, split, train=False, size=int(ck["img_size"]))
                 y_true, y_pred, ids, scores = [], [], [], []
                 model.eval()
+                emit("progress", split=split, done=0, total=len(ds))
                 with torch.no_grad():
                     loader = torch.utils.data.DataLoader(ds, batch_size=16, shuffle=False, collate_fn=task.collate)
                     for imgs, labels, idl in loader:
@@ -106,6 +110,7 @@ def run(cfg: dict) -> None:
                             y_pred.append(cmap.get(pi, -1))
                             scores.append(s)
                             ids.append(i)
+                        emit("progress", split=split, done=len(ids), total=len(ds))
                 # 分错到项目里没有的类别时，混淆矩阵放不下，记成「判成第一个类以外」——这里归到最后统计前过滤
                 yp = [p if p >= 0 else (t + 1) % max(len(classes), 1) for p, t in zip(y_pred, y_true)]
                 r = classify_eval(y_true, yp, ids, len(classes), scores=np.array(scores))
