@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, App, Button, Empty, Progress, Select, Space, Tag, Tooltip } from "antd";
 import { CheckOutlined, EyeInvisibleOutlined, FormOutlined, HeartOutlined, PlusOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
-import { api, errText, HealthProgress, HealthReport, ImageStatus, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
+import { api, errText, HealthProgress, HealthReport, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
 import { useApp, useReview } from "../store";
+import { statusTag } from "../status";
 import { fmtTime } from "./Train";
 import { t } from "../i18n";
 
@@ -21,12 +22,6 @@ const KINDS: { key: Filter; name: string; color: string; tip: string; model?: bo
   { key: "no_label", name: t("无类别"), color: "#9aa1ab", tip: t("框没有类别，不会参与训练") },
 ];
 
-const STATUS: Record<ImageStatus, { text: string; color?: string }> = {
-  todo: { text: t("未标注") },
-  labeled: { text: t("已标注"), color: "processing" },
-  reviewed: { text: t("已审核"), color: "success" },
-  skipped: { text: t("已跳过") },
-};
 
 const PAGE = 48;
 
@@ -444,7 +439,7 @@ export default function Health({ project }: { project: ProjectInfo }) {
                           {g.map((id) => {
                             const kept = keepOf(g) === id;
                             const info = report.imgInfo?.[String(id)];
-                            const st = info ? STATUS[!review && info[0] === "reviewed" ? "labeled" : info[0]] : null;
+                            const st = info ? statusTag(info[0], review) : null;
                             return (
                               <div
                                 key={id}

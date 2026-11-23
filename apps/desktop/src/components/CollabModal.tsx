@@ -143,7 +143,7 @@ export default function CollabModal({ project, open, onClose }: { project: Proje
                   <Radio.Group value={scope} onChange={(e) => setScope(e.target.value)}>
                     <Radio value="todo">{t("只分未标注的图")}</Radio>
                     {/* 一个人标注时没有审核，这一项（未标注 + 已标注但没审核）没意义，不显示 */}
-                    {review && <Radio value="unreviewed">{t("未审核的（未标注 + 已标注待复核）")}</Radio>}
+                    {review && <Radio value="unreviewed">{t("没审核过的（未标注 + 待审核）")}</Radio>}
                     <Radio value="all">{t("全部（跳过的除外）")}</Radio>
                   </Radio.Group>
                   <Checkbox checked={withAnns} onChange={(e) => setWithAnns(e.target.checked)}>
