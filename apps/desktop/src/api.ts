@@ -973,3 +973,23 @@ export const imageUrl = (projectPath: string, id: number) =>
   isRemote ? `api/image/${id}?t=${encodeURIComponent(getToken())}` : `${BASE}/image/${id}?p=${projectKey(projectPath)}`;
 
 export const errText = (e: unknown) => (typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
+
+// ---------- 等待中的进度（训练准备、重新评估、部署） ----------
+
+/** 部署页导出、生成服务包的步骤（deploy-progress）；total 为 0 表示还不知道有几步 */
+export interface DeployStep {
+  done: number;
+  total: number;
+  /** 当前步骤：多格式导出时是格式（onnx、openvino 等），其他是说明文字 */
+  name: string;
+}
+
+/** 重新评估的进度（eval-progress）：stage 是 export 导出数据 / load 加载模型 / val / test */
+export interface EvalProgress {
+  stage: string;
+  done: number;
+  total: number;
+}
+
+/** 最近一次导入的那批图的 id（现场回流导入后去标注这批） */
+export const lastImportIds = () => invoke<number[]>("last_import_ids");

@@ -258,9 +258,20 @@ pub async fn evaluate_run(app: AppHandle, state: State<'_, AppState>, run_id: i6
     let project = state.current()?;
     tauri::async_runtime::spawn_blocking(move || {
         let a = app.clone();
+        let b = app.clone();
+        // 导出数据时每张图回调一次，按 1% 推；每个阶段的开头（done 为 0 或变小）一定推
+        let last = std::sync::atomic::AtomicUsize::new(usize::MAX);
+        let progress = move |stage: &str, done: usize, total: usize| {
+            use std::sync::atomic::Ordering::Relaxed;
+            let prev = last.load(Relaxed);
+            if prev == usize::MAX || done == 0 || done == total || done < prev || done >= prev + (total / 100).max(1) {
+                last.store(done, Relaxed);
+                let _ = b.emit("eval-progress", serde_json::json!({ "stage": stage, "done": done, "total": total }));
+            }
+        };
         evaltools::evaluate_run(&project, &app.state::<Runtime>(), run_id, &move |l| {
             let _ = a.emit("eval-log", l);
-        })
+        }, &progress)
     })
     .await
     .map_err(|e| msg(t!("评估异常：{e}", e = e)))?
@@ -559,7 +570,9 @@ pub async fn start_training(app: AppHandle, state: State<'_, AppState>, config: 
     });
     tauri::async_runtime::spawn_blocking(move || {
         let rt = app.state::<Runtime>();
-        training::start(project, &rt, jobs, config, sink)
+        // 开始前要导出一份数据集副本，图多时要一会儿，给界面推进度
+        let prepare = progress_emitter(app.clone(), "train-prepare");
+        training::start(project, &rt, jobs, config, sink, &prepare)
     })
     .await
     .map_err(|e| msg(t!("启动训练异常：{e}", e = e)))?
@@ -776,9 +789,10 @@ pub async fn export_formats(
     training::ensure_deployable(&project, run_id, training::Deploy::Onnx)?;
     tauri::async_runtime::spawn_blocking(move || {
         let a = app.clone();
+        let step = deploy_step(app.clone());
         deploy::export_formats(&project, &app.state::<Runtime>(), run_id, &formats, size, &PathBuf::from(out_dir), &move |l| {
             let _ = a.emit("deploy-log", l);
-        })
+        }, &step)
     })
     .await
     .map_err(|e| msg(t!("导出异常：{e}", e = e)))?
@@ -796,12 +810,30 @@ pub async fn build_service(
     training::ensure_deployable(&project, run_id, training::Deploy::Service)?;
     tauri::async_runtime::spawn_blocking(move || {
         let a = app.clone();
+        let step = deploy_step(app.clone());
         deploy::build_service(&project, &app.state::<Runtime>(), run_id, &config, &PathBuf::from(out_dir), &move |l| {
             let _ = a.emit("deploy-log", l);
-        })
+        }, &step)
     })
     .await
     .map_err(|e| msg(t!("生成服务包异常：{e}", e = e)))?
+}
+
+/// 部署页导出、生成服务包的步骤进度（deploy-progress：done / total / name）
+fn deploy_step(app: AppHandle) -> impl Fn(usize, usize, String) + Sync {
+    move |done, total, name| {
+        let _ = app.emit("deploy-progress", serde_json::json!({ "done": done, "total": total, "name": name }));
+    }
+}
+
+/// 最近一次导入的那批图的 id（现场回流导入后直接去标注这批）
+#[tauri::command]
+pub async fn last_import_ids(state: State<'_, AppState>) -> AppResult<Vec<i64>> {
+    let project = state.current()?;
+    let conn = project.conn.lock();
+    let mut stmt = conn.prepare("SELECT id FROM images WHERE batch = (SELECT MAX(batch) FROM images) AND batch > 0 ORDER BY id")?;
+    let ids = stmt.query_map([], |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(ids)
 }
 
 // ---------- 体检 ----------

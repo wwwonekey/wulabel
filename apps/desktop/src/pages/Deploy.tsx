@@ -8,6 +8,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Progress,
   Segmented,
   Select,
   Slider,
@@ -27,7 +28,7 @@ import {
 } from "@ant-design/icons";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { api, errText, FormatResult, Label, ProjectInfo, RunInfo } from "../api";
+import { api, DeployStep, errText, FormatResult, ImportProgress, Label, lastImportIds, ProjectInfo, RunInfo } from "../api";
 import { prefs, useApp } from "../store";
 import { t } from "../i18n";
 import { xuntongEnabled } from "../features";
@@ -117,6 +118,8 @@ function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recC
   const [classes, setClasses] = useState<string[]>([]);
   const [stat, setStat] = useState<{ w: number; h: number; fps: number; ms: number; counts: Record<string, number> } | null>(null);
   const [status, setStatus] = useState("");
+  /** 启动阶段：prepare 准备环境 → model 加载模型 → open 连接视频源，收到第一帧前显示 */
+  const [stage, setStage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const busy = useRef(false);
@@ -237,7 +240,11 @@ function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recC
   useEffect(() => {
     const un = listen<{ kind: string; data: Record<string, unknown> }>("live", (e) => {
       const { kind: k, data } = e.payload;
-      if (k === "open") {
+      if (k === "stage") {
+        setStage(String(data.step ?? ""));
+        setStatus("");
+      } else if (k === "open") {
+        setStage("");
         // 第一帧可能紧跟着到，先同步记下类别名
         classesRef.current = data.classes as string[];
         setClasses(data.classes as string[]);
@@ -265,8 +272,10 @@ function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recC
       } else if (k === "ended") {
         setStatus(t("视频播放完毕"));
       } else if (k === "error") {
+        setStage("");
         setError(String(data.msg ?? t("出错了")));
       } else if (k === "stopped") {
+        setStage("");
         setRunning(false);
       }
     });
@@ -281,7 +290,9 @@ function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recC
   const start = async () => {
     setError(null);
     setStat(null);
-    setStatus(t("正在连接…"));
+    // 第一次用要装 OpenCV，装的过程（log）显示在阶段下面
+    setStatus("");
+    setStage("prepare");
     setStarting(true);
     prefs.set("liveKind", kind);
     prefs.set("liveUrl", url);
@@ -292,10 +303,13 @@ function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recC
     } catch (e) {
       setError(errText(e));
       setStatus("");
+      setStage("");
     } finally {
       setStarting(false);
     }
   };
+  const stageNames: Record<string, string> = { prepare: t("准备运行环境…"), model: t("加载模型…"), open: t("连接视频源…") };
+  const stageOrder = ["prepare", "model", "open"];
 
   return (
     <div>
@@ -362,7 +376,15 @@ function LiveTab({ run, labels, recConf }: { run: RunInfo; labels: Label[]; recC
       {error && <Alert type="error" showIcon style={{ marginBottom: 12 }} message={error} closable onClose={() => setError(null)} />}
       <div className="live-box">
         <canvas ref={canvas} style={{ display: stat ? "block" : "none" }} />
-        {!stat && <div className="dim">{status || t("填写视频流地址或选择视频文件，点「开始」查看模型的实时效果")}</div>}
+        {!stat && stage && !error ? (
+          <div className="dim" style={{ width: 280, textAlign: "center" }}>
+            <Progress percent={((stageOrder.indexOf(stage) + 1) / (stageOrder.length + 1)) * 100} status="active" showInfo={false} size="small" />
+            <div>{stageNames[stage] ?? stage}</div>
+            {status && <div style={{ fontSize: 12, wordBreak: "break-all" }}>{status}</div>}
+          </div>
+        ) : (
+          !stat && <div className="dim">{status || t("填写视频流地址或选择视频文件，点「开始」查看模型的实时效果")}</div>
+        )}
         {stat && (
           <div className="live-stat">
             <span>{status}</span>
@@ -394,6 +416,23 @@ const FORMATS = [
   { value: "rknn", name: t("RKNN 转换包"), desc: t("瑞芯微 RK3588/3568 等。官方工具只支持 Linux，需在 Ubuntu 上运行脚本转换") },
 ];
 
+/** 导出、生成服务包的步骤进度条（deploy-progress）；步数未知时只显示当前在做什么 */
+function StepBar({ step }: { step: DeployStep | null }) {
+  if (!step) return null;
+  const name = FORMATS.find((f) => f.value === step.name)?.name ?? step.name;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <Progress size="small" percent={step.total ? Math.floor((step.done / step.total) * 100) : 0} status="active" />
+      <div className="dim" style={{ fontSize: 12 }}>
+        {step.total > 0 && step.done < step.total ? t("第 {n} / {total} 步：{name}", { n: step.done + 1, total: step.total, name }) : name}
+      </div>
+    </div>
+  );
+}
+
+/** 监听 deploy-progress，返回取消监听的函数 */
+const listenStep = (set: (s: DeployStep) => void) => listen<DeployStep>("deploy-progress", (e) => set(e.payload));
+
 function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
   const { message } = App.useApp();
   const builtin = MODELS.find((m) => m.value === run.config?.model);
@@ -410,6 +449,7 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
   const [busy, setBusy] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
   const [results, setResults] = useState<FormatResult[]>([]);
+  const [step, setStep] = useState<DeployStep | null>(null);
 
   const go = async () => {
     if (!parent) {
@@ -419,8 +459,10 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
     setBusy(true);
     setLines([]);
     setResults([]);
+    setStep({ done: 0, total: 0, name: "" });
     prefs.set("deployParent", parent);
     const un = await listen<string>("deploy-log", (e) => setLines((l) => [...l.slice(-200), e.payload]));
+    const unStep = await listenStep(setStep);
     try {
       setResults(await api.exportFormats(run.id, formats, size, join(parent, name)));
     } catch (e) {
@@ -429,6 +471,8 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
       // 不管成没成功都换一个新文件夹名，重试时不会报「输出目录不为空」
       setName(t("{name}_模型_{time}", { name: project.name, time: stamp() }));
       un();
+      unStep();
+      setStep(null);
       setBusy(false);
     }
   };
@@ -471,6 +515,7 @@ function ExportTab({ run, project }: { run: RunInfo; project: ProjectInfo }) {
       <Button type="primary" loading={busy} disabled={formats.length === 0} onClick={go}>
         {t("导出")}
       </Button>
+      <StepBar step={step} />
       <LogBox lines={lines} />
       {results.length > 0 && (
         <div className="card" style={{ marginTop: 12 }}>
@@ -559,6 +604,7 @@ function ServiceTab({ run, project, recConf }: { run: RunInfo; project: ProjectI
   const [name, setName] = useState(t("{name}_推理服务_{time}", { name: project.name, time: stamp() }));
   const [busy, setBusy] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
+  const [step, setStep] = useState<DeployStep | null>(null);
 
   const set = (patch: Partial<ServiceForm>) => {
     const next = { ...f, ...patch };
@@ -595,8 +641,10 @@ function ServiceTab({ run, project, recConf }: { run: RunInfo; project: ProjectI
     };
     setBusy(true);
     setLines([]);
+    setStep({ done: 0, total: 0, name: "" });
     prefs.set("deployParent", parent);
     const un = await listen<string>("deploy-log", (e) => setLines((l) => [...l.slice(-200), e.payload]));
+    const unStep = await listenStep(setStep);
     try {
       const out = await api.buildService(run.id, config, join(parent, name));
       setName(t("{name}_推理服务_{time}", { name: project.name, time: stamp() }));
@@ -618,6 +666,8 @@ function ServiceTab({ run, project, recConf }: { run: RunInfo; project: ProjectI
       message.error(errText(e));
     } finally {
       un();
+      unStep();
+      setStep(null);
       setBusy(false);
     }
   };
@@ -736,6 +786,7 @@ function ServiceTab({ run, project, recConf }: { run: RunInfo; project: ProjectI
         <span className="dim" style={{ marginLeft: 12, fontSize: 12 }}>
           {t("只依赖 onnxruntime、OpenCV、numpy，现场电脑不需要 PyTorch 和显卡")}
         </span>
+        <StepBar step={step} />
         <LogBox lines={lines} />
       </div>
     </Form>
@@ -748,26 +799,43 @@ function RefluxTab() {
   const { message } = App.useApp();
   const refreshStats = useApp((s) => s.refreshStats);
   const setPage = useApp((s) => s.setPage);
+  const annotateQueue = useApp((s) => s.annotateQueue);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
+  const [stopping, setStopping] = useState(false);
+  /** 这次导入进来的图（去标注这批） */
+  const [ids, setIds] = useState<number[]>([]);
 
   const pick = async () => {
     const d = await open({ directory: true, title: t("选择推理服务包里的 reflux 文件夹") });
     if (typeof d !== "string") return;
     setBusy(true);
+    setResult(null);
+    setIds([]);
+    setStopping(false);
+    setProgress({ done: 0, total: 0 });
+    const un = await listen<ImportProgress>("import-progress", (e) => setProgress(e.payload));
     try {
       const r = await api.importImages([d], true);
       await refreshStats();
-      setResult(
-        r.failed.length
-          ? t("导入 {added} 张，跳过重复 {dup} 张，{failed} 张读取失败", { added: r.added, dup: r.duplicated, failed: r.failed.length })
-          : t("导入 {added} 张，跳过重复 {dup} 张", { added: r.added, dup: r.duplicated }),
-      );
+      const base = r.failed.length
+        ? t("导入 {added} 张，跳过重复 {dup} 张，{failed} 张读取失败", { added: r.added, dup: r.duplicated, failed: r.failed.length })
+        : t("导入 {added} 张，跳过重复 {dup} 张", { added: r.added, dup: r.duplicated });
+      setResult(r.stopped ? t("已停止，{text}，还有 {n} 张没导入", { text: base, n: r.stopped }) : base);
+      // 新导入的图在最近一批里；全是重复的就没有新的一批
+      if (r.added > 0) setIds(await lastImportIds().catch(() => []));
     } catch (e) {
       message.error(errText(e));
     } finally {
+      un();
+      setProgress(null);
       setBusy(false);
     }
+  };
+  const stop = () => {
+    setStopping(true);
+    api.stopImport().catch((e) => message.error(errText(e)));
   };
 
   return (
@@ -778,16 +846,41 @@ function RefluxTab() {
         <div><b>3</b> {t("到「标注」页筛选「未标注」，用模型预标注后修正。")}</div>
         <div><b>4</b> {t("重新训练，再生成新的服务包替换现场的 model.onnx。模型会越用越准。")}</div>
       </div>
-      <Button type="primary" icon={<ImportOutlined />} loading={busy} onClick={pick} style={{ marginTop: 12 }}>
-        {t("导入现场回流图片")}
-      </Button>
+      <Space style={{ marginTop: 12 }}>
+        <Button type="primary" icon={<ImportOutlined />} loading={busy} onClick={pick}>
+          {t("导入现场回流图片")}
+        </Button>
+        {busy && (
+          <Button danger loading={stopping} onClick={stop}>
+            {t("停止")}
+          </Button>
+        )}
+      </Space>
+      {progress && (
+        <div style={{ marginTop: 12 }}>
+          <Progress percent={progress.total ? Math.floor((progress.done / progress.total) * 100) : 0} status="active" />
+          <div className="dim" style={{ fontSize: 12 }}>
+            {progress.total
+              ? t("已处理 {done} / {total} 张（计算指纹、生成缩略图）", { done: progress.done, total: progress.total })
+              : t("正在查找图片…")}
+          </div>
+        </div>
+      )}
       {result && (
         <Alert
           style={{ marginTop: 12 }}
           type="success"
           showIcon
           message={result}
-          action={<Button size="small" onClick={() => setPage("annotate")}>{t("去标注")}</Button>}
+          action={
+            ids.length > 0 ? (
+              <Button size="small" type="primary" onClick={() => annotateQueue(ids, t("现场回流"))}>
+                {t("去标注这批")}
+              </Button>
+            ) : (
+              <Button size="small" onClick={() => setPage("annotate")}>{t("去标注")}</Button>
+            )
+          }
         />
       )}
     </div>

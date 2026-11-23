@@ -118,6 +118,7 @@ pub fn run() {
             commands::list_images,
             commands::project_stats,
             commands::last_import,
+            commands::last_import_ids,
             commands::delete_images,
             commands::list_image_ids,
             commands::load_annotations,
