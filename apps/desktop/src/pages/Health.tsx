@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, App, Button, Empty, Progress, Select, Space, Tag, Tooltip } from "antd";
 import { CheckOutlined, EyeInvisibleOutlined, FormOutlined, HeartOutlined, PlusOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
-import { api, errText, HealthReport, ImageStatus, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
+import { api, errText, HealthProgress, HealthReport, ImageStatus, Issue, IssueKind, ProjectInfo, RunInfo, thumbUrl } from "../api";
 import { useApp, useReview } from "../store";
 import { fmtTime } from "./Train";
 import { t } from "../i18n";
@@ -29,6 +29,15 @@ const STATUS: Record<ImageStatus, { text: string; color?: string }> = {
 };
 
 const PAGE = 48;
+
+/** 体检进度下面的一行字 */
+function stageText(r: HealthProgress) {
+  if (r.stopping) return t("正在停止…");
+  if (r.stage === "hash") return t("查重：计算指纹 {done} / {total} 张", { done: r.done, total: r.total });
+  if (r.stage === "compare") return t("查重：两两比对");
+  if (r.stage === "model") return t("模型检查 {done} / {total} 张", { done: r.done, total: r.total });
+  return t("准备中…");
+}
 
 /** 缩略图上叠加问题框 */
 function IssueThumb({ path, issue, dims, color }: { path: string; issue: Issue; dims?: [number, number]; color: string }) {
@@ -62,7 +71,9 @@ export default function Health({ project }: { project: ProjectInfo }) {
   const [loaded, setLoaded] = useState(false);
   const [runs, setRuns] = useState<RunInfo[]>([]);
   const [runId, setRunId] = useState<number | null>(null);
-  const [running, setRunning] = useState<{ done: number; total: number } | null>(null);
+  const [running, setRunning] = useState<HealthProgress | null>(null);
+  // 这个页面发起的体检被点了停止（结束时提示「已停止」而不是报错）
+  const stopping = useRef(false);
   const [filter, setFilter] = useState<Filter | null>(null);
   const [limit, setLimit] = useState(PAGE);
   // 每组重复图片保留哪张（key 是组里 id 连起来），没选的用排在第一张的（后端按标注完整程度排好了）
@@ -84,6 +95,36 @@ export default function Health({ project }: { project: ProjectInfo }) {
       setRunId(ok[0]?.id ?? null);
     }).catch(() => {});
   }, [message]);
+
+  // 体检在后台跑：离开页面再回来能接着看进度；跑完（不管是不是这次打开页面时发起的）都刷新报告
+  useEffect(() => {
+    let alive = true;
+    let finished = false;
+    const uns = [
+      listen<HealthProgress>("health-progress", (e) => {
+        if (alive) setRunning(e.payload);
+      }),
+      listen<boolean>("health-done", () => {
+        finished = true;
+        if (!alive) return;
+        setRunning(null);
+        api.healthLoad().then((r) => {
+          if (alive) setReport(r);
+        }).catch(() => {});
+      }),
+    ];
+    // 先挂好监听再查，免得中间刚好跑完漏掉
+    Promise.all(uns)
+      .then(() => api.healthStatus())
+      .then((s) => {
+        if (alive && s && !finished) setRunning(s);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+      uns.forEach((p) => p.then((un) => un()));
+    };
+  }, []);
 
   const labelName = useMemo(() => {
     const m = new Map((report?.classes ?? []).map((c) => [c.labelId, c.name]));
@@ -108,8 +149,8 @@ export default function Health({ project }: { project: ProjectInfo }) {
   }, [report, counts, filter, kinds]);
 
   const start = async () => {
-    setRunning({ done: 0, total: 0 });
-    const un = await listen<{ done: number; total: number }>("health-progress", (e) => setRunning(e.payload));
+    stopping.current = false;
+    setRunning({ stage: "", done: 0, total: 0, stopping: false });
     try {
       const r = await api.healthRun(runId);
       setReport(r);
@@ -119,11 +160,18 @@ export default function Health({ project }: { project: ProjectInfo }) {
       setShowChanged(false);
       message.success(t("体检完成，发现 {n} 处问题", { n: r.issues.length + r.dupGroups.length }));
     } catch (e) {
-      modal.error({ title: t("体检没有完成"), content: errText(e) });
+      if (stopping.current) message.info(t("已停止体检"));
+      else modal.error({ title: t("体检没有完成"), content: errText(e) });
     } finally {
-      un();
-      setRunning(null);
+      // 被拒绝（已经有体检在跑）时接着显示那次的进度
+      setRunning(await api.healthStatus().catch(() => null));
     }
+  };
+
+  const stop = () => {
+    stopping.current = true;
+    setRunning((r) => (r ? { ...r, stopping: true } : r));
+    api.healthStop().catch((e) => message.error(errText(e)));
   };
 
   const drop = (keys: string[]) =>
@@ -294,10 +342,13 @@ export default function Health({ project }: { project: ProjectInfo }) {
 
       {running && (
         <div className="card" style={{ marginBottom: 12 }}>
-          <Progress percent={running.total ? Math.floor((running.done / running.total) * 100) : 0} status="active" />
-          <div className="dim" style={{ fontSize: 12 }}>
-            {runId ? t("比对图片、用模型检查每张已标注的图…") : t("比对图片…")}
+          <div className="row" style={{ gap: 12, flexWrap: "nowrap" }}>
+            <Progress style={{ flex: 1, margin: 0 }} percent={running.total ? Math.floor((running.done / running.total) * 100) : 0} status="active" />
+            <Button size="small" danger loading={running.stopping} onClick={stop}>
+              {t("停止")}
+            </Button>
           </div>
+          <div className="dim" style={{ fontSize: 12 }}>{stageText(running)}</div>
         </div>
       )}
 

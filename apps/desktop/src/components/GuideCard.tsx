@@ -24,13 +24,18 @@ export default function GuideCard({
 }) {
   const [hidden, setHidden] = useState(prefs.get("guideHidden", "0") === "1");
   const [envReady, setEnvReady] = useState<boolean | null>(null);
+  // 环境装了但缺组件：提示去补装，而不是重新装
+  const [envMissing, setEnvMissing] = useState(false);
   const setPage = useApp((s) => s.setPage);
 
   useEffect(() => {
     if (hidden) return;
     api
       .envStatus(false)
-      .then((s) => setEnvReady(s.ready))
+      .then((s) => {
+        setEnvReady(s.ready);
+        setEnvMissing(!s.ready && !!s.python && s.missing.length > 0);
+      })
       .catch(() => setEnvReady(false));
   }, [hidden]);
 
@@ -54,7 +59,7 @@ export default function GuideCard({
   const steps = [
     {
       title: t("装训练环境"),
-      description: envReady ? t("已装好") : t("设置页一键安装；只标注可以跳过"),
+      description: envReady ? t("已装好") : envMissing ? t("还缺几个组件，去设置页补装") : t("设置页一键安装；只标注可以跳过"),
       done: !!envReady,
       action: envReady ? null : (
         <Button size="small" onClick={() => setPage("settings")}>

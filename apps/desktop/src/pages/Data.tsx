@@ -99,6 +99,8 @@ export default function Data({ project }: { project: ProjectInfo }) {
   const [importStop, setImportStop] = useState<"off" | "on" | "stopping">("off");
   const [dragging, setDragging] = useState(false);
   const importing = useRef(false);
+  // 这次导入是否复制进项目（进度文字用）
+  const importCopy = useRef(true);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   // Shift 连选的起点
@@ -157,17 +159,32 @@ export default function Data({ project }: { project: ProjectInfo }) {
   };
 
   const confirmDelete = (title: string, scope: "ids" | "last" | "all", ids?: number[]) => {
-    modal.confirm({
+    const dlg = modal.confirm({
       title,
       content: t("图片的标注会一起删除，无法恢复。复制进项目的图片副本会删掉，你电脑上的原图不受影响。"),
       okText: t("删除"),
       okButtonProps: { danger: true },
       cancelText: t("取消"),
       onOk: async () => {
+        // 删几万张时文件要删一会儿：确认框里显示进度
+        const un = await listen<ImportProgress>("delete-progress", (e) => {
+          const { done, total } = e.payload;
+          if (!total) return;
+          dlg.update({
+            content: (
+              <>
+                <Progress size="small" percent={Math.floor((done / total) * 100)} />
+                <div className="muted">{t("正在删除图片文件 {done} / {total} 张", { done, total })}</div>
+              </>
+            ),
+          });
+        });
         try {
           await afterDelete(await api.deleteImages(scope, ids));
         } catch (e) {
           message.error(errText(e));
+        } finally {
+          un();
         }
       },
     });
@@ -186,9 +203,13 @@ export default function Data({ project }: { project: ProjectInfo }) {
     setSelected(next);
   };
 
-  // 换了筛选或翻页就清空选择，免得删掉看不见的图
+  // 换了筛选就清空选择，免得删掉看不见的图；翻页保留（「选中全部 N 张」后可以翻页确认），
+  // 删除等操作的确认框里会写明一共多少张
   useEffect(() => {
     setSelected(new Set());
+  }, [filter]);
+  // Shift 连选只在同一页里
+  useEffect(() => {
     anchor.current = null;
   }, [filter, page]);
 
@@ -287,11 +308,12 @@ export default function Data({ project }: { project: ProjectInfo }) {
     async (paths: string[]) => {
       if (paths.length === 0 || importing.current) return;
       importing.current = true;
+      importCopy.current = prefs.get("copyMode", "copy") === "copy";
       setProgress({ done: 0, total: 0 });
       setImportStop("on");
       const unlisten = await listen<ImportProgress>("import-progress", (e) => setProgress(e.payload));
       try {
-        const r = await api.importImages(paths, prefs.get("copyMode", "copy") === "copy");
+        const r = await api.importImages(paths, importCopy.current);
         showResult(r);
         await load();
         await refreshStats();
@@ -310,6 +332,17 @@ export default function Data({ project }: { project: ProjectInfo }) {
   const stopImport = () => {
     setImportStop("stopping");
     api.stopImport().catch((e) => message.error(errText(e)));
+  };
+
+  // 导入进度分两段（total 是 2 × 张数）：先算指纹、生成缩略图，再复制并写入项目
+  const importText = (p: ImportProgress | null) => {
+    if (!p || !p.total) return t("正在查找图片…");
+    const half = p.total / 2;
+    if (p.done <= half) return t("已处理 {done} / {total} 张（计算指纹、生成缩略图）", { done: p.done, total: half });
+    const n = p.done - half;
+    return importCopy.current
+      ? t("复制并写入 {done} / {total} 张", { done: n, total: half })
+      : t("写入项目 {done} / {total} 张", { done: n, total: half });
   };
 
   // 拖进来的东西分流：视频去抽帧设置，图片和文件夹走普通导入；混在一起时先导图片再弹抽帧
@@ -347,6 +380,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
     });
     if (typeof dir !== "string" || importing.current) return;
     importing.current = true;
+    importCopy.current = true; // 导入数据集总是复制
     setProgress({ done: 0, total: 0 });
     const unlisten = await listen<ImportProgress>("import-progress", (e) => setProgress(e.payload));
     try {
@@ -867,11 +901,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
         }
       >
         <Progress percent={progress && progress.total ? Math.floor((progress.done / progress.total) * 100) : 0} />
-        <div className="muted">
-          {progress && progress.total
-            ? t("已处理 {done} / {total} 张（计算指纹、生成缩略图）", { done: progress.done, total: progress.total })
-            : t("正在查找图片…")}
-        </div>
+        <div className="muted">{importText(progress)}</div>
       </Modal>
 
       <Modal
@@ -994,7 +1024,8 @@ export default function Data({ project }: { project: ProjectInfo }) {
                     : vp.total
                       ? t("正在抽帧：{detail} · 已抽 {done} 帧 / 约 {total}", { detail: vp.detail, done: vp.done, total: vp.total })
                       : t("正在抽帧：{detail} · 已抽 {done} 帧", { detail: vp.detail, done: vp.done })
-                  : t("正在导入 {done} / {total} 帧（生成缩略图）", { done: vp.done, total: vp.total });
+                  : // 导入进度的 total 是 2 × 帧数（指纹缩略图、复制写库各一半）
+                    t("正在导入 {done} / {total} 帧（生成缩略图）", { done: Math.ceil(vp.done / 2), total: Math.ceil(vp.total / 2) });
             return (
               <>
                 <Progress percent={pct} status="active" showInfo={vp.total > 0} />

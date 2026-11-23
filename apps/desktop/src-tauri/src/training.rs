@@ -68,6 +68,8 @@ pub struct RunInfo {
     pub created_at: i64,
     pub has_weights: bool,
     pub has_onnx: bool,
+    /// 停止、中断或失败的训练，留有断点（resume.pt）：可以从最后一个完整的轮次接着训练
+    pub can_resume: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -115,16 +117,19 @@ fn row_to_info(p: &Project, r: &rusqlite::Row) -> rusqlite::Result<RunInfo> {
     let config: String = r.get(4)?;
     let engine: String = r.get(2)?;
     let external = engine == EXTERNAL;
+    let status: String = r.get(3)?;
+    let can_resume = !external && matches!(status.as_str(), "stopped" | "interrupted" | "failed") && abs.join("resume.pt").exists();
     Ok(RunInfo {
         id: r.get(0)?,
         name: dir.clone(),
         dir: abs.to_string_lossy().into_owned(),
-        status: r.get(3)?,
+        status,
         config: serde_json::from_str(&config).unwrap_or(serde_json::Value::Null),
         best_map50: r.get(5)?,
         created_at: r.get(6)?,
         has_weights: abs.join("best.pt").exists() || (external && abs.join("model.onnx").exists()),
         has_onnx: abs.join("model.onnx").exists(),
+        can_resume,
         engine,
     })
 }
@@ -211,8 +216,15 @@ fn now_name() -> String {
 /// 训练过程中的事件，发给前端
 pub type EventSink = Arc<dyn Fn(i64, serde_json::Value) + Send + Sync>;
 
-/// 准备数据集并启动训练进程，立即返回训练记录 id
-pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, sink: EventSink) -> AppResult<i64> {
+/// 准备数据集并启动训练进程，立即返回训练记录 id。prepare：准备数据（导出数据集副本）的进度
+pub fn start(
+    p: Arc<Project>,
+    rt: &Runtime,
+    jobs: Arc<Jobs>,
+    cfg: TrainConfig,
+    sink: EventSink,
+    prepare: &dyn Fn(usize, usize),
+) -> AppResult<i64> {
     if jobs.running().is_some() {
         return Err(msg(t!("已经有训练在进行中")));
     }
@@ -256,8 +268,8 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
     let format = if p.meta.task == "classify" { Format::Cls } else { Format::Coco };
     let opts = ExportOptions { format, out_dir: ds.clone(), only_reviewed: cfg.only_reviewed, ratios: cfg.ratios, copy_files: false };
     let res = match cfg.version {
-        Some(v) => dataset::export_version(&p, v, &opts, &|_, _| {}),
-        None => dataset::export(&p, &opts, &|_, _| {}),
+        Some(v) => dataset::export_version(&p, v, &opts, prepare),
+        None => dataset::export(&p, &opts, prepare),
     }
     .inspect_err(|_| {
         let _ = fs::remove_dir_all(&dir);
@@ -318,6 +330,38 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
         conn.last_insert_rowid()
     };
 
+    launch(p, jobs, id, dir, cmd, sink)?;
+    Ok(id)
+}
+
+/// 从断点继续训练：同一条训练记录、同一份数据集副本，从最后一个完整的轮次接着跑（曲线、日志接在后面）
+pub fn resume(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, id: i64, sink: EventSink) -> AppResult<()> {
+    if jobs.running().is_some() {
+        return Err(msg(t!("已经有训练在进行中")));
+    }
+    let r = get_run(&p, id)?;
+    if !r.can_resume {
+        return Err(msg(t!("这次训练没有留下可以接着跑的进度")));
+    }
+    let dir = PathBuf::from(&r.dir);
+    let cfg_path = dir.join("config.json");
+    let mut cfg: serde_json::Value = serde_json::from_str(&fs::read_to_string(&cfg_path)?)?;
+    let ds = PathBuf::from(cfg["dataset"].as_str().unwrap_or(""));
+    if !ds.exists() {
+        return Err(msg(t!("这次训练用的数据集副本不见了，没法接着训，请重新开始训练")));
+    }
+    cfg["resume"] = serde_json::json!(true);
+    fs::write(&cfg_path, serde_json::to_string_pretty(&cfg)?)?;
+    let cmd = rt.worker(&["train"])?;
+    // 上次的出错信息、停止标记作废
+    let _ = fs::remove_file(dir.join("error.txt"));
+    let _ = fs::remove_file(dir.join("STOP"));
+    set_status(&p, id, "running");
+    launch(p, jobs, id, dir, cmd, sink)
+}
+
+/// 启动训练进程并接管它的输出（新开训练、从断点继续训练共用）
+fn launch(p: Arc<Project>, jobs: Arc<Jobs>, id: i64, dir: PathBuf, mut cmd: std::process::Command, sink: EventSink) -> AppResult<()> {
     cmd.arg(dir.join("config.json")).current_dir(&dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -356,6 +400,8 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
     }
     std::thread::spawn(move || {
         let mut final_status = None;
+        // 还没下完的文件：训练进程被停掉、崩了时，告诉界面下载结束了（不然右下角的进度条一直挂着）
+        let mut downloading: std::collections::HashSet<String> = std::collections::HashSet::new();
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let Ok(ev) = serde_json::from_str::<serde_json::Value>(&line) else {
                 let _ = writeln!(log_file.lock(), "{line}");
@@ -366,6 +412,16 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
                     let _ = writeln!(log_file.lock(), "{}", ev["msg"].as_str().unwrap_or(""));
                 }
                 Some("warn") => add_warning(&dir, &ev),
+                // 下载预训练权重的进度：右下角进度条
+                Some("download") => {
+                    let name = ev["name"].as_str().unwrap_or("").to_string();
+                    if ev["finished"] == true || ev["failed"] == true {
+                        downloading.remove(&name);
+                    } else {
+                        downloading.insert(name);
+                    }
+                    crate::dlprogress::forward(&ev);
+                }
                 Some("batch") => {
                     // 显存不够自动调小了批大小：训练记录里改成实际用的，原来设的另存一份
                     // 会从头重训，上一次的提示作废（预训练权重的提示重训时会再发）
@@ -411,6 +467,9 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
             }
             sink(id, ev);
         }
+        for name in downloading {
+            crate::dlprogress::forward(&serde_json::json!({ "type": "download", "name": name, "done": 0, "total": 0, "speed": 0, "failed": true }));
+        }
         let code = child.lock().wait().ok();
         let status = final_status.unwrap_or_else(|| {
             // 进程直接退出（崩溃、显存不足等）
@@ -423,7 +482,7 @@ pub fn start(p: Arc<Project>, rt: &Runtime, jobs: Arc<Jobs>, cfg: TrainConfig, s
         *jobs.current.lock() = None;
         sink(id, serde_json::json!({ "type": "finished", "status": status }));
     });
-    Ok(id)
+    Ok(())
 }
 
 /// 请求停止：写 STOP 文件让训练在当前迭代后停下，60 秒还没退出就强制结束
@@ -654,6 +713,8 @@ impl Predictor {
             match v["type"].as_str() {
                 Some("done") => return Ok(v),
                 Some("error") => return Err(msg(v["msg"].as_str().map(String::from).unwrap_or_else(|| t!("推理失败")))),
+                // 第一次用 SAM、文本提示时下载模型的进度
+                Some("download") => crate::dlprogress::forward(&v),
                 _ => on_event(&v),
             }
         }
@@ -876,8 +937,8 @@ mod tests {
             base_run: None,
             aug: None,
         };
-        let id = start(p.clone(), &rt, jobs.clone(), cfg, Arc::new(move |_, e| ev2.lock().push(e))).unwrap();
-        assert!(start(p.clone(), &rt, jobs.clone(), TrainConfig { epochs: 1, ..serde_json::from_value(get_run(&p, id).unwrap().config).unwrap() }, Arc::new(|_, _| {})).is_err(), "同时只能一个训练");
+        let id = start(p.clone(), &rt, jobs.clone(), cfg, Arc::new(move |_, e| ev2.lock().push(e)), &|_, _| {}).unwrap();
+        assert!(start(p.clone(), &rt, jobs.clone(), TrainConfig { epochs: 1, ..serde_json::from_value(get_run(&p, id).unwrap().config).unwrap() }, Arc::new(|_, _| {}), &|_, _| {}).is_err(), "同时只能一个训练");
         for _ in 0..600 {
             if jobs.running().is_none() {
                 break;
@@ -910,11 +971,11 @@ mod tests {
 
         // 部署：服务包、多格式导出、实时验证
         let svc = base.join("服务包");
-        crate::deploy::build_service(&p, &rt, id, &serde_json::json!({ "port": 8090, "streams": [] }), &svc, &|l| eprintln!("{l}")).unwrap();
+        crate::deploy::build_service(&p, &rt, id, &serde_json::json!({ "port": 8090, "streams": [] }), &svc, &|l| eprintln!("{l}"), &|_, _, _| {}).unwrap();
         for f in ["model.onnx", "model.json", "service.py", "config.json", "run.bat", "README.md"] {
             assert!(svc.join(f).exists(), "服务包缺少 {f}");
         }
-        let fmts = crate::deploy::export_formats(&p, &rt, id, &["onnx_static".into(), "openvino".into(), "rknn".into()], 224, &base.join("导出"), &|l| eprintln!("{l}")).unwrap();
+        let fmts = crate::deploy::export_formats(&p, &rt, id, &["onnx_static".into(), "openvino".into(), "rknn".into()], 224, &base.join("导出"), &|l| eprintln!("{l}"), &|_, _, _| {}).unwrap();
         eprintln!("导出：{fmts:?}");
         assert!(fmts.iter().all(|f| f.ok), "{fmts:?}");
         if let Ok(video) = std::env::var("XLABEL_TEST_VIDEO") {
@@ -1146,10 +1207,9 @@ pub fn prelabel_all(
         let m = map.as_ref().unwrap();
         for (id, raw) in got {
             let anns = task_annotations(p, &to_result(raw, m), conf, "model")?;
-            if !anns.is_empty() {
+            if !anns.is_empty() && annotations::save_predictions(p, id, &anns)? {
                 result.boxes += anns.len();
                 result.images += 1;
-                annotations::save_predictions(p, id, &anns)?;
             }
         }
         done += chunk.len();

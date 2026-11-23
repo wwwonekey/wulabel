@@ -6,6 +6,7 @@ mod commands;
 mod dataset;
 mod dataset_import;
 mod deploy;
+mod dlprogress;
 mod db;
 mod error;
 mod evaltools;
@@ -67,7 +68,16 @@ pub fn run() {
             // 训练环境有好几 GB，放本机目录（Local），不放会漫游同步的 Roaming
             let rt = runtime::Runtime::new(app.path().app_config_dir()?, app.path().app_local_data_dir()?, worker_dir(app));
             app.manage(rt);
+            dlprogress::init(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 训练、安装等还在进行时关主窗口：先拦下，前端弹确认框
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && commands::intercept_close(window.app_handle()) {
+                    api.prevent_close();
+                }
+            }
         })
         .register_asynchronous_uri_scheme_protocol("xl", protocol::handle)
         .invoke_handler(tauri::generate_handler![
@@ -116,6 +126,7 @@ pub fn run() {
             commands::list_images,
             commands::project_stats,
             commands::last_import,
+            commands::last_import_ids,
             commands::delete_images,
             commands::list_image_ids,
             commands::load_annotations,
@@ -141,11 +152,17 @@ pub fn run() {
             commands::env_status,
             commands::save_settings,
             commands::env_install,
+            commands::env_repair,
+            commands::env_cancel,
+            commands::busy_tasks,
+            commands::close_ack,
+            commands::quit_app,
             commands::speed_test,
             commands::list_runs,
             commands::run_detail,
             commands::running_run,
             commands::start_training,
+            commands::resume_training,
             commands::stop_training,
             commands::delete_run,
             commands::export_onnx,
@@ -156,6 +173,8 @@ pub fn run() {
             commands::health_run,
             commands::health_ignore,
             commands::health_unignore,
+            commands::health_status,
+            commands::health_stop,
             commands::append_annotation,
             commands::live_start,
             commands::live_stop,

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
@@ -139,19 +139,19 @@ fn prepare(project: &Project, src: &Path) -> AppResult<Prepared> {
     Ok(Prepared { src: src.to_path_buf(), hash, width: img.width(), height: img.height() })
 }
 
-/// 复制到项目 images/ 下，重名时加序号
-fn copy_into(project: &Project, src: &Path) -> AppResult<String> {
-    let dir = project.root.join(IMAGES_DIR);
+/// 在项目 images/ 下挑一个没占用的文件名，重名时加序号。
+/// taken 是本批已经挑走的（还没复制完），按小写比较，Windows 上大小写不同也算重名。
+fn unique_name(dir: &Path, src: &Path, taken: &mut HashSet<String>) -> String {
     let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
     let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("jpg").to_ascii_lowercase();
     let mut name = format!("{stem}.{ext}");
     let mut i = 1;
-    while dir.join(&name).exists() {
+    while taken.contains(&name.to_lowercase()) || dir.join(&name).exists() {
         name = format!("{stem}_{i}.{ext}");
         i += 1;
     }
-    fs::copy(src, dir.join(&name))?;
-    Ok(format!("{IMAGES_DIR}/{name}"))
+    taken.insert(name.to_lowercase());
+    name
 }
 
 /// 存储路径：项目内用相对路径（整个文件夹拷走也能打开），项目外用绝对路径
@@ -165,6 +165,7 @@ fn stored_path(project: &Project, src: &Path) -> String {
 }
 
 /// 导入图片。copy=true 复制进项目，false 只记录原路径。按内容去重。
+/// 进度的 total 是 2 × 张数：前一半算指纹、生成缩略图，后一半复制并写库。
 pub fn import(
     project: &Project,
     files: &[PathBuf],
@@ -181,7 +182,7 @@ pub fn import_stoppable(
     copy: bool,
     on_progress: &(dyn Fn(usize, usize) + Sync),
 ) -> AppResult<ImportResult> {
-    import_inner(project, files, copy, None, Some(&STOP_IMPORT), on_progress).map(|(r, _)| r)
+    import_inner(project, files, copy, None, Some(&STOP_IMPORT), WRITE_CHUNK, on_progress).map(|(r, _)| r)
 }
 
 /// 同 import，另外返回「源文件 → 图片 id」（重复的图对应已有的 id），导入带标注的数据集时用
@@ -208,40 +209,252 @@ pub fn import_batch(
     batch: Option<i64>,
     on_progress: &(dyn Fn(usize, usize) + Sync),
 ) -> AppResult<(ImportResult, HashMap<PathBuf, i64>)> {
-    import_inner(project, files, copy, batch, None, on_progress)
+    import_inner(project, files, copy, batch, None, WRITE_CHUNK, on_progress)
 }
 
+/// 第二阶段每批多少张：每批一个小事务，批与批之间放开数据库锁，导入时缩略图、原图照常能看
+const WRITE_CHUNK: usize = 500;
+
+type PrepItem = Option<Result<Prepared, String>>;
+
+/// 进度分两段报：前一半是算指纹、生成缩略图，后一半是复制并写库（total = 2 × 张数）
 fn import_inner(
     project: &Project,
     files: &[PathBuf],
     copy: bool,
     batch: Option<i64>,
     stop: Option<&AtomicBool>,
+    chunk: usize,
     on_progress: &(dyn Fn(usize, usize) + Sync),
 ) -> AppResult<(ImportResult, HashMap<PathBuf, i64>)> {
-    let mut map = HashMap::new();
     let total = files.len();
+    let total2 = total * 2;
+    let stopped = || stop.is_some_and(|s| s.load(Ordering::Relaxed));
     let done = AtomicUsize::new(0);
-    on_progress(0, total);
+    on_progress(0, total2);
 
     // 1. 并行：算哈希、读宽高、生成缩略图；停止后剩下的跳过（None）
-    let prepared: Vec<Option<Result<Prepared, String>>> = files
+    let prepared: Vec<PrepItem> = files
         .par_iter()
         .map(|f| {
-            let r = if stop.is_some_and(|s| s.load(Ordering::Relaxed)) {
+            let r = if stopped() {
                 None
             } else {
                 Some(prepare(project, f).map_err(|e| format!("{}：{e}", f.display())))
             };
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-            on_progress(n, total);
+            on_progress(n, total2);
             r
         })
         .collect();
 
-    // 2. 串行：去重、复制、写库
-    let mut result = ImportResult { added: 0, duplicated: 0, failed: Vec::new(), stopped: 0 };
-    let mut seen: HashMap<String, i64> = HashMap::new();
+    // 2. 分批：去重 → 复制（不持锁）→ 小事务写库
+    let batch: i64 = match batch {
+        Some(b) => b,
+        None => next_batch(project)?,
+    };
+    let mut w = Writer {
+        project,
+        copy,
+        batch,
+        now: db::now(),
+        seen: HashMap::new(),
+        result: ImportResult { added: 0, duplicated: 0, failed: Vec::new(), stopped: 0 },
+        map: HashMap::new(),
+    };
+    let mut base = total;
+    let mut rest = prepared.into_iter().peekable();
+    while rest.peek().is_some() {
+        let items: Vec<PrepItem> = rest.by_ref().take(chunk.max(1)).collect();
+        let n = items.len();
+        if stopped() {
+            // 停止后还没写库的都算没导入（读取失败的照样报出来）
+            for it in items {
+                match it {
+                    Some(Err(e)) => w.result.failed.push(e),
+                    _ => w.result.stopped += 1,
+                }
+            }
+        } else {
+            let start = base;
+            w.chunk(items, &|k| on_progress(start + k, total2))?;
+        }
+        base += n;
+        on_progress(base, total2);
+    }
+    Ok((w.result, w.map))
+}
+
+/// 第二阶段的状态：已入库的内容哈希、结果统计、源文件 → id
+struct Writer<'a> {
+    project: &'a Project,
+    copy: bool,
+    batch: i64,
+    now: i64,
+    /// 内容哈希 → 图片 id（库里已有的和本次写入的）
+    seen: HashMap<String, i64>,
+    result: ImportResult,
+    map: HashMap<PathBuf, i64>,
+}
+
+impl Writer<'_> {
+    /// 处理一批。复制失败、写库失败的进 failed，不影响其他图；已经复制进来的文件删掉
+    fn chunk(&mut self, items: Vec<PrepItem>, on_copied: &(dyn Fn(usize) + Sync)) -> AppResult<()> {
+        let project = self.project;
+        // 要新入库的（同一内容只留第一张）；和本批前面的图重复的，写完库再对应 id
+        let mut fresh: Vec<Prepared> = Vec::new();
+        let mut dups: Vec<(PathBuf, String)> = Vec::new();
+        let mut in_chunk: HashSet<String> = HashSet::new();
+        {
+            let conn = project.conn.lock();
+            let mut exists = conn.prepare("SELECT id FROM images WHERE hash = ?1 LIMIT 1")?;
+            for it in items {
+                let p = match it {
+                    None => {
+                        self.result.stopped += 1;
+                        continue;
+                    }
+                    Some(Err(e)) => {
+                        self.result.failed.push(e);
+                        continue;
+                    }
+                    Some(Ok(p)) => p,
+                };
+                let existing = match self.seen.get(&p.hash) {
+                    Some(id) => Some(*id),
+                    None => exists.query_row([&p.hash], |r| r.get::<_, i64>(0)).optional()?,
+                };
+                if let Some(id) = existing {
+                    self.seen.insert(p.hash, id);
+                    self.result.duplicated += 1;
+                    self.map.insert(p.src, id);
+                } else if in_chunk.contains(&p.hash) {
+                    dups.push((p.src, p.hash));
+                } else {
+                    in_chunk.insert(p.hash.clone());
+                    fresh.push(p);
+                }
+            }
+        }
+
+        // 复制：先串行定好文件名（同名文件并行复制时不会互相覆盖），再并行复制，不持数据库锁
+        let dir = project.root.join(IMAGES_DIR);
+        let mut taken: HashSet<String> = HashSet::new();
+        let copy = self.copy;
+        let named: Vec<(Prepared, Option<String>)> = fresh
+            .into_iter()
+            .map(|p| {
+                let name = if copy { Some(unique_name(&dir, &p.src, &mut taken)) } else { None };
+                (p, name)
+            })
+            .collect();
+        let copied = AtomicUsize::new(0);
+        let outcomes: Vec<Result<(Prepared, String), (Prepared, String)>> = named
+            .into_par_iter()
+            .map(|(p, name)| {
+                let r = match name {
+                    Some(name) => {
+                        let dest = dir.join(&name);
+                        match fs::copy(&p.src, &dest) {
+                            Ok(_) => Ok(format!("{IMAGES_DIR}/{name}")),
+                            Err(e) => {
+                                let _ = fs::remove_file(&dest);
+                                Err(e.to_string())
+                            }
+                        }
+                    }
+                    None => Ok(stored_path(project, &p.src)),
+                };
+                on_copied(copied.fetch_add(1, Ordering::Relaxed) + 1);
+                match r {
+                    Ok(path) => Ok((p, path)),
+                    Err(e) => Err((p, e)),
+                }
+            })
+            .collect();
+
+        // 失败原因按内容哈希记下，本批里和它重复的图一起算失败
+        let mut errs: HashMap<String, String> = HashMap::new();
+        let mut ok: Vec<(Prepared, String)> = Vec::new();
+        for o in outcomes {
+            match o {
+                Ok(x) => ok.push(x),
+                Err((p, e)) => self.fail(&p, e, &mut errs),
+            }
+        }
+
+        // 写库：一个小事务
+        match insert_rows(project, &ok, self.batch, self.now) {
+            Ok(res) => {
+                for ((p, path), r) in ok.into_iter().zip(res) {
+                    match r {
+                        Ok((id, added)) => {
+                            if added {
+                                self.result.added += 1;
+                            } else {
+                                // 复制期间别处已经导入了同样的图
+                                self.remove_copy(&path);
+                                self.result.duplicated += 1;
+                            }
+                            self.seen.insert(p.hash, id);
+                            self.map.insert(p.src, id);
+                        }
+                        Err(e) => {
+                            self.remove_copy(&path);
+                            self.fail(&p, e, &mut errs);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                // 整批没写进去：复制进来的文件删掉，都算失败
+                let e = e.to_string();
+                for (p, path) in ok {
+                    self.remove_copy(&path);
+                    self.fail(&p, e.clone(), &mut errs);
+                }
+            }
+        }
+
+        for (src, hash) in dups {
+            match self.seen.get(&hash) {
+                Some(id) => {
+                    self.result.duplicated += 1;
+                    self.map.insert(src, *id);
+                }
+                None => {
+                    let e = errs.get(&hash).cloned().unwrap_or_default();
+                    self.result.failed.push(format!("{}：{e}", src.display()));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn fail(&mut self, p: &Prepared, e: String, errs: &mut HashMap<String, String>) {
+        self.result.failed.push(format!("{}：{e}", p.src.display()));
+        errs.insert(p.hash.clone(), e);
+    }
+
+    /// 删掉复制进项目的副本（引用模式下 path 是用户的原图，不能删）
+    fn remove_copy(&self, path: &str) {
+        if self.copy {
+            let _ = fs::remove_file(self.project.root.join(path));
+        }
+    }
+}
+
+/// 一个事务写入一批图片。每张返回 Ok((id, 是否新增)) 或 Err(原因)
+fn insert_rows(
+    project: &Project,
+    rows: &[(Prepared, String)],
+    batch: i64,
+    now: i64,
+) -> AppResult<Vec<Result<(i64, bool), String>>> {
+    let mut out = Vec::with_capacity(rows.len());
+    if rows.is_empty() {
+        return Ok(out);
+    }
     let mut conn = project.conn.lock();
     let tx = conn.transaction()?;
     {
@@ -249,42 +462,20 @@ fn import_inner(
         let mut insert = tx.prepare(
             "INSERT INTO images (path, width, height, hash, created_at, batch) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
-        let now = db::now();
-        let batch: i64 = match batch {
-            Some(b) => b,
-            None => tx.query_row("SELECT COALESCE(MAX(batch), 0) + 1 FROM images", [], |r| r.get(0))?,
-        };
-        for item in prepared {
-            let p = match item {
-                None => {
-                    result.stopped += 1;
-                    continue;
-                }
-                Some(Ok(p)) => p,
-                Some(Err(e)) => {
-                    result.failed.push(e);
-                    continue;
-                }
-            };
-            let existing = match seen.get(&p.hash) {
-                Some(id) => Some(*id),
-                None => exists.query_row([&p.hash], |r| r.get::<_, i64>(0)).optional()?,
-            };
-            if let Some(id) = existing {
-                result.duplicated += 1;
-                map.insert(p.src, id);
+        for (p, path) in rows {
+            // 复制时没持锁，再查一次有没有同样内容的图
+            if let Some(id) = exists.query_row([&p.hash], |r| r.get::<_, i64>(0)).optional()? {
+                out.push(Ok((id, false)));
                 continue;
             }
-            let path = if copy { copy_into(project, &p.src)? } else { stored_path(project, &p.src) };
-            insert.execute(params![path, p.width, p.height, p.hash, now, batch])?;
-            let id = tx.last_insert_rowid();
-            seen.insert(p.hash, id);
-            map.insert(p.src, id);
-            result.added += 1;
+            match insert.execute(params![path, p.width, p.height, p.hash, now, batch]) {
+                Ok(_) => out.push(Ok((tx.last_insert_rowid(), true))),
+                Err(e) => out.push(Err(e.to_string())),
+            }
         }
     }
     tx.commit()?;
-    Ok((result, map))
+    Ok(out)
 }
 
 pub fn list(project: &Project, status: Option<&str>, offset: u32, limit: u32) -> AppResult<ImagePage> {
@@ -347,7 +538,13 @@ pub enum DeleteScope {
 }
 
 /// 删除图片及其标注。复制进项目的图片文件一起删；引用的外部原图不动。返回删除张数。
+#[cfg_attr(not(test), allow(dead_code))] // 界面用 delete_with，这个给测试用
 pub fn delete(project: &Project, scope: DeleteScope) -> AppResult<usize> {
+    delete_with(project, scope, &|_, _| {})
+}
+
+/// 同 delete，删文件时报进度（删几万张时文件要删一会儿）
+pub fn delete_with(project: &Project, scope: DeleteScope, progress: &(dyn Fn(usize, usize) + Sync)) -> AppResult<usize> {
     let mut conn = project.conn.lock();
     let tx = conn.transaction()?;
     let rows: Vec<(i64, String, String)> = {
@@ -381,17 +578,34 @@ pub fn delete(project: &Project, scope: DeleteScope) -> AppResult<usize> {
     }
     tx.commit()?;
 
-    // 提交成功后再删文件：只删项目 images/ 下的副本
-    let mut still_used = conn.prepare("SELECT 1 FROM images WHERE hash = ?1 LIMIT 1")?;
-    for (_, path, hash) in &rows {
-        if path.starts_with(&format!("{IMAGES_DIR}/")) {
+    // 内容相同的图可能还有别的在用缩略图：先查好，然后放开数据库锁再删文件
+    let unused: HashSet<&str> = {
+        let mut still_used = conn.prepare("SELECT 1 FROM images WHERE hash = ?1 LIMIT 1")?;
+        let mut set = HashSet::new();
+        for (_, _, hash) in &rows {
+            if !set.contains(hash.as_str()) && still_used.query_row([hash], |_| Ok(())).optional()?.is_none() {
+                set.insert(hash.as_str());
+            }
+        }
+        set
+    };
+    drop(conn);
+
+    // 提交成功后再删文件：只删项目 images/ 下的副本，并行删
+    let total = rows.len();
+    let done = AtomicUsize::new(0);
+    let prefix = format!("{IMAGES_DIR}/");
+    progress(0, total);
+    rows.par_iter().for_each(|(_, path, hash)| {
+        if path.starts_with(&prefix) {
             let _ = fs::remove_file(project.root.join(path));
         }
-        if still_used.query_row([hash], |_| Ok(())).optional()?.is_none() {
+        if unused.contains(hash.as_str()) {
             let _ = fs::remove_file(project.thumb_path(hash));
         }
-    }
-    Ok(rows.len())
+        progress(done.fetch_add(1, Ordering::Relaxed) + 1, total);
+    });
+    Ok(total)
 }
 
 /// 按 id 查图片的存储路径和哈希
@@ -474,6 +688,65 @@ mod tests {
         let (path, _) = locate(&project, 1).unwrap();
         assert!(Path::new(&path).is_absolute());
         assert!(fs::read_dir(project.root.join(IMAGES_DIR)).unwrap().next().is_none());
+        drop(project);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn chunked_import_dedup_and_stop() {
+        let base = temp_dir("chunk");
+        fs::create_dir_all(base.join("x")).unwrap();
+        fs::create_dir_all(base.join("y")).unwrap();
+        for (n, c) in [("a", 1u8), ("b", 2), ("c", 3), ("d", 4)] {
+            make_image(&base.join(format!("{n}.png")), 20, 10, c);
+        }
+        fs::copy(base.join("a.png"), base.join("a_dup.png")).unwrap();
+        fs::copy(base.join("b.png"), base.join("b_dup.png")).unwrap();
+        make_image(&base.join("x/img.png"), 20, 10, 5);
+        make_image(&base.join("y/img.png"), 20, 10, 6);
+        let project = Project::create(&base, "p", "detect").unwrap();
+
+        // 每批 2 张：同一批里重复、和前一批重复、同名不同内容都要对
+        let files: Vec<PathBuf> = ["a", "a_dup", "b", "c", "b_dup", "d"]
+            .iter()
+            .map(|n| base.join(format!("{n}.png")))
+            .chain([base.join("x/img.png"), base.join("y/img.png")])
+            .collect();
+        let last = AtomicUsize::new(0);
+        let (r, map) = import_inner(&project, &files, true, None, None, 2, &|d, t| {
+            assert_eq!(t, files.len() * 2);
+            last.fetch_max(d, Ordering::Relaxed);
+        })
+        .unwrap();
+        assert_eq!((r.added, r.duplicated, r.failed.len(), r.stopped), (6, 2, 0, 0));
+        assert_eq!(last.load(Ordering::Relaxed), files.len() * 2, "进度走到头");
+        assert_eq!(map[&files[0]], map[&files[1]], "a 和 a_dup 是同一张");
+        assert_eq!(map[&files[2]], map[&files[4]], "b 和 b_dup 是同一张");
+        assert!(project.root.join("images/img.png").exists());
+        assert!(project.root.join("images/img_1.png").exists(), "同名文件不能互相覆盖");
+        assert_eq!(project.stats().unwrap().total, 6);
+
+        // 第一批写完就停：后面的算没导入，也没留下复制的文件
+        for (n, c) in [("e", 7u8), ("f", 8), ("g", 9), ("h", 10)] {
+            make_image(&base.join(format!("{n}.png")), 20, 10, c);
+        }
+        let more: Vec<PathBuf> = ["e", "f", "g", "h"].iter().map(|n| base.join(format!("{n}.png"))).collect();
+        let stop = AtomicBool::new(false);
+        let (r, _) = import_inner(&project, &more, true, None, Some(&stop), 2, &|d, t| {
+            if d >= t / 2 + 2 {
+                stop.store(true, Ordering::Relaxed);
+            }
+        })
+        .unwrap();
+        assert_eq!((r.added, r.stopped), (2, 2));
+        assert!(!project.root.join("images/g.png").exists());
+        assert!(!project.root.join("images/h.png").exists());
+
+        // 一开始就停：一张都不导入
+        stop.store(true, Ordering::Relaxed);
+        let (r, _) = import_inner(&project, &more[2..], true, None, Some(&stop), 2, &|_, _| {}).unwrap();
+        assert_eq!((r.added, r.stopped), (0, 2));
+        assert_eq!(project.stats().unwrap().total, 8);
         drop(project);
         let _ = fs::remove_dir_all(&base);
     }

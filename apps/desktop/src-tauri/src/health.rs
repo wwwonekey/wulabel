@@ -3,12 +3,14 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::db;
-use crate::error::AppResult;
+use crate::error::{msg, AppResult};
 use crate::images;
 use crate::project::Project;
 use crate::t;
@@ -19,6 +21,98 @@ pub const TINY: f64 = 8.0;
 const DUP_BOX_IOU: f64 = 0.85;
 /// 感知哈希汉明距离不超过这个值算近似重复图片
 const DUP_IMAGE_DIST: u32 = 4;
+/// 模型检查每次送多少张，之间检查一下有没有点停止
+const MODEL_CHUNK: usize = 128;
+
+/// 体检页「停止」：置位后尽快停下，不保存报告
+pub static STOP_HEALTH: AtomicBool = AtomicBool::new(false);
+
+/// 体检进度。stage：空（准备中）/ hash 计算指纹 / compare 两两比对 / model 模型检查
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthProgress {
+    pub stage: String,
+    pub done: usize,
+    pub total: usize,
+    /// 已经点了停止，正在停
+    pub stopping: bool,
+}
+
+/// 正在跑的体检（同一时间只跑一个），离开体检页再回来能接着看进度
+struct Running {
+    root: PathBuf,
+    progress: HealthProgress,
+    /// 上次推给前端时的 done，用来限频
+    emitted: usize,
+}
+
+static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
+
+fn running() -> MutexGuard<'static, Option<Running>> {
+    RUNNING.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// 体检结束（完成、出错、停止）时清掉「正在体检」
+pub struct RunGuard;
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        *running() = None;
+    }
+}
+
+/// 开始一次体检；已经有体检在跑就拒绝
+pub fn begin(p: &Project) -> AppResult<RunGuard> {
+    let mut r = running();
+    if let Some(cur) = r.as_ref() {
+        return Err(msg(if cur.root == p.root {
+            t!("体检正在进行中，请等它完成或先停止")
+        } else {
+            t!("另一个项目正在体检，请等它完成")
+        }));
+    }
+    STOP_HEALTH.store(false, Ordering::Relaxed);
+    *r = Some(Running {
+        root: p.root.clone(),
+        progress: HealthProgress { stage: String::new(), done: 0, total: 0, stopping: false },
+        emitted: 0,
+    });
+    Ok(RunGuard)
+}
+
+/// 这个项目正在跑的体检的进度，没在跑返回 None
+pub fn status(p: &Project) -> Option<HealthProgress> {
+    running().as_ref().filter(|r| r.root == p.root).map(|r| HealthProgress {
+        stopping: STOP_HEALTH.load(Ordering::Relaxed),
+        ..r.progress.clone()
+    })
+}
+
+pub fn stop() {
+    STOP_HEALTH.store(true, Ordering::Relaxed);
+}
+
+/// 记下当前进度；返回 Some 时推给前端（换阶段、每 1%、做完时各推一次）
+pub fn note(stage: &str, done: usize, total: usize) -> Option<HealthProgress> {
+    let mut g = running();
+    let r = g.as_mut()?;
+    let changed = r.progress.stage != stage;
+    if changed {
+        r.progress.stage = stage.to_string();
+    }
+    r.progress.done = done;
+    r.progress.total = total;
+    let step = (total / 100).max(1);
+    if !(changed || done == total || done < r.emitted || done >= r.emitted + step) {
+        return None;
+    }
+    r.emitted = done;
+    Some(HealthProgress { stopping: STOP_HEALTH.load(Ordering::Relaxed), ..r.progress.clone() })
+}
+
+fn stopped_err() -> crate::error::AppError {
+    msg(t!("体检已停止"))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -265,29 +359,69 @@ fn dhash(path: &std::path::Path) -> Option<u64> {
     Some(h)
 }
 
-/// 近似重复图片分组（只看未跳过的图）
-pub fn duplicate_groups(p: &Project, progress: &(dyn Fn(usize, usize) + Sync)) -> AppResult<Vec<Vec<i64>>> {
+fn dhash_cache_path(p: &Project) -> PathBuf {
+    p.root.join(".cache").join("dhash.json")
+}
+
+/// 近似重复图片分组（只看未跳过的图）。
+/// 指纹按图片内容哈希缓存在 .cache/dhash.json，再次体检只算新图。
+pub fn duplicate_groups(
+    p: &Project,
+    stop: &AtomicBool,
+    progress: &(dyn Fn(&str, usize, usize) + Sync),
+) -> AppResult<Vec<Vec<i64>>> {
     let rows: Vec<(i64, String, String)> = {
         let conn = p.conn.lock();
         let mut stmt = conn.prepare("SELECT id, path, hash FROM images WHERE status != 'skipped' ORDER BY id")?;
         let v = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<Result<_, _>>()?;
         v
     };
+    let cache: HashMap<String, u64> = fs::read_to_string(dhash_cache_path(p))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+
+    // 1. 计算指纹（缓存里有的直接用）
     let total = rows.len();
-    let done = std::sync::atomic::AtomicUsize::new(0);
-    let hashes: Vec<(i64, u64)> = rows
+    let done = AtomicUsize::new(0);
+    progress("hash", 0, total);
+    let hashes: Vec<(i64, &str, u64)> = rows
         .par_iter()
         .filter_map(|(id, path, hash)| {
-            let r = images::ensure_thumb(p, path, hash).ok().and_then(|t| dhash(&t)).map(|h| (*id, h));
-            let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-            if n % 50 == 0 || n == total {
-                progress(n, total);
+            if stop.load(Ordering::Relaxed) {
+                return None;
             }
-            r
+            let h = match cache.get(hash) {
+                Some(h) => Some(*h),
+                None => images::ensure_thumb(p, path, hash).ok().and_then(|t| dhash(&t)),
+            };
+            let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+            if n % 50 == 0 || n == total {
+                progress("hash", n, total);
+            }
+            h.map(|h| (*id, hash.as_str(), h))
         })
         .collect();
-    // 并查集
-    let n = hashes.len();
+    if stop.load(Ordering::Relaxed) {
+        return Err(stopped_err());
+    }
+    // 只留现在还在的图，有变化才写
+    let fresh: HashMap<&str, u64> = hashes.iter().map(|(_, k, h)| (*k, *h)).collect();
+    if fresh.len() != cache.len() || fresh.keys().any(|k| !cache.contains_key(*k)) {
+        if let Ok(s) = serde_json::to_string(&fresh) {
+            let _ = fs::create_dir_all(p.root.join(".cache"));
+            let _ = fs::write(dhash_cache_path(p), s);
+        }
+    }
+
+    // 2. 两两比对 + 并查集。进度按比过的对数算
+    let hs: Vec<u64> = hashes.iter().map(|x| x.2).collect();
+    let n = hs.len();
+    let pairs = n * n.saturating_sub(1) / 2;
+    let step = (pairs / 100).max(1);
+    let mut compared = 0usize;
+    let mut next = step;
+    progress("compare", 0, pairs);
     let mut parent: Vec<usize> = (0..n).collect();
     fn find(parent: &mut [usize], mut x: usize) -> usize {
         while parent[x] != x {
@@ -297,13 +431,22 @@ pub fn duplicate_groups(p: &Project, progress: &(dyn Fn(usize, usize) + Sync)) -
         x
     }
     for i in 0..n {
+        if i % 64 == 0 && stop.load(Ordering::Relaxed) {
+            return Err(stopped_err());
+        }
+        let hi = hs[i];
         for j in i + 1..n {
-            if (hashes[i].1 ^ hashes[j].1).count_ones() <= DUP_IMAGE_DIST {
+            if (hi ^ hs[j]).count_ones() <= DUP_IMAGE_DIST {
                 let (a, b) = (find(&mut parent, i), find(&mut parent, j));
                 if a != b {
                     parent[b] = a;
                 }
             }
+        }
+        compared += n - i - 1;
+        if compared >= next || i + 1 == n {
+            progress("compare", compared, pairs);
+            next = compared + step;
         }
     }
     let mut groups: HashMap<usize, Vec<i64>> = HashMap::new();
@@ -572,22 +715,52 @@ pub fn load(p: &Project) -> AppResult<Option<HealthReport>> {
 }
 
 /// 运行体检。predict 不为空时做模型检查（传入每张图的预测结果）。
+#[cfg_attr(not(test), allow(dead_code))] // 界面用 run_with，这个给测试用
 pub fn run(
     p: &Project,
     run: Option<(i64, String)>,
     predict: Option<&dyn Fn(&[i64]) -> AppResult<HashMap<i64, Vec<Pred>>>>,
     progress: &(dyn Fn(usize, usize) + Sync),
 ) -> AppResult<HealthReport> {
+    let wrapped = predict.map(|f| move |ids: &[i64], _: &(dyn Fn(usize, usize) + Sync)| f(ids));
+    let stop = AtomicBool::new(false);
+    run_with(p, run, wrapped.as_ref().map(|w| w as &Predict<'_>), &stop, &|_, d, n| progress(d, n))
+}
+
+/// 模型检查：传入一批图片 id 和进度回调，返回每张图的预测
+pub type Predict<'a> = dyn Fn(&[i64], &(dyn Fn(usize, usize) + Sync)) -> AppResult<HashMap<i64, Vec<Pred>>> + 'a;
+
+/// 同 run，进度带阶段（hash / compare / model），stop 置位后尽快停下、不保存报告
+pub fn run_with(
+    p: &Project,
+    run: Option<(i64, String)>,
+    predict: Option<&Predict<'_>>,
+    stop: &AtomicBool,
+    progress: &(dyn Fn(&str, usize, usize) + Sync),
+) -> AppResult<HealthReport> {
+    let check = || if stop.load(Ordering::Relaxed) { Err(stopped_err()) } else { Ok(()) };
     let (ids, gts) = load_gts(p)?;
     let (mut issues, sizes) = rule_issues(&gts);
     let classes = class_stats(p)?;
     let names: HashMap<i64, String> = classes.iter().map(|c| (c.label_id, c.name.clone())).collect();
     let name_of = |id: Option<i64>| id.and_then(|i| names.get(&i).cloned()).unwrap_or_else(|| t!("未分类"));
-    let dup_groups = duplicate_groups(p, progress)?;
+    let dup_groups = duplicate_groups(p, stop, progress)?;
     if let Some(f) = predict {
-        let preds = f(&ids)?;
+        // 分批送给模型，批与批之间看看有没有点停止
+        let total = ids.len();
+        progress("model", 0, total);
+        let mut preds = HashMap::new();
+        let mut base = 0;
+        for chunk in ids.chunks(MODEL_CHUNK) {
+            check()?;
+            let start = base;
+            let prog: &(dyn Fn(usize, usize) + Sync) = &|d, _| progress("model", start + d, total);
+            preds.extend(f(chunk, prog)?);
+            base += chunk.len();
+        }
         issues.extend(model_issues(&gts, &preds, &name_of));
     }
+    check()?;
     let mut r = HealthReport {
         created_at: db::now(),
         images_checked: ids.len(),
@@ -697,6 +870,28 @@ mod tests {
         assert_eq!(r.dup_groups, vec![vec![1, 2]]);
         assert_eq!(r.issues.len(), 1, "一个极小框");
         assert!(!r.suggestions.is_empty());
+
+        // 指纹缓存了；缩略图删掉再体检也不用重算，结果一样
+        let cache: HashMap<String, u64> = serde_json::from_str(&fs::read_to_string(dhash_cache_path(&p)).unwrap()).unwrap();
+        assert_eq!(cache.len(), 3);
+        let _ = fs::remove_dir_all(p.root.join(crate::project::THUMBS_DIR));
+        fs::create_dir_all(p.root.join(crate::project::THUMBS_DIR)).unwrap();
+        let stages = Mutex::new(Vec::<String>::new());
+        let r = run_with(&p, None, None, &AtomicBool::new(false), &|s, _, _| {
+            let mut v = stages.lock().unwrap();
+            if v.last().map(|x| x.as_str()) != Some(s) {
+                v.push(s.to_string());
+            }
+        })
+        .unwrap();
+        assert_eq!(r.dup_groups, vec![vec![1, 2]]);
+        assert_eq!(*stages.lock().unwrap(), vec!["hash", "compare"]);
+        assert!(fs::read_dir(p.root.join(crate::project::THUMBS_DIR)).unwrap().next().is_none(), "命中缓存，不重建缩略图");
+
+        // 点了停止：报错、不覆盖上次的报告
+        let before = fs::read_to_string(report_path(&p)).unwrap();
+        assert!(run_with(&p, None, None, &AtomicBool::new(true), &|_, _, _| {}).is_err());
+        assert_eq!(fs::read_to_string(report_path(&p)).unwrap(), before);
 
         ignore(&p, &[r.issues[0].key()]).unwrap();
         assert!(load(&p).unwrap().unwrap().issues.is_empty(), "忽略后不再出现");

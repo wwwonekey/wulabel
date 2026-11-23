@@ -18,6 +18,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 
+from .download import patch_torch_hub
 from .i18n import tr
 from .protocol import log, warn
 from .yolox import YOLOPAFPN, YOLOX, YOLOXHead, ModelEMA
@@ -68,6 +69,7 @@ def build_net(key: str, num_classes: int) -> YOLOX:
 
 
 def _load_weights(url: str, name: str):
+    patch_torch_hub()  # 下载显示进度、断了接着下
     return torch.hub.load_state_dict_from_url(url, map_location="cpu", progress=False, check_hash=False, file_name=name, weights_only=False)
 
 
@@ -280,6 +282,25 @@ class YoloxTask:
 
     def eval_model(self, model: YoloxDetector) -> YoloxDetector:
         return self.ema.ema if self.ema is not None else model
+
+    def resume_state(self) -> dict:
+        """存进断点：EMA 权重和更新次数、多尺度计数"""
+        return {
+            "ema": self.ema.ema.state_dict() if self.ema is not None else None,
+            "updates": self.ema.updates if self.ema is not None else 0,
+            "it": self._it,
+        }
+
+    def load_resume(self, state: dict, model: YoloxDetector, start_epoch: int):
+        """从断点接着训练：恢复 EMA；已经过了关掉强增强的那一轮，就直接按收尾阶段训练"""
+        if self.ema is not None and state.get("ema") is not None:
+            self.ema.ema.load_state_dict(state["ema"])
+            self.ema.updates = int(state.get("updates", 0))
+        self._it = int(state.get("it", 0))
+        if self.no_aug_epochs and start_epoch > self.epochs - self.no_aug_epochs + 1:
+            if self.train_set is not None:
+                self.train_set.close()
+            model.net.head.use_l1 = True
 
     def loss(self, model: YoloxDetector, batch, device):
         imgs, targets = batch

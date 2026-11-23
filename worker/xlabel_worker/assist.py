@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 from .data import load_image
+from .download import hf_model
 from .i18n import tr
 from .protocol import log
 
@@ -72,8 +73,9 @@ class Sam:
         tf = _transformers()
         name = "facebook/sam-vit-base" if device.type == "cuda" else "Zigeng/SlimSAM-uniform-77"
         log(tr("加载 SAM 模型 {name}（第一次会下载）…", name=name))
-        self.processor = tf.SamProcessor.from_pretrained(name)
-        self.model = tf.SamModel.from_pretrained(name).to(device).eval()
+        src = hf_model(name)
+        self.processor = tf.SamProcessor.from_pretrained(src)
+        self.model = tf.SamModel.from_pretrained(src).to(device).eval()
         self.device = device
         self.key = None
         log(tr("SAM 已就绪"))
@@ -144,12 +146,14 @@ class Owl:
         self.v2 = device.type == "cuda"
         if self.v2:
             name = "google/owlv2-base-patch16-ensemble"
-            self.processor = tf.Owlv2Processor.from_pretrained(name)
-            model = tf.Owlv2ForObjectDetection.from_pretrained(name)
+            src = hf_model(name)
+            self.processor = tf.Owlv2Processor.from_pretrained(src)
+            model = tf.Owlv2ForObjectDetection.from_pretrained(src)
         else:
             name = "google/owlvit-base-patch32"
-            self.processor = tf.OwlViTProcessor.from_pretrained(name)
-            model = tf.OwlViTForObjectDetection.from_pretrained(name)
+            src = hf_model(name)
+            self.processor = tf.OwlViTProcessor.from_pretrained(src)
+            model = tf.OwlViTForObjectDetection.from_pretrained(src)
         log(tr("已加载文本检测模型 {name}", name=name))
         self.model = model.to(device).eval()
         self.device = device
