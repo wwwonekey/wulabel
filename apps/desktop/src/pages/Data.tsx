@@ -35,6 +35,7 @@ import {
   VideoProgress,
 } from "../api";
 import { prefs, useApp, useReview } from "../store";
+import { statusTag } from "../status";
 import { t } from "../i18n";
 import { xuntongEnabled } from "../features";
 import ImageViewer from "../components/ImageViewer";
@@ -48,18 +49,12 @@ const PAGE_SIZE = 120;
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "bmp", "webp", "tif", "tiff"];
 const VIDEO_EXTS = ["mp4", "mov", "mkv", "avi", "webm", "flv", "wmv", "m4v", "ts"];
 
-const STATUS: Record<ImageStatus, { text: string; color?: string }> = {
-  todo: { text: t("未标注") },
-  labeled: { text: t("已标注"), color: "processing" },
-  reviewed: { text: t("已审核"), color: "success" },
-  skipped: { text: t("已跳过"), color: "default" },
-};
-
 const FILTERS = [
   { label: t("全部"), value: "all" },
   { label: t("未标注"), value: "todo" },
-  { label: t("已标注"), value: "labeled" },
-  { label: t("已审核"), value: "reviewed" },
+  // 只在团队协作（审核流程）时用：标注员提交的待审核，审核员通过的已通过
+  { label: t("待审核"), value: "labeled" },
+  { label: t("已通过"), value: "reviewed" },
   { label: t("已跳过"), value: "skipped" },
 ];
 
@@ -605,7 +600,7 @@ export default function Data({ project }: { project: ProjectInfo }) {
           <h1>{t("数据")}</h1>
           <p className="desc" style={{ margin: 0 }}>
             {review
-              ? t("{total} 张图片 · 可训练 {n}（已标注 {labeled} + 已审核 {reviewed}）", { total: s.total, n: s.labeled + s.reviewed, labeled: s.labeled, reviewed: s.reviewed })
+              ? t("{total} 张图片 · 可训练 {n}（待审核 {labeled} + 已通过 {reviewed}）", { total: s.total, n: s.labeled + s.reviewed, labeled: s.labeled, reviewed: s.reviewed })
               : t("{total} 张图片 · 已标注 {n}", { total: s.total, n: s.labeled + s.reviewed })}
           </p>
         </div>
@@ -727,8 +722,8 @@ export default function Data({ project }: { project: ProjectInfo }) {
         {/* 点统计卡片切换到对应的筛选，再点一下回到全部 */}
         {[
           { label: t("未标注"), n: s.todo, f: "todo" },
-          { label: t("已标注"), n: review ? s.labeled : s.labeled + s.reviewed, f: review ? "labeled" : "done" },
-          review ? { label: t("已审核"), n: s.reviewed, f: "reviewed" } : { label: t("已跳过"), n: s.skipped, f: "skipped" },
+          { label: review ? t("待审核") : t("已标注"), n: review ? s.labeled : s.labeled + s.reviewed, f: review ? "labeled" : "done" },
+          review ? { label: t("已通过"), n: s.reviewed, f: "reviewed" } : { label: t("已跳过"), n: s.skipped, f: "skipped" },
         ].map((c) => (
           <div
             key={c.f}
@@ -833,8 +828,8 @@ export default function Data({ project }: { project: ProjectInfo }) {
               >
                 <img src={thumbUrl(project.path, it.id)} loading="lazy" alt={it.name} draggable={false} />
                 {selecting && <Checkbox className="pick" checked={selected.has(it.id)} />}
-                <Tag className="st" color={STATUS[!review && it.status === "reviewed" ? "labeled" : it.status]?.color}>
-                  {STATUS[!review && it.status === "reviewed" ? "labeled" : it.status]?.text ?? it.status}
+                <Tag className="st" color={statusTag(it.status, review).color}>
+                  {statusTag(it.status, review).text}
                 </Tag>
                 <span className="nm">{it.name}</span>
               </div>
