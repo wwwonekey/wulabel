@@ -378,7 +378,8 @@ export default function AnnotCanvas(p: Props) {
         ? "crosshair"
         : "default";
   const vertexIdx = (pts: number[]) => pts.map((_, i) => i).filter((i) => i % 2 === 0);
-  const imgReady = img && img.src === p.src;
+  // 用 getAttribute 比较：img.src 读出来是完整地址，协作网页传进来的是相对地址
+  const imgReady = img && img.getAttribute("src") === p.src;
 
   return (
     <div ref={wrap} style={{ position: "absolute", inset: 0, cursor: cssCursor }} onContextMenu={(e) => e.preventDefault()}>
