@@ -275,8 +275,9 @@ fn fingerprint(anns: &[Annotation], names: &HashMap<i64, String>) -> Vec<String>
     v
 }
 
-/// 把一个标注包合并回来。没有 package.json 的普通 Wulabel 项目也能合并（按图片内容对应）
-pub fn merge(p: &Project, opts: &MergeOptions) -> AppResult<MergeResult> {
+/// 把一个标注包合并回来。没有 package.json 的普通 Wulabel 项目也能合并（按图片内容对应）。
+/// progress 按包里的图片张数报
+pub fn merge(p: &Project, opts: &MergeOptions, progress: &(dyn Fn(usize, usize) + Sync)) -> AppResult<MergeResult> {
     if opts.dir.canonicalize().ok() == p.root.canonicalize().ok() {
         return Err(msg(t!("不能把项目合并到它自己")));
     }
@@ -311,7 +312,13 @@ pub fn merge(p: &Project, opts: &MergeOptions) -> AppResult<MergeResult> {
         let v = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<_, _>>()?;
         v
     };
-    for (pid, path, status, hash) in pkg_imgs {
+    let total = pkg_imgs.len();
+    progress(0, total);
+    for (i, (pid, path, status, hash)) in pkg_imgs.into_iter().enumerate() {
+        // 每张图开头报上一张做完（中间有好几处 continue）
+        if i > 0 {
+            progress(i, total);
+        }
         let pkg = annotations::load(&np, pid)?.annotations;
         // 对应原项目的图：先看包里的对照表，没有再按图片内容找
         let sid: Option<i64> = match map.get(&pid) {
@@ -368,6 +375,7 @@ pub fn merge(p: &Project, opts: &MergeOptions) -> AppResult<MergeResult> {
         }
         res.updated += 1;
     }
+    progress(total, total);
     let dir = np.root.to_string_lossy().into_owned();
     p.conn.lock().execute("UPDATE packages SET merged_at = ?2 WHERE dir = ?1", params![dir, db::now()])?;
     Ok(res)

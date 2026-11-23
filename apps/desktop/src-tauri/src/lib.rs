@@ -158,6 +158,8 @@ pub fn run() {
             commands::health_run,
             commands::health_ignore,
             commands::health_unignore,
+            commands::health_status,
+            commands::health_stop,
             commands::append_annotation,
             commands::live_start,
             commands::live_stop,
